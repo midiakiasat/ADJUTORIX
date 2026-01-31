@@ -24,26 +24,11 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "adjutorix.open",
-        "title": "ADJUTORIX: Open Panel"
-      },
-      {
-        "command": "adjutorix.check",
-        "title": "ADJUTORIX: Check"
-      },
-      {
-        "command": "adjutorix.fix",
-        "title": "ADJUTORIX: Fix"
-      },
-      {
-        "command": "adjutorix.verify",
-        "title": "ADJUTORIX: Verify"
-      },
-      {
-        "command": "adjutorix.deploy",
-        "title": "ADJUTORIX: Deploy"
-      }
+      { "command": "adjutorix.open", "title": "Adjutorix: Open", "category": "Adjutorix" },
+      { "command": "adjutorix.check", "title": "Adjutorix: Check", "category": "Adjutorix" },
+      { "command": "adjutorix.fix", "title": "Adjutorix: Fix", "category": "Adjutorix" },
+      { "command": "adjutorix.verify", "title": "Adjutorix: Verify", "category": "Adjutorix" },
+      { "command": "adjutorix.deploy", "title": "Adjutorix: Deploy", "category": "Adjutorix" }
     ],
     "configuration": {
       "type": "object",
@@ -100,8 +85,9 @@
     "publish": "vsce publish"
   },
   "dependencies": {
-    "ws": "^8.16.0",
-    "uuid": "^9.0.1"
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -115,7 +101,7 @@
     "vitest": "^1.2.1",
     "webpack": "^5.90.0",
     "webpack-cli": "^5.1.4",
-    "vsce": "^2.22.0"
+    "@vscode/vsce": "^3.0.0"
   },
   "repository": {
     "type": "git",
