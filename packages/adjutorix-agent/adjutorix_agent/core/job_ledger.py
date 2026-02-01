@@ -1,8 +1,9 @@
 import json
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 
 class JobLedgerError(Exception):
@@ -28,6 +29,43 @@ class JobLedger:
         self.agent_root = agent_root
         self.repo_root = repo_root
         self.jobs_dir = self._ensure_jobs_dir()
+        self._current_job: Optional[Path] = None
+
+    # -------------------------
+    # Run lifecycle (for RPC run)
+    # -------------------------
+
+    def start(self, job_name: str, action: str) -> None:
+        """Begin a run; creates a job directory and sets it as current."""
+        slug = f"{job_name}_{action}_{int(time.time() * 1000)}"
+        self._current_job = self.create_job(slug)
+
+    def finish(self, result: Any) -> None:
+        """Record run result and clear current job."""
+        if self._current_job is None:
+            return
+        self.update_meta(self._current_job, {"result": result, "status": "finished"})
+        self._current_job = None
+
+    @property
+    def job_id(self) -> Optional[str]:
+        """Current job directory name, for recovery."""
+        return self._current_job.name if self._current_job else None
+
+    @property
+    def current_job(self) -> Optional[Path]:
+        """Current job path (read-only); set by start(), cleared by finish()."""
+        return self._current_job
+
+    @classmethod
+    def from_path(cls, job_path: Union[Path, str]) -> "JobLedger":
+        """Build a ledger with current job set to an existing job directory (for recovery)."""
+        job = Path(job_path).resolve()
+        repo_root = job.parent.parent.parent  # job -> jobs -> .agent -> repo
+        agent_root = repo_root / ".agent"
+        ledger = cls(agent_root=agent_root, repo_root=repo_root)
+        ledger._current_job = job
+        return ledger
 
     # -------------------------
     # Job Lifecycle
@@ -110,7 +148,7 @@ class JobLedger:
     # -------------------------
 
     def _ensure_jobs_dir(self) -> Path:
-        base = self.repo_root / ".agent" / "jobs"
+        base = self.agent_root / "jobs"
         base.mkdir(parents=True, exist_ok=True)
         return base
 
@@ -159,11 +197,9 @@ class JobLedger:
     def _write_meta(self, job: Path, data: Dict[str, Any]) -> None:
         path = job / "meta.json"
 
-        payload = {
-            "created_at": datetime.utcnow().isoformat(),
-            "repo": str(self.repo_root),
-            **data,
-        }
+        payload = {"repo": str(self.repo_root), **data}
+        if "created_at" not in payload:
+            payload["created_at"] = datetime.utcnow().isoformat()
 
         path.write_text(
             json.dumps(payload, indent=2, sort_keys=True),

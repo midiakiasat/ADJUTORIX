@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import traceback
 from typing import Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -67,17 +68,36 @@ ws_manager = WebSocketManager()
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    # Allow /health without auth for load balancers and health checks
+    # Allow /health without auth
     if request.url.path == "/health":
         return await call_next(request)
+
+    # For /rpc: enforce local-only, but return JSON-RPC error envelope on failure (client always parses it)
+    if request.url.path == "/rpc":
+        try:
+            verify_local_request(request)
+        except Exception as exc:
+            logger.warning("Local verification failed: %s", exc)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": "Unauthorized (local request required)",
+                        "data": {"raw": str(exc)},
+                    },
+                },
+            )
+        return await call_next(request)
+
+    # For everything else: keep current behavior (plain 401)
     try:
         verify_local_request(request)
     except Exception as exc:
         logger.warning("Auth failed: %s", exc)
-        return JSONResponse(
-            status_code=401,
-            content={"error": "unauthorized"},
-        )
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
 
     return await call_next(request)
 
@@ -88,27 +108,40 @@ async def health() -> Dict[str, str]:
 
 
 @app.post("/rpc")
-async def rpc_endpoint(request: Request, payload: Dict[str, Any]) -> Dict[str, Any]:
+async def rpc_endpoint(request: Request) -> Dict[str, Any]:
     """
-    JSON-RPC over HTTP. Token from Authorization header or ?token= (already verified by middleware).
+    JSON-RPC over HTTP. Body read manually so we always return JSON-RPC (no FastAPI 422/500).
+    Local-only verified by middleware; token auth in RPCDispatcher.handle().
     """
-    logger.debug("RPC request: %s", payload)
-
-    token = extract_token(request) or ""
+    req_id = None
+    payload = {}
     try:
-        response = rpc_dispatcher.dispatch(payload, token=token)
-        return response
-
+        body = await request.body()
+        if body:
+            payload = json.loads(body)
+        if not isinstance(payload, dict):
+            payload = {}
+        req_id = payload.get("id")
     except Exception as exc:
-        logger.exception("RPC error")
-
+        logger.warning("RPC body parse failed: %s", exc)
         return {
             "jsonrpc": "2.0",
-            "id": payload.get("id"),
+            "id": None,
+            "error": {"code": -32700, "message": f"Parse error: {exc}", "data": {"raw": str(exc)}},
+        }
+    logger.debug("RPC request: %s", payload)
+    token = extract_token(request) or ""
+    try:
+        return rpc_dispatcher.dispatch(payload, token=token)
+    except Exception as exc:
+        logger.exception("RPC endpoint error")
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
             "error": {
-                "code": -32000,
-                "message": "Internal error",
-                "data": str(exc),
+                "code": "INTERNAL",
+                "message": str(exc),
+                "data": {"traceback": traceback.format_exc()},
             },
         }
 
@@ -132,14 +165,13 @@ async def websocket_endpoint(ws: WebSocket, client_id: str):
                 response = rpc_dispatcher.dispatch(payload, token=token)
             except Exception as exc:
                 logger.exception("WS RPC error")
-
                 response = {
                     "jsonrpc": "2.0",
                     "id": payload.get("id"),
                     "error": {
-                        "code": -32000,
-                        "message": "Internal error",
-                        "data": str(exc),
+                        "code": "INTERNAL",
+                        "message": str(exc),
+                        "data": {"traceback": traceback.format_exc()},
                     },
                 }
 
@@ -158,7 +190,7 @@ def run():
     Entrypoint for CLI/dev scripts
     """
     host = os.getenv("ADJUTORIX_HOST", "127.0.0.1")
-    port = int(os.getenv("ADJUTORIX_PORT", "8765"))
+    port = int(os.getenv("ADJUTORIX_PORT", "7337"))
 
     logger.info("Starting Adjutorix Agent on %s:%s", host, port)
 

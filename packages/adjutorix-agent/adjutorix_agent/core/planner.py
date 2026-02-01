@@ -102,7 +102,7 @@ class Planner:
         normalized = dict(plan)
 
         normalized.setdefault("risk_level", "normal")
-        normalized.setdefault("category", ErrorCategory.GENERIC.value)
+        normalized.setdefault("category", ErrorCategory.UNKNOWN.value)
 
         normalized["files"] = sorted(set(normalized.get("files", [])))
         normalized["commands"] = list(normalized.get("commands", []))

@@ -6,6 +6,12 @@ import * as vscode from "vscode";
 import { RpcClient } from "../client/rpc";
 import { AgentState } from "./state";
 
+/** Stub for panel webview message handlers; extend as needed. */
+export function registerUiCommands(
+  _panel: vscode.WebviewPanel,
+  _state: AgentState
+): void {}
+
 export class AgentCommands {
   constructor(
     private readonly context: vscode.ExtensionContext,

@@ -1,0 +1,18 @@
+{
+  "check": {
+    "commands": ["npm test"],
+    "pass_condition": ""
+  },
+  "fix": {
+    "commands": ["npm run lint -- --fix"],
+    "pass_condition": ""
+  },
+  "verify": {
+    "commands": ["npm test"],
+    "pass_condition": ""
+  },
+  "deploy": {
+    "commands": ["echo \"deploy not configured\""],
+    "pass_condition": ""
+  }
+}

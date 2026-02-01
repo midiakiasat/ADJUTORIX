@@ -89,6 +89,15 @@ class Policy:
             return False
         return cmd in allow
 
+    def is_command_allowed(self, command: str) -> bool:
+        """Check if a shell command string is allowed (first token must be allowlisted)."""
+        argv = command.strip().split()
+        return self.allowlisted(argv) if argv else False
+
+    def allowed_env_vars(self) -> List[str]:
+        """Env var names allowed to be passed to commands; empty means essentials only."""
+        return list(self.data.get("allowlist", {}).get("env", []))
+
     def protected_globs(self) -> List[str]:
         return list(self.data.get("protected_files", []))
 

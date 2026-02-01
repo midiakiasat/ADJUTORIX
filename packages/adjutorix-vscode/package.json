@@ -1,12 +1,20 @@
 {
   "name": "adjutorix-vscode",
+  "private": true,
   "displayName": "ADJUTORIX",
+  "files": [
+    "dist/**",
+    "media/**",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
   "description": "Zero-cost local AI coding agent with governance, diff control, and offline execution.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "adjutorix",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": ">=1.75.0"
   },
   "categories": [
     "Other",
@@ -15,7 +23,18 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onView:adjutorix.panel",
+    "onCommand:adjutorix.smoke",
+    "onCommand:adjutorix.showSidebar",
     "onCommand:adjutorix.open",
+    "onCommand:adjutorix.startAgent",
+    "onCommand:adjutorix.stopAgent",
+    "onCommand:adjutorix.restartAgent",
+    "onCommand:adjutorix.diagnostics",
+    "onCommand:adjutorix.copyDiagnostics",
+    "onCommand:adjutorix.setAgentModeAuto",
+    "onCommand:adjutorix.setAgentModeManaged",
+    "onCommand:adjutorix.setAgentModeExternal",
     "onCommand:adjutorix.check",
     "onCommand:adjutorix.fix",
     "onCommand:adjutorix.verify",
@@ -24,12 +43,41 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      { "command": "adjutorix.smoke", "title": "Adjutorix: Smoke Test", "category": "Adjutorix" },
+      { "command": "adjutorix.showSidebar", "title": "Adjutorix: Show Sidebar", "category": "Adjutorix" },
       { "command": "adjutorix.open", "title": "Adjutorix: Open", "category": "Adjutorix" },
+      { "command": "adjutorix.startAgent", "title": "Adjutorix: Start Agent", "category": "Adjutorix" },
+      { "command": "adjutorix.stopAgent", "title": "Adjutorix: Stop Agent", "category": "Adjutorix" },
+      { "command": "adjutorix.restartAgent", "title": "Adjutorix: Restart Agent", "category": "Adjutorix" },
+      { "command": "adjutorix.diagnostics", "title": "Adjutorix: Diagnostics", "category": "Adjutorix" },
+      { "command": "adjutorix.copyDiagnostics", "title": "Adjutorix: Copy Diagnostics", "category": "Adjutorix" },
+      { "command": "adjutorix.setAgentModeAuto", "title": "Adjutorix: Set Agent Mode — Auto", "category": "Adjutorix" },
+      { "command": "adjutorix.setAgentModeManaged", "title": "Adjutorix: Set Agent Mode — Managed", "category": "Adjutorix" },
+      { "command": "adjutorix.setAgentModeExternal", "title": "Adjutorix: Set Agent Mode — External", "category": "Adjutorix" },
       { "command": "adjutorix.check", "title": "Adjutorix: Check", "category": "Adjutorix" },
       { "command": "adjutorix.fix", "title": "Adjutorix: Fix", "category": "Adjutorix" },
       { "command": "adjutorix.verify", "title": "Adjutorix: Verify", "category": "Adjutorix" },
       { "command": "adjutorix.deploy", "title": "Adjutorix: Deploy", "category": "Adjutorix" }
     ],
+    "menus": {
+      "commandPalette": [
+        { "command": "adjutorix.smoke" },
+        { "command": "adjutorix.showSidebar" },
+        { "command": "adjutorix.open" },
+        { "command": "adjutorix.startAgent" },
+        { "command": "adjutorix.stopAgent" },
+        { "command": "adjutorix.restartAgent" },
+        { "command": "adjutorix.diagnostics" },
+        { "command": "adjutorix.copyDiagnostics" },
+        { "command": "adjutorix.setAgentModeAuto" },
+        { "command": "adjutorix.setAgentModeManaged" },
+        { "command": "adjutorix.setAgentModeExternal" },
+        { "command": "adjutorix.check" },
+        { "command": "adjutorix.fix" },
+        { "command": "adjutorix.verify" },
+        { "command": "adjutorix.deploy" }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "ADJUTORIX",
@@ -41,8 +89,18 @@
         },
         "adjutorix.agentPort": {
           "type": "number",
-          "default": 17654,
+          "default": 7337,
           "description": "Local agent port"
+        },
+        "adjutorix.agentUrl": {
+          "type": "string",
+          "description": "Override agent base URL (e.g. http://127.0.0.1:7338). If set, agentHost/agentPort are ignored."
+        },
+        "adjutorix.agentMode": {
+          "type": "string",
+          "enum": ["auto", "managed", "external"],
+          "default": "auto",
+          "description": "Agent control: auto (try managed, allow external), managed (spawn/kill only), external (health-check only)."
         },
         "adjutorix.autoStartAgent": {
           "type": "boolean",
@@ -70,7 +128,8 @@
       "adjutorix": [
         {
           "id": "adjutorix.panel",
-          "name": "Agent Panel"
+          "name": "Adjutorix",
+          "type": "webview"
         }
       ]
     }
@@ -81,7 +140,7 @@
     "watch": "webpack --watch --mode development",
     "lint": "eslint src --ext ts",
     "test": "vitest",
-    "package": "vsce package",
+    "vsix": "vsce package",
     "publish": "vsce publish"
   },
   "dependencies": {

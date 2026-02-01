@@ -1,3 +1,5 @@
+import json
+import os
 import subprocess
 import threading
 import time
@@ -66,6 +68,70 @@ class Executor:
     # ---------------------------
     # Public API
     # ---------------------------
+
+    def run_action(
+        self,
+        job_name: str,
+        action: str,
+        allow_override: bool,
+        ledger: Any = None,
+    ) -> Dict[str, Any]:
+        """
+        Run a single action (check/fix/verify/deploy).
+        Loads .adjutorix/actions.json if present; executes configured commands.
+        Always returns a structured report (never leaves system ambiguous).
+        """
+        start_time = time.time()
+        actions_path = self.workspace / ".adjutorix" / "actions.json"
+        plan: Dict[str, Any] = {"commands": [], "pass_condition": ""}
+
+        if actions_path.exists():
+            try:
+                cfg = json.loads(actions_path.read_text(encoding="utf-8"))
+                plan = cfg.get(action) or cfg.get(action.lower()) or plan
+                if isinstance(plan, list):
+                    plan = {"commands": plan, "pass_condition": ""}
+            except Exception as e:
+                raise ExecutionError(f"Invalid {actions_path}: {e}") from e
+
+        if not plan.get("commands"):
+            raise ExecutionError(
+                f"No commands configured for action '{action}'. "
+                f"Add {actions_path} with a '{action}' entry."
+            )
+
+        try:
+            report = self.execute_plan(plan)
+        except ExecutionError as e:
+            duration = time.time() - start_time
+            report = {
+                "status": "failed",
+                "message": str(e),
+                "category": self._classify_error(e),
+                "duration": duration,
+                "results": [],
+            }
+        except Exception as e:
+            duration = time.time() - start_time
+            report = {
+                "status": "failed",
+                "message": str(e),
+                "category": self._classify_error(e),
+                "duration": duration,
+                "results": [],
+            }
+
+        try:
+            if ledger is not None and getattr(ledger, "current_job", None) is not None:
+                job = ledger.current_job
+                for cmd in plan["commands"]:
+                    ledger.append_command(job, cmd)
+                ledger.append_result(job, json.dumps(report))
+                ledger.update_meta(job, {"job_name": job_name, "action": action})
+        except Exception:
+            pass
+
+        return report
 
     def execute_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -208,18 +274,14 @@ class Executor:
 
     def _filtered_env(self) -> Dict[str, str]:
         """
-        Remove dangerous environment variables.
+        Return real environment filtered by policy; essentials (PATH, HOME, LANG) included if allowed.
         """
-
-        allowed = self.policy.allowed_env_vars()
-
-        env = {}
-
-        for key, value in dict(**dict()).items():
-            if key in allowed:
-                env[key] = value
-
-        return env
+        allowed = set(self.policy.allowed_env_vars())
+        essentials = {"PATH", "HOME", "LANG"}
+        for k in essentials:
+            allowed.add(k)
+        base = os.environ
+        return {k: v for k, v in base.items() if k in allowed}
 
     def _validate_pass_condition(
         self,
@@ -269,4 +331,4 @@ class Executor:
         if "deploy" in msg:
             return ErrorCategory.DEPLOY.value
 
-        return ErrorCategory.GENERIC.value
+        return ErrorCategory.UNKNOWN.value

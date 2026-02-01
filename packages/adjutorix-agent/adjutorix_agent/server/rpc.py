@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -46,7 +47,7 @@ class RPCDispatcher:
         # Core orchestration
         self.state_machine = StateMachine()
         _root = Path(self.repo_root)
-        self.job_ledger = JobLedger(agent_root=_root, repo_root=_root)
+        self.job_ledger = JobLedger(agent_root=_root / ".agent", repo_root=_root)
         self.taxonomy = ErrorTaxonomy()
         self.locks = LockManager(repo_root=self.repo_root)
         self.recovery = RecoveryManager(
@@ -88,9 +89,22 @@ class RPCDispatcher:
                 "id": req_id,
                 "error": {"code": e.code, "message": e.message, "data": e.data},
             }
+        except Exception as e:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": "INTERNAL",
+                    "message": str(e),
+                    "data": {"traceback": traceback.format_exc()},
+                },
+            }
 
     def handle(self, token: str, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        require_local_token(token)
+        try:
+            require_local_token(token)
+        except Exception as e:
+            raise RPCError("UNAUTHORIZED", "Invalid or missing token", {"raw": str(e)})
 
         fn = getattr(self, f"rpc_{method}", None)
         if fn is None:
@@ -124,16 +138,18 @@ class RPCDispatcher:
 
         with self.locks.job_lock():
             self.job_ledger.start(job_name=job_name, action=action)
-
-            result = self.executor.run_action(
-                job_name=job_name,
-                action=action,
-                allow_override=allow_override,
-                ledger=self.job_ledger,
-            )
-
-            self.job_ledger.finish(result=result)
-            return {"ok": True, "result": result}
+            try:
+                result = self.executor.run_action(
+                    job_name=job_name,
+                    action=action,
+                    allow_override=allow_override,
+                    ledger=self.job_ledger,
+                )
+                self.job_ledger.finish(result=result)
+                return {"ok": True, "result": result}
+            except Exception as e:
+                self.job_ledger.finish(result={"status": "failed", "error": str(e)})
+                raise
 
     def rpc_recover(self, _: Dict[str, Any]) -> Dict[str, Any]:
         with self.locks.job_lock():

@@ -1,9 +1,5 @@
 import { Transport } from "./transport";
-import {
-  RpcRequest,
-  RpcResponse,
-  RpcError,
-} from "./types";
+import { RpcRequest, RpcError } from "./types";
 
 /**
  * JSON-RPC 2.0 client for communicating with Adjutorix agent.
@@ -34,14 +30,15 @@ export class RpcClient {
       params: params ?? {},
     };
 
-    const response = await this.transport.send<RpcResponse<T>>(request);
+    // Transport already returns RpcResponse<T>; T is the result type
+    const response = await this.transport.send<T>(request);
 
     if (response.error) {
-      throw new RpcError(
-        response.error.code,
-        response.error.message,
-        response.error.data
-      );
+      const code = response.error.code;
+      const msg = response.error.message;
+      const tb = response.error.data?.traceback;
+      const fullMessage = tb ? `${msg}\n${tb}` : msg;
+      throw new RpcError(code, fullMessage, response.error.data);
     }
 
     if (response.result === undefined) {

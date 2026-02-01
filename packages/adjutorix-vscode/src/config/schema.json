@@ -17,6 +17,24 @@
       "description": "Port used by the local Adjutorix agent server."
     },
 
+    "adjutorix.agentUrl": {
+      "type": "string",
+      "description": "Override agent base URL (e.g. http://127.0.0.1:7338). If set, agentHost/agentPort are ignored."
+    },
+
+    "adjutorix.agentMode": {
+      "type": "string",
+      "enum": ["auto", "managed", "external"],
+      "default": "auto",
+      "description": "Agent control: auto (try managed, allow external), managed (spawn/kill only), external (health-check only)."
+    },
+
+    "adjutorix.autoStartAgent": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, opening the Adjutorix sidebar starts the agent (or reconnects)."
+    },
+
     "adjutorix.autoRunCheckOnSave": {
       "type": "boolean",
       "default": false,

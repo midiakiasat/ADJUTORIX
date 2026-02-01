@@ -1,0 +1,10 @@
+{
+  "created_at": "2026-02-01T12:06:26.047195",
+  "repo": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/ADJUTORIX",
+  "result": {
+    "error": "type object 'ErrorCategory' has no attribute 'GENERIC'",
+    "status": "failed"
+  },
+  "slug": "sidebar_verify_1769947586045",
+  "status": "finished"
+}

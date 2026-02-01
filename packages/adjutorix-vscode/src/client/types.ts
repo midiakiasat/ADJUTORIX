@@ -19,7 +19,7 @@ export interface RpcFailure {
   jsonrpc: "2.0";
   id: number | string | null;
   error: {
-    code: number;
+    code: number | string;
     message: string;
     data?: any;
   };
@@ -31,10 +31,10 @@ export type RpcResponse<T = any> = RpcSuccess<T> | RpcFailure;
  * RPC error wrapper.
  */
 export class RpcError extends Error {
-  code: number;
+  code: number | string;
   data?: any;
 
-  constructor(code: number, message: string, data?: any) {
+  constructor(code: number | string, message: string, data?: any) {
     super(message);
     this.name = "RpcError";
     this.code = code;

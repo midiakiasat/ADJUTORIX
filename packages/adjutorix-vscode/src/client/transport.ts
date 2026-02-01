@@ -1,14 +1,16 @@
 import fetch from "node-fetch";
 import { readAdjutorixToken } from "./token";
+import type { RpcResponse } from "./types";
 
 /**
  * POST JSON-RPC to the agent with Authorization from ~/.adjutorix/token.
  * Use this (or Transport.send) for every /rpc call so auth is applied in one place.
+ * Returns the JSON-RPC envelope; decode with RpcClient or check response.error / response.result.
  */
 export async function postJsonRpc<T = any>(
   url: string,
   payload: unknown
-): Promise<T> {
+): Promise<RpcResponse<T>> {
   const token = await readAdjutorixToken();
   if (!token) {
     throw new Error("Adjutorix token missing: ~/.adjutorix/token");
@@ -23,19 +25,36 @@ export async function postJsonRpc<T = any>(
     body: JSON.stringify(payload),
   });
 
+  const raw = await res.text().catch(() => "");
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {}
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Adjutorix RPC failed (${res.status}): ${text || res.statusText}`
-    );
+    const rpcErr = data?.error;
+    const msg = rpcErr
+      ? (rpcErr.message || "") +
+        (rpcErr.data?.traceback ? "\n" + rpcErr.data.traceback : "")
+      : raw || res.statusText;
+    throw new Error(`HTTP ${res.status}: ${msg}`);
   }
 
-  return res.json() as Promise<T>;
+  if (!data || typeof data !== "object") {
+    throw new Error(`Invalid RPC response: ${raw || "<empty body>"}`);
+  }
+
+  if (data.jsonrpc !== "2.0" || data.id === undefined) {
+    throw new Error(`Invalid RPC response: ${raw}`);
+  }
+
+  return data as RpcResponse<T>;
 }
 
 /**
  * Transport layer for JSON-RPC over HTTP.
  * Uses keep-alive and attaches Authorization on every request.
+ * Returns the JSON-RPC envelope; RpcClient.call() is the single decoder.
  */
 export class Transport {
   private endpoint: string;
@@ -56,7 +75,7 @@ export class Transport {
     }
   }
 
-  async send<T = any>(payload: any): Promise<T> {
+  async send<T = any>(payload: any): Promise<RpcResponse<T>> {
     this.controller = new AbortController();
 
     const token = await readAdjutorixToken();
@@ -74,14 +93,29 @@ export class Transport {
       signal: this.controller.signal,
     });
 
+    const raw = await res.text().catch(() => "");
+    let data: any = null;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {}
+
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `Adjutorix RPC failed (${res.status}): ${text || res.statusText}`
-      );
+      const rpcErr = data?.error;
+      const msg = rpcErr
+        ? (rpcErr.message || "") +
+          (rpcErr.data?.traceback ? "\n" + rpcErr.data.traceback : "")
+        : raw || res.statusText;
+      throw new Error(`HTTP ${res.status}: ${msg}`);
     }
 
-    const data = (await res.json()) as T;
-    return data;
+    if (!data || typeof data !== "object") {
+      throw new Error(`Invalid RPC response: ${raw || "<empty body>"}`);
+    }
+
+    if (data.jsonrpc !== "2.0" || data.id === undefined) {
+      throw new Error(`Invalid RPC response: ${raw}`);
+    }
+
+    return data as RpcResponse<T>;
   }
 }
