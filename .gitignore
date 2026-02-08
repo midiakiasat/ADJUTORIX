@@ -39,3 +39,7 @@ runtime/
 **/*.egg-info/
 **/.agent/
 **/runtime/
+
+# ADJUTORIX generated/runtime artifacts
+.agent/
+runtime/
