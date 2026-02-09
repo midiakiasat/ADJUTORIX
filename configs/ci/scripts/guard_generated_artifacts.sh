@@ -1,4 +1,3 @@
-cat > configs/ci/scripts/guard_generated_artifacts.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -42,5 +41,3 @@ if [[ $rc -eq 0 ]]; then
 fi
 
 echo "OK: negative test failed as expected"
-EOF
-chmod +x configs/ci/scripts/guard_generated_artifacts.sh
