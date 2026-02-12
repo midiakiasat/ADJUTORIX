@@ -30,16 +30,17 @@ pnpm-debug.log*
 
 # Adjutorix runtime (generated)
 runtime/
-**/runtime/
-.agent/
-**/.agent/
+
 
 # === Recursive ignores for monorepo ===
 **/*.vsix
 **/*.egg-info/
 **/.agent/
-**/runtime/
 
-# ADJUTORIX generated/runtime artifacts
-.agent/
-runtime/
+# deps
+node_modules/
+
+# Never allow package-local runtimes (generated)
+packages/**/runtime/
+
+# Never allow package-local runtimes (generated)

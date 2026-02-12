@@ -286,9 +286,7 @@ export class AdjutorixViewProvider implements vscode.WebviewViewProvider {
       const st = this.agentProcessManager.getStatus();
       const isManagedPolicyMismatch =
         st.mode === "managed" &&
-        st.lastErrorRaw &&
-        (st.lastErrorRaw.startsWith("managed policy:") ||
-          st.lastErrorRaw.includes("mode mismatch (managed)"));
+        st.warningRaw?.startsWith("managed policy:");
       // Auto-start only in Managed mode. External = no lifecycle; Auto = no auto-start (user picks Managed or runs agent manually).
       if (
         st.mode === "managed" &&
@@ -445,7 +443,7 @@ export class AdjutorixViewProvider implements vscode.WebviewViewProvider {
       const ok = await this.agentProcessManager.ping();
       const status = this.agentProcessManager.getStatus();
       // "ok" for UI/backoff/logging must match what the UI will show (sticky FAILED = not connected).
-      const effectiveOk = ok && status.state === "connected";
+      const effectiveOk = ok && status.state === "connected" && !status.lastError;
       this.postStatus(status);
       const now = Date.now();
       if (effectiveOk) {
@@ -639,17 +637,18 @@ export class AdjutorixViewProvider implements vscode.WebviewViewProvider {
         ? "failed"
         : "disconnected";
 
-    this.postToWebview({
-      type: "status",
-      status: statusLabel,
-      state: status.state,
-      mode: status.mode,
-      ownership: status.ownership,
-      error: status.lastError,
-      version: status.version,
-      lastPingAt: status.lastPingAt,
-      baseUrl: status.baseUrl,
-    });
+this.postToWebview({
+  type: "status",
+  status: statusLabel,
+  state: status.state,
+  mode: status.mode,
+  ownership: status.ownership,
+  error: status.lastError,
+  warning: status.warning,
+  version: status.version,
+  lastPingAt: status.lastPingAt,
+  baseUrl: status.baseUrl,
+});
 
     if (status.state === "connected") {
       void this._fetchAndPostAuthority();
@@ -1820,7 +1819,7 @@ Pending jobs: —</div>
         if (m.mode) setModeActive(m.mode);
         if (engineStateEl && s !== 'connected') engineStateEl.textContent = s === 'failed' ? 'Engine state: FAILED — click Retry' : (m.mode === 'managed' && m.state === 'stopped') ? 'Engine state: click Retry to start agent' : s === 'starting' || s === 'stopping' ? 'Engine state: …' : 'Engine state: —';
         const retryEl = document.getElementById('engineRetry');
-        const showRetry = (s === 'failed') || (m.mode === 'managed' && m.state === 'stopped');
+        const showRetry = s === 'failed' || (m.mode === 'managed' && m.state === 'stopped' && !m.warning);
         if (retryEl) retryEl.style.display = showRetry ? 'inline-block' : 'none';
         controllerMode = (m.version === 'reject_only_v2');
         if (controllerBannerEl) {
@@ -1833,10 +1832,12 @@ Pending jobs: —</div>
         }
         if (managedFailureBannerEl) {
           const showManagedWarning =
-            (m.mode === 'managed' && m.ownership !== 'managed') ||
-            (m.error && String(m.error).includes('Managed requires extension-spawned'));
+            m.mode === 'managed' &&
+            m.state === 'connected' &&
+            m.ownership === 'external';
           if (showManagedWarning) {
-            managedFailureBannerEl.textContent = 'Managed requires extension-spawned agent; stop external agent or switch to Auto.';
+            managedFailureBannerEl.textContent = 
+              'Managed mode policy: external agent detected. Switch to External/Auto or Retry to take over.';
             managedFailureBannerEl.style.display = 'block';
           } else {
             managedFailureBannerEl.style.display = 'none';

@@ -28,9 +28,16 @@ export interface AgentProcessStatus {
   mode: AgentMode;
   ownership: AgentOwnership;
   baseUrl: string;
+
+  // Failures (connectivity / hard failures)
   lastError?: string;
   /** Raw error message for forensics; UI shows lastError only. */
   lastErrorRaw?: string;
+
+  // Policy warnings (do not imply disconnect)
+  warning?: string;
+  warningRaw?: string;
+
   lastPingAt?: number;
   version?: string;
 }
@@ -118,6 +125,8 @@ export class AgentProcessManager {
   private stopRequested = false;
   private lastError: string | undefined;
   private lastErrorRaw: string | undefined;
+  private warning: string | undefined;
+  private warningRaw: string | undefined;
   private lastPingAt: number | undefined;
   private version: string | undefined;
   private baseUrl: string;
@@ -179,6 +188,8 @@ export class AgentProcessManager {
   private clearMetadata(): void {
     this.lastError = undefined;
     this.lastErrorRaw = undefined;
+    this.warning = undefined;
+    this.warningRaw = undefined;
     this.version = undefined;
     this.lastPingAt = undefined;
   }
@@ -230,6 +241,8 @@ export class AgentProcessManager {
       baseUrl: this.baseUrl,
       lastError: this.lastError,
       lastErrorRaw: this.lastErrorRaw,
+      warning: this.warning,
+      warningRaw: this.warningRaw,
       lastPingAt: this.lastPingAt,
       version: this.version,
     };
@@ -245,7 +258,11 @@ export class AgentProcessManager {
     this.state = state;
     if (userError !== undefined) this.lastError = userError;
     if (rawError !== undefined) this.lastErrorRaw = rawError;
-    if (state === "connected") this.lastPingAt = Date.now();
+if (state === "connected") {
+  this.lastPingAt = Date.now();
+  this.warning = undefined;
+  this.warningRaw = undefined;
+}
     if (state === "failed" && !wasFailed && rawError !== undefined) {
       const now = Date.now();
       const sig = rawError;
@@ -695,18 +712,21 @@ export class AgentProcessManager {
       }
       this.lastPingAt = Date.now();
       this.version = result.engine?.fingerprint ?? result.engine?.version ?? "";
-      if (this.mode === "managed" && !this.hasManagedProcess()) {
-        this.ownership = "external";
-        this.setState(
-          "failed",
-          "Managed requires extension-spawned agent; stop external agent or switch to Auto.",
-          "managed policy: no child process"
-        );
-        return false;
-      }
+      // successful ping: clear warning, keep failures unless we explicitly recover below
+      this.warning = undefined;
+      this.warningRaw = undefined;
+
+      // Ownership inference (fact)
       if (this.mode === "external") this.ownership = "external";
       else if (this.hasManagedProcess()) this.ownership = "managed";
       else this.ownership = "external";
+
+      // Managed-mode policy (not connectivity failure)
+      if (this.mode === "managed" && !this.hasManagedProcess()) {
+        this.warning =
+          "External agent detected while mode=Managed (switch to Auto/External or click Retry to take over).";
+        this.warningRaw = "managed policy: ping ok but no child process";
+      }
       // Recovery policy:
       // - FAILED stays sticky in managed/auto (requires explicit Retry).
       // - STOPPED is not sticky: if ping succeeds, we can show connected (especially in auto, where we don't own lifecycle).
@@ -717,6 +737,9 @@ export class AgentProcessManager {
         this.state === "failed" && this.mode === "external"; // only external may clear FAILED via ping
 
       if (canRecoverFromStopped || canRecoverFromFailed) {
+        // recovery means prior failure is no longer true
+        this.lastError = undefined;
+        this.lastErrorRaw = undefined;
         this.setState("connected");
       } else {
         this.emitStatus();
