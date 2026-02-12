@@ -1,92 +1,23 @@
-/**
- * Patch apply controller for Adjutorix.
- * Sends approved unified diffs to the local agent for atomic application.
- */
+import { rpc } from "../client/rpc";
 
-import * as vscode from "vscode";
-import { AgentClient } from "../client/rpc";
+export type ApplyResult = {
+  ok: boolean;
+  applied: number;
+  errors: string[];
+};
 
-export class DiffApplier {
-  constructor(private readonly agent: AgentClient) {}
-
-  async applyPatch(diff: string): Promise<boolean> {
-    if (!diff || diff.trim().length === 0) {
-      vscode.window.showErrorMessage("Adjutorix: Empty patch.");
-      return false;
-    }
-
-    const confirmed = await this.confirmApply(diff);
-
-    if (!confirmed) {
-      return false;
-    }
-
-    try {
-      const result = await this.agent.applyPatch({
-        diff,
-        atomic: true,
-      });
-
-      if (!result.success) {
-        vscode.window.showErrorMessage(
-          `Adjutorix: Patch failed: ${result.error || "unknown error"}`
-        );
-        return false;
-      }
-
-      vscode.window.showInformationMessage("Adjutorix: Patch applied.");
-      return true;
-    } catch (err: any) {
-      vscode.window.showErrorMessage(
-        `Adjutorix: Agent error: ${err?.message || err}`
-      );
-      return false;
-    }
-  }
-
-  /* -------------------------
-   * Internal
-   * ------------------------- */
-
-  private async confirmApply(diff: string): Promise<boolean> {
-    const preview = diff.split("\n").slice(0, 20).join("\n");
-
-    const choice = await vscode.window.showWarningMessage(
-      "Apply this patch?",
-      {
-        modal: true,
-        detail: `Preview:\n\n${preview}\n\n(Truncated)`,
-      },
-      "Apply",
-      "Cancel"
-    );
-
-    return choice === "Apply";
-  }
-}
-
-/* -------------------------
- * RPC Client Interface
- * ------------------------- */
-
-export interface ApplyPatchRequest {
-  diff: string;
-  atomic: boolean;
-}
-
-export interface ApplyPatchResponse {
-  success: boolean;
-  error?: string;
-}
+export type FsOp = {
+  op: "write" | "delete" | "mkdir" | "chmod" | "rename";
+  path: string;
+  to?: string;
+  content_b64?: string;
+  mode?: number;
+};
 
 /**
- * Minimal AgentClient extension.
- * (Implemented in client/rpc.ts)
+ * UI must never write locally.
+ * It sends ops to the agent apply endpoint and renders the result.
  */
-declare module "../client/rpc" {
-  interface AgentClient {
-    applyPatch(
-      req: ApplyPatchRequest
-    ): Promise<ApplyPatchResponse>;
-  }
+export async function applyPatch(sessionId: string, ops: FsOp[]): Promise<ApplyResult> {
+  return rpc<ApplyResult>("fs.applyPatch", { session_id: sessionId, ops });
 }

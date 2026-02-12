@@ -1,88 +1,91 @@
-from enum import Enum
-from typing import Optional
+from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Dict, Tuple, Literal
 
-class AgentState(str, Enum):
-    SCAN = "SCAN"
-    PLAN = "PLAN"
-    PATCH = "PATCH"
-    VERIFY = "VERIFY"
-    REPORT = "REPORT"
-    STOP = "STOP"
+AdjutorixState = Literal[
+    "IDLE",
+    "PROMPTED",
+    "PLANNED",
+    "PATCHED",
+    "REVIEWED",
+    "APPLIED",
+    "RUNNING",
+    "RESULT",
+    "FAILED",
+]
 
+AdjutorixEvent = Literal[
+    "PROMPT",
+    "PLAN_OK",
+    "PLAN_FAIL",
+    "PATCH_OK",
+    "PATCH_FAIL",
+    "REVIEW_ACCEPT",
+    "REVIEW_REJECT",
+    "APPLY_OK",
+    "APPLY_FAIL",
+    "RUN_START",
+    "RUN_OK",
+    "RUN_FAIL",
+    "RESET",
+]
 
-_ALLOWED_TRANSITIONS = {
-    AgentState.SCAN: {AgentState.PLAN, AgentState.STOP},
-    AgentState.PLAN: {AgentState.PATCH, AgentState.STOP},
-    AgentState.PATCH: {AgentState.VERIFY, AgentState.STOP},
-    AgentState.VERIFY: {AgentState.REPORT, AgentState.STOP},
-    AgentState.REPORT: {AgentState.STOP, AgentState.SCAN},
-    AgentState.STOP: {AgentState.SCAN},
+TRANSITIONS: Dict[Tuple[AdjutorixState, AdjutorixEvent], AdjutorixState] = {
+    ("IDLE", "PROMPT"): "PROMPTED",
+
+    ("PROMPTED", "PLAN_OK"): "PLANNED",
+    ("PROMPTED", "PLAN_FAIL"): "FAILED",
+
+    ("PLANNED", "PATCH_OK"): "PATCHED",
+    ("PLANNED", "PATCH_FAIL"): "FAILED",
+
+    ("PATCHED", "REVIEW_ACCEPT"): "REVIEWED",
+    ("PATCHED", "REVIEW_REJECT"): "PLANNED",
+
+    ("REVIEWED", "APPLY_OK"): "APPLIED",
+    ("REVIEWED", "APPLY_FAIL"): "FAILED",
+
+    ("APPLIED", "RUN_START"): "RUNNING",
+
+    ("RUNNING", "RUN_OK"): "RESULT",
+    ("RUNNING", "RUN_FAIL"): "FAILED",
+
+    ("RESULT", "RESET"): "IDLE",
+    ("FAILED", "RESET"): "IDLE",
 }
 
 
-class InvalidStateTransition(Exception):
-    pass
+class InvalidTransition(RuntimeError):
+    def __init__(self, state: AdjutorixState, event: AdjutorixEvent) -> None:
+        super().__init__(f"Invalid transition: {state} --{event}--> ?")
+        self.state = state
+        self.event = event
+
+
+@dataclass
+class MachineSnapshot:
+    state: AdjutorixState
 
 
 class StateMachine:
-    """
-    Enforces SCAN → PLAN → PATCH → VERIFY → REPORT → STOP.
-
-    Prevents skipping steps and chaotic execution.
-    """
-
-    def __init__(self) -> None:
-        self._state: AgentState = AgentState.STOP
-        self._job_id: Optional[str] = None
+    def __init__(self, initial: AdjutorixState = "IDLE") -> None:
+        self._state: AdjutorixState = initial
 
     @property
-    def state(self) -> AgentState:
+    def state(self) -> AdjutorixState:
         return self._state
 
-    @property
-    def job_id(self) -> Optional[str]:
-        return self._job_id
+    def dispatch(self, event: AdjutorixEvent) -> AdjutorixState:
+        key = (self._state, event)
+        nxt = TRANSITIONS.get(key)
+        if nxt is None:
+            raise InvalidTransition(self._state, event)
+        self._state = nxt
+        return self._state
 
-    def start_job(self, job_id: str) -> None:
-        if self._state != AgentState.STOP:
-            raise InvalidStateTransition("Job already running")
+    def snapshot(self) -> MachineSnapshot:
+        return MachineSnapshot(state=self._state)
 
-        self._job_id = job_id
-        self._transition(AgentState.SCAN)
-
-    def finish_job(self) -> None:
-        self._transition(AgentState.STOP)
-        self._job_id = None
-
-    def to_scan(self) -> None:
-        self._transition(AgentState.SCAN)
-
-    def to_plan(self) -> None:
-        self._transition(AgentState.PLAN)
-
-    def to_patch(self) -> None:
-        self._transition(AgentState.PATCH)
-
-    def to_verify(self) -> None:
-        self._transition(AgentState.VERIFY)
-
-    def to_report(self) -> None:
-        self._transition(AgentState.REPORT)
-
-    def _transition(self, new_state: AgentState) -> None:
-        allowed = _ALLOWED_TRANSITIONS.get(self._state, set())
-
-        if new_state not in allowed:
-            raise InvalidStateTransition(
-                f"Illegal transition: {self._state} → {new_state}"
-            )
-
-        self._state = new_state
-
-    def reset(self) -> None:
-        """
-        Emergency reset (crash recovery).
-        """
-        self._state = AgentState.STOP
-        self._job_id = None
+    def restore(self, snap: MachineSnapshot) -> None:
+        self._state = snap.state

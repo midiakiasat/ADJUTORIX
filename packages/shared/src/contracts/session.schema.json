@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adjutorix://contracts/session.schema.json",
+  "title": "Session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "created_at", "machine_snapshot"],
+  "properties": {
+    "session_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "machine_snapshot": {
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "meta": { "type": ["object", "null"] }
+  }
+}

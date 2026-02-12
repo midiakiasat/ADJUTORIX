@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adjutorix://contracts/apply_result.schema.json",
+  "title": "ApplyResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "applied", "errors"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "applied": { "type": "integer", "minimum": 0 },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
