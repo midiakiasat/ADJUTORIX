@@ -22,9 +22,9 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from typing import TYPE_CHECKING
-from adjutorix_agent.core.locks import LockError, get_workspace_lock
+from adjutorix_agent.core.lock_manager import LockError, get_workspace_lock
 if TYPE_CHECKING:
-    from adjutorix_agent.core.locks import WorkspaceLock
+    from adjutorix_agent.core.lock_manager import WorkspaceLock
 from adjutorix_agent.governance.policy import PolicyLoader
 
 

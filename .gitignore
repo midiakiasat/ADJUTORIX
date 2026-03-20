@@ -1,12 +1,16 @@
-# Node / JS
-**/node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-**/.npmrc
+# ===============================
+# Dependencies
+# ===============================
 
-# Builds
+**/node_modules/
+node_modules/
+**/.venv/
+**/*.egg-info/
+
+# ===============================
+# Build Artifacts
+# ===============================
+
 **/dist/
 **/build/
 **/.turbo/
@@ -14,33 +18,37 @@ pnpm-debug.log*
 **/.vite/
 **/coverage/
 
-# Python
-**/.venv/
+# ===============================
+# Python Artifacts
+# ===============================
+
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/
 **/.mypy_cache/
 **/.ruff_cache/
 
-# OS / editor
+# ===============================
+# OS / Editor
+# ===============================
+
 .DS_Store
 .idea/
 .vscode/
 *.swp
 
-# Adjutorix runtime (generated)
+# ===============================
+# Adjutorix Runtime (STRICT)
+# ===============================
+
+# Root runtime is always generated
 runtime/
 
-
-# === Recursive ignores for monorepo ===
-**/*.vsix
-**/*.egg-info/
-**/.agent/
-
-# deps
-node_modules/
-
-# Never allow package-local runtimes (generated)
+# Never allow package-local runtimes
 packages/**/runtime/
 
-# Never allow package-local runtimes (generated)
+# Never allow agent metadata
+**/.agent/
+
+# VSIX
+**/*.vsix

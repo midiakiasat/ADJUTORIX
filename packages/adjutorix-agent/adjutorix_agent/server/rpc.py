@@ -16,7 +16,7 @@ from ..chat.router import ChatRouter
 from ..core.context_budget import ContextBudget
 from ..core.executor import Executor
 from ..core.job_ledger import JobLedger
-from ..core.locks import LockManager
+from ..core.lock_manager import LockManager
 from ..core.recovery import RecoveryManager
 from ..core.rollback import RollbackManager
 from ..core.state_machine import StateMachine

@@ -1,0 +1,107 @@
+# ADJUTORIX Decision Log
+# Append-only file.
+# Do NOT rewrite history.
+# New entries must be added at the end.
+
+---
+
+## Format
+
+YYYY-MM-DD | AUTHOR | SCOPE | DECISION | REASON | CONSEQUENCE
+
+Example:
+2026-01-15 | agent | build | Switched to Ruff | Faster linting | Reduced CI time
+
+---
+
+## System Decisions
+
+2026-01-01 | system | architecture | Adopted SCAN→PLAN→PATCH→VERIFY→REPORT→STOP | Prevents agent drift | Deterministic workflow
+
+2026-01-01 | system | governance | Enforced diff-only patches | Prevent silent breakage | Safer changes
+
+2026-01-01 | system | security | Blocked network by default | Reduce exfiltration risk | Manual override needed
+
+2026-01-01 | system | tooling | Tool-first execution model | Minimize hallucination | Higher reliability
+
+---
+
+## Repository-Specific Decisions
+
+# Add project-specific decisions below
+
+# Example:
+# 2026-02-10 | user | api | Switched auth to JWT | Scalability | Token rotation required
+
+---
+
+## Model & Agent Decisions
+
+# Model routing changes
+
+# Example:
+# 2026-03-01 | agent | llm | Promoted strong model for tax logic | Accuracy | Higher latency
+
+---
+
+## Infrastructure Decisions
+
+# CI/CD, deployment, hosting
+
+# Example:
+# 2026-02-20 | user | deploy | Moved to Cloudflare Workers | Cost | Vendor dependency
+
+---
+
+## Security Decisions
+
+# Security posture changes
+
+# Example:
+# 2026-01-30 | agent | security | Added secrets scanner | Leak prevention | Pre-commit overhead
+
+---
+
+## Performance Decisions
+
+# Optimization choices
+
+# Example:
+# 2026-02-05 | agent | perf | Enabled test targeting | Faster feedback | Risk of missed tests
+
+---
+
+## Breaking Changes
+
+# Major changes that require migration
+
+# Example:
+# 2026-04-01 | user | api | Removed v1 endpoints | Cleanup | Client updates required
+
+---
+
+## Deprecated Practices
+
+# Old approaches no longer allowed
+
+# Example:
+# 2025-12-10 | system | lint | Deprecated flake8 | Slow | Replaced by Ruff
+
+---
+
+## Notes
+
+- This file is authoritative.
+- If it’s not here, it didn’t happen.
+- Every irreversible decision must be logged.
+- Use precise language.
+- Avoid vague entries.
+
+---
+
+## Metadata
+
+Created: 2026-01-01  
+Maintained by: ADJUTORIX Agent  
+Policy: Immutable History  
+Version: 1.0
