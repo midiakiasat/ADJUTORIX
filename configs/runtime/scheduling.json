@@ -1,0 +1,759 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.scheduling",
+  "version": 1,
+  "title": "ADJUTORIX Governed Scheduling Configuration",
+  "description": "Canonical machine-readable configuration for governed scheduling, admission, prioritization, concurrency, leases, retries, exclusivity, recovery, and escalation across ADJUTORIX jobs and transactions. This file defines how work enters execution, competes for resources, recovers from interruption, and preserves authoritative state semantics.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "runtime-orchestration",
+    "agent-runtime",
+    "verify-runtime",
+    "replay-runtime"
+  ],
+  "defaults": {
+    "unknown_queue_behavior": "deny",
+    "unknown_job_class_behavior": "deny",
+    "missing_admission_policy_behavior": "deny",
+    "scheduler_mode": "governed_fifo_with_priority"
+  },
+  "invariants": [
+    "No job may execute without admission, authoritative transaction identity, and policy binding.",
+    "No mutation-capable job may bypass verify, replay, trust, or confirmation preconditions by priority alone.",
+    "Exclusive resources must be modeled explicitly and leased before use.",
+    "Retries must preserve auditability and may not silently convert non-idempotent work into repeated mutation.",
+    "Recovery and rollback paths must be first-class scheduler outcomes, not external conventions."
+  ],
+  "enums": {
+    "queue_kind": [
+      "foreground_interactive",
+      "governance_critical",
+      "verify",
+      "replay",
+      "mutation",
+      "command",
+      "artifact",
+      "release",
+      "recovery",
+      "background_observability"
+    ],
+    "job_class": [
+      "workspace_open",
+      "verify_run",
+      "replay_run",
+      "patch_review",
+      "patch_apply",
+      "rollback",
+      "command_run",
+      "settings_update",
+      "trust_update",
+      "release_promotion",
+      "health_probe",
+      "diagnostics_refresh",
+      "artifact_export",
+      "crash_recovery"
+    ],
+    "priority": [
+      "p0",
+      "p1",
+      "p2",
+      "p3",
+      "p4"
+    ],
+    "admission_result": [
+      "allow",
+      "allow_with_warning",
+      "defer",
+      "deny"
+    ],
+    "retry_policy": [
+      "never",
+      "bounded_idempotent_only",
+      "bounded_with_revalidation",
+      "manual_only"
+    ],
+    "lease_scope": [
+      "workspace",
+      "ledger",
+      "transaction",
+      "release",
+      "global"
+    ],
+    "resource_kind": [
+      "workspace_mutation",
+      "ledger_writer",
+      "release_channel",
+      "command_executor",
+      "artifact_writer",
+      "recovery_controller"
+    ],
+    "preemption_policy": [
+      "none",
+      "queue_before_start_only",
+      "cooperative_non_mutating_only"
+    ],
+    "completion_action": [
+      "persist_and_complete",
+      "persist_and_warn",
+      "persist_and_fail",
+      "request_recovery",
+      "request_rollback",
+      "deny"
+    ]
+  },
+  "scheduler": {
+    "mode": "governed_fifo_with_priority",
+    "admission_required": true,
+    "transaction_identity_required": true,
+    "policy_binding_required": true,
+    "max_concurrent_jobs": 4,
+    "max_queued_jobs": 128,
+    "poll_interval_ms": 250,
+    "heartbeat_interval_ms": 1000,
+    "heartbeat_grace_ms": 5000,
+    "default_job_timeout_ms": 1800000,
+    "crash_resume_enabled": true
+  },
+  "queues": [
+    {
+      "id": "foreground_interactive",
+      "kind": "foreground_interactive",
+      "title": "Foreground Interactive Queue",
+      "description": "Low-latency queue for user-visible, non-destructive operations that must remain responsive without bypassing governance.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 2,
+      "allowed_job_classes": [
+        "workspace_open",
+        "diagnostics_refresh",
+        "health_probe",
+        "patch_review",
+        "settings_update",
+        "trust_update"
+      ],
+      "preemption_policy": "queue_before_start_only"
+    },
+    {
+      "id": "governance_critical",
+      "kind": "governance_critical",
+      "title": "Governance Critical Queue",
+      "description": "Highest integrity queue for decisions or transitions that gate consequential actions.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "trust_update",
+        "rollback",
+        "crash_recovery",
+        "release_promotion"
+      ],
+      "preemption_policy": "none"
+    },
+    {
+      "id": "verify",
+      "kind": "verify",
+      "title": "Verify Queue",
+      "description": "Queue for authoritative verify aggregation jobs.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 2,
+      "allowed_job_classes": [
+        "verify_run",
+        "diagnostics_refresh"
+      ],
+      "preemption_policy": "queue_before_start_only"
+    },
+    {
+      "id": "replay",
+      "kind": "replay",
+      "title": "Replay Queue",
+      "description": "Queue for replay and lineage evaluation jobs.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "replay_run",
+        "crash_recovery"
+      ],
+      "preemption_policy": "none"
+    },
+    {
+      "id": "mutation",
+      "kind": "mutation",
+      "title": "Mutation Queue",
+      "description": "Queue for consequential workspace or ledger mutation jobs.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "patch_apply",
+        "rollback",
+        "settings_update",
+        "trust_update",
+        "artifact_export"
+      ],
+      "preemption_policy": "none"
+    },
+    {
+      "id": "command",
+      "kind": "command",
+      "title": "Command Queue",
+      "description": "Queue for governed subprocess and terminal-backed command jobs.",
+      "priority_order": [
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "p0"
+      ],
+      "max_concurrency": 2,
+      "allowed_job_classes": [
+        "command_run"
+      ],
+      "preemption_policy": "cooperative_non_mutating_only"
+    },
+    {
+      "id": "artifact",
+      "kind": "artifact",
+      "title": "Artifact Queue",
+      "description": "Queue for artifact persistence and export operations that should not starve critical governance work.",
+      "priority_order": [
+        "p2",
+        "p3",
+        "p4",
+        "p1",
+        "p0"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "artifact_export",
+        "release_promotion"
+      ],
+      "preemption_policy": "queue_before_start_only"
+    },
+    {
+      "id": "release",
+      "kind": "release",
+      "title": "Release Queue",
+      "description": "Queue for release promotion and publication actions with the strictest exclusivity and rollback semantics.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "release_promotion"
+      ],
+      "preemption_policy": "none"
+    },
+    {
+      "id": "recovery",
+      "kind": "recovery",
+      "title": "Recovery Queue",
+      "description": "Queue for crash resume, state reconstruction, forced failure, and rollback orchestration.",
+      "priority_order": [
+        "p0",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "crash_recovery",
+        "rollback"
+      ],
+      "preemption_policy": "none"
+    },
+    {
+      "id": "background_observability",
+      "kind": "background_observability",
+      "title": "Background Observability Queue",
+      "description": "Queue for non-authoritative periodic refresh, health, and diagnostics work.",
+      "priority_order": [
+        "p4",
+        "p3",
+        "p2",
+        "p1",
+        "p0"
+      ],
+      "max_concurrency": 1,
+      "allowed_job_classes": [
+        "health_probe",
+        "diagnostics_refresh"
+      ],
+      "preemption_policy": "queue_before_start_only"
+    }
+  ],
+  "job_classes": {
+    "workspace_open": {
+      "default_queue": "foreground_interactive",
+      "default_priority": "p1",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 30000,
+      "requires": [
+        "transaction_identity",
+        "workspace_target"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "verify_run": {
+      "default_queue": "verify",
+      "default_priority": "p1",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 600000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "workspace_healthy",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "replay_run": {
+      "default_queue": "replay",
+      "default_priority": "p1",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 600000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "workspace_healthy",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "patch_review": {
+      "default_queue": "foreground_interactive",
+      "default_priority": "p1",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 120000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "verify_passed",
+        "replay_passed"
+      ],
+      "completion_action_on_timeout": "persist_and_warn"
+    },
+    "patch_apply": {
+      "default_queue": "mutation",
+      "default_priority": "p0",
+      "retry_policy": "manual_only",
+      "max_retries": 0,
+      "timeout_ms": 600000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "workspace_healthy",
+        "verify_passed",
+        "verify_fresh",
+        "replay_passed",
+        "replay_deterministic",
+        "confirmation_present",
+        "confirmation_fresh",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "request_rollback"
+    },
+    "rollback": {
+      "default_queue": "recovery",
+      "default_priority": "p0",
+      "retry_policy": "manual_only",
+      "max_retries": 0,
+      "timeout_ms": 600000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "verify_passed",
+        "replay_passed",
+        "rollback_target_available",
+        "confirmation_present",
+        "confirmation_fresh"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "command_run": {
+      "default_queue": "command",
+      "default_priority": "p2",
+      "retry_policy": "bounded_idempotent_only",
+      "max_retries": 1,
+      "timeout_ms": 600000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "settings_update": {
+      "default_queue": "mutation",
+      "default_priority": "p2",
+      "retry_policy": "manual_only",
+      "max_retries": 0,
+      "timeout_ms": 30000,
+      "requires": [
+        "transaction_identity",
+        "confirmation_present",
+        "confirmation_fresh",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "trust_update": {
+      "default_queue": "governance_critical",
+      "default_priority": "p0",
+      "retry_policy": "manual_only",
+      "max_retries": 0,
+      "timeout_ms": 30000,
+      "requires": [
+        "transaction_identity",
+        "confirmation_present",
+        "confirmation_fresh",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "release_promotion": {
+      "default_queue": "release",
+      "default_priority": "p0",
+      "retry_policy": "manual_only",
+      "max_retries": 0,
+      "timeout_ms": 1800000,
+      "requires": [
+        "transaction_identity",
+        "workspace_trusted",
+        "verify_passed",
+        "verify_fresh",
+        "replay_passed",
+        "replay_deterministic",
+        "release_attested",
+        "confirmation_present",
+        "confirmation_fresh",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "request_rollback"
+    },
+    "health_probe": {
+      "default_queue": "background_observability",
+      "default_priority": "p4",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 2,
+      "timeout_ms": 5000,
+      "requires": [
+        "transaction_identity"
+      ],
+      "completion_action_on_timeout": "persist_and_warn"
+    },
+    "diagnostics_refresh": {
+      "default_queue": "background_observability",
+      "default_priority": "p3",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 120000,
+      "requires": [
+        "transaction_identity",
+        "workspace_target"
+      ],
+      "completion_action_on_timeout": "persist_and_warn"
+    },
+    "artifact_export": {
+      "default_queue": "artifact",
+      "default_priority": "p2",
+      "retry_policy": "bounded_with_revalidation",
+      "max_retries": 1,
+      "timeout_ms": 300000,
+      "requires": [
+        "transaction_identity",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "persist_and_fail"
+    },
+    "crash_recovery": {
+      "default_queue": "recovery",
+      "default_priority": "p0",
+      "retry_policy": "never",
+      "max_retries": 0,
+      "timeout_ms": 60000,
+      "requires": [
+        "transaction_identity",
+        "policy_bound"
+      ],
+      "completion_action_on_timeout": "request_recovery"
+    }
+  },
+  "admission": {
+    "required_fields": [
+      "transaction_id",
+      "job_class",
+      "queue_id",
+      "priority",
+      "authority_surface",
+      "policy_bindings"
+    ],
+    "deny_if": [
+      "queue_unknown",
+      "job_class_unknown",
+      "queue_disallows_job_class",
+      "policy_binding_missing",
+      "transaction_identity_missing",
+      "required_guard_missing",
+      "max_queued_jobs_exceeded",
+      "exclusive_resource_unavailable_without_wait_path"
+    ],
+    "defer_if": [
+      "exclusive_resource_held",
+      "dependent_job_running",
+      "foreground_capacity_reserved"
+    ],
+    "warn_if": [
+      "queue_backlog_high",
+      "workspace_already_busy_nonexclusive",
+      "noncritical_job_starvation_risk"
+    ]
+  },
+  "resources": [
+    {
+      "id": "workspace_mutation",
+      "kind": "workspace_mutation",
+      "lease_scope": "workspace",
+      "exclusive": true,
+      "max_holders": 1,
+      "applies_to": [
+        "patch_apply",
+        "rollback",
+        "settings_update",
+        "trust_update",
+        "artifact_export"
+      ]
+    },
+    {
+      "id": "ledger_writer",
+      "kind": "ledger_writer",
+      "lease_scope": "ledger",
+      "exclusive": true,
+      "max_holders": 1,
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_apply",
+        "rollback",
+        "release_promotion",
+        "crash_recovery"
+      ]
+    },
+    {
+      "id": "release_channel",
+      "kind": "release_channel",
+      "lease_scope": "release",
+      "exclusive": true,
+      "max_holders": 1,
+      "applies_to": [
+        "release_promotion"
+      ]
+    },
+    {
+      "id": "command_executor",
+      "kind": "command_executor",
+      "lease_scope": "global",
+      "exclusive": false,
+      "max_holders": 2,
+      "applies_to": [
+        "command_run"
+      ]
+    },
+    {
+      "id": "artifact_writer",
+      "kind": "artifact_writer",
+      "lease_scope": "global",
+      "exclusive": false,
+      "max_holders": 1,
+      "applies_to": [
+        "artifact_export",
+        "release_promotion",
+        "verify_run",
+        "replay_run"
+      ]
+    },
+    {
+      "id": "recovery_controller",
+      "kind": "recovery_controller",
+      "lease_scope": "global",
+      "exclusive": true,
+      "max_holders": 1,
+      "applies_to": [
+        "crash_recovery",
+        "rollback"
+      ]
+    }
+  ],
+  "priority_rules": {
+    "p0": {
+      "description": "Immediate integrity-critical work such as rollback, recovery, trust-critical, or release-critical transitions.",
+      "allowed_job_classes": [
+        "patch_apply",
+        "rollback",
+        "trust_update",
+        "release_promotion",
+        "crash_recovery"
+      ]
+    },
+    "p1": {
+      "description": "User-visible but governed work that should start promptly without overtaking integrity-critical work.",
+      "allowed_job_classes": [
+        "workspace_open",
+        "verify_run",
+        "replay_run",
+        "patch_review"
+      ]
+    },
+    "p2": {
+      "description": "Normal operational work such as commands, settings changes, and exports.",
+      "allowed_job_classes": [
+        "command_run",
+        "settings_update",
+        "artifact_export"
+      ]
+    },
+    "p3": {
+      "description": "Background refresh work with user-visible utility but no immediate governance consequence.",
+      "allowed_job_classes": [
+        "diagnostics_refresh"
+      ]
+    },
+    "p4": {
+      "description": "Lowest-priority observability work.",
+      "allowed_job_classes": [
+        "health_probe"
+      ]
+    }
+  },
+  "retry": {
+    "global_rules": {
+      "never_retry_non_idempotent_without_explicit_policy": true,
+      "retry_requires_new_audit_event": true,
+      "retry_requires_correlation_to_original_attempt": true,
+      "retry_requires_guard_revalidation_for_bounded_with_revalidation": true
+    },
+    "backoff": {
+      "initial_ms": 250,
+      "multiplier": 2,
+      "max_ms": 10000,
+      "jitter_percent": 20
+    },
+    "deny_retry_if": [
+      "decision_denied",
+      "confirmation_stale",
+      "verify_stale_for_mutation_job",
+      "replay_non_deterministic_for_required_job",
+      "rollback_requested",
+      "resource_exclusive_conflict_persistent"
+    ]
+  },
+  "starvation_prevention": {
+    "enabled": true,
+    "max_wait_ms_by_priority": {
+      "p0": 1000,
+      "p1": 5000,
+      "p2": 30000,
+      "p3": 120000,
+      "p4": 300000
+    },
+    "action_on_exceeded_wait": "elevate_with_audit_if_safe",
+    "never_elevate_classes": [
+      "patch_apply",
+      "rollback",
+      "release_promotion"
+    ]
+  },
+  "recovery": {
+    "enabled": true,
+    "entry_conditions": [
+      "process_crash_detected",
+      "heartbeat_stalled",
+      "job_timeout_with_recovery_action",
+      "incomplete_persist_state_detected"
+    ],
+    "required_inputs": [
+      "persisted_transaction_state",
+      "ledger_state",
+      "artifact_state",
+      "policy_bindings"
+    ],
+    "deny_resume_if": [
+      "persisted_state_missing",
+      "policy_binding_mismatch",
+      "workspace_identity_ambiguous_for_non_resumable_job"
+    ],
+    "force_fail_if": [
+      "state_reconstruction_incomplete",
+      "required_artifact_missing",
+      "ledger_conflict_detected"
+    ],
+    "force_rollback_if": [
+      "patch_apply_partial_mutation_detected",
+      "release_partial_publish_detected"
+    ]
+  },
+  "audit": {
+    "required_fields": [
+      "job_id",
+      "transaction_id",
+      "job_class",
+      "queue_id",
+      "priority",
+      "admission_result",
+      "evaluated_at"
+    ],
+    "recommended_fields": [
+      "workspace_id",
+      "verify_id",
+      "replay_id",
+      "ledger_id",
+      "release_id",
+      "resource_leases",
+      "retry_of_job_id"
+    ]
+  },
+  "validation_rules": {
+    "job_class_default_queue_must_exist": true,
+    "queue_allowed_job_classes_must_reference_known_classes": true,
+    "priority_allowed_job_classes_must_reference_known_classes": true,
+    "exclusive_resources_must_have_max_holders_one": true,
+    "manual_only_retry_requires_max_retries_zero": true,
+    "p0_jobs_must_not_use_preemption_policy_queue_before_start_only": false
+  }
+}

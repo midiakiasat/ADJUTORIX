@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "ADJUTORIX TypeScript / Tests",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": [
+      "node",
+      "vitest/globals"
+    ],
+    "rootDir": "../../..",
+    "outDir": "../../../.tmp/tsc/tests",
+    "tsBuildInfoFile": "../../../node_modules/.cache/tsc/tests.tsbuildinfo",
+    "baseUrl": "../../..",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@configs/*": [
+        "configs/*"
+      ],
+      "@docs/*": [
+        "docs/*"
+      ],
+      "@packages/*": [
+        "packages/*"
+      ],
+      "@tests/*": [
+        "tests/*"
+      ],
+      "@fixtures/*": [
+        "tests/fixtures/*"
+      ],
+      "@golden/*": [
+        "tests/golden/*"
+      ],
+      "@contracts/*": [
+        "tests/contracts/*"
+      ],
+      "@invariants/*": [
+        "tests/invariants/*"
+      ],
+      "@replay-tests/*": [
+        "tests/replay/*"
+      ],
+      "@recovery-tests/*": [
+        "tests/recovery/*"
+      ],
+      "@perf-tests/*": [
+        "tests/performance/*"
+      ],
+      "@app-main/*": [
+        "packages/adjutorix-app/src/main/*"
+      ],
+      "@app-preload/*": [
+        "packages/adjutorix-app/src/preload/*"
+      ],
+      "@app-renderer/*": [
+        "packages/adjutorix-app/src/renderer/*"
+      ],
+      "@app-shared/*": [
+        "packages/adjutorix-app/src/shared/*"
+      ],
+      "@cli/*": [
+        "packages/adjutorix-cli/*"
+      ],
+      "@shared/*": [
+        "packages/shared/*"
+      ]
+    },
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    "inlineSources": true,
+    "incremental": true,
+    "composite": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": false,
+    "skipLibCheck": false,
+    "useDefineForClassFields": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "importsNotUsedAsValues": "remove",
+    "preserveValueImports": false,
+    "moduleSuffixes": [
+      "",
+      ".test",
+      ".spec",
+      ".mock",
+      ".fixture"
+    ],
+    "customConditions": [
+      "test",
+      "mock",
+      "fixture"
+    ],
+    "plugins": []
+  },
+  "include": [
+    "../../../tests/**/*.ts",
+    "../../../tests/**/*.tsx",
+    "../../../packages/**/tests/**/*.ts",
+    "../../../packages/**/tests/**/*.tsx",
+    "../../../packages/**/*.test.ts",
+    "../../../packages/**/*.test.tsx",
+    "../../../packages/**/*.spec.ts",
+    "../../../packages/**/*.spec.tsx",
+    "../../../configs/**/*.ts"
+  ],
+  "exclude": [
+    "../../../**/node_modules/**",
+    "../../../**/dist/**",
+    "../../../**/build/**",
+    "../../../**/out/**",
+    "../../../**/coverage/**",
+    "../../../**/.turbo/**",
+    "../../../**/.next/**",
+    "../../../**/.vite/**",
+    "../../../**/*.generated.ts",
+    "../../../**/*.generated.tsx"
+  ],
+  "references": []
+}

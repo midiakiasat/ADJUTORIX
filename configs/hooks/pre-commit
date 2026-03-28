@@ -1,0 +1,135 @@
+repos:
+  - repo: local
+    hooks:
+      - id: adjutorix-workspace-clean
+        name: ADJUTORIX / workspace clean baseline
+        entry: bash configs/ci/guard_workspace_clean.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-generated-artifacts
+        name: ADJUTORIX / generated artifact discipline
+        entry: bash configs/ci/guard_generated_artifacts.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-no-direct-write
+        name: ADJUTORIX / no direct write bypass
+        entry: bash configs/ci/guard_no_direct_write.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-scheduler-bypass
+        name: ADJUTORIX / no scheduler bypass
+        entry: bash configs/ci/guard_scheduler_bypass.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-apply-gate-bypass
+        name: ADJUTORIX / no apply gate bypass
+        entry: bash configs/ci/guard_apply_gate_bypass.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-verify-gate-bypass
+        name: ADJUTORIX / no verify gate bypass
+        entry: bash configs/ci/guard_verify_gate_bypass.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-renderer-authority
+        name: ADJUTORIX / renderer authority boundary
+        entry: bash configs/ci/guard_renderer_authority.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-contract-drift
+        name: ADJUTORIX / contract drift guard
+        entry: bash configs/ci/guard_contract_drift.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-replay-determinism
+        name: ADJUTORIX / replay determinism guard
+        entry: bash configs/ci/guard_replay_determinism.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-structure-check
+        name: ADJUTORIX / structural check
+        entry: bash configs/ci/check.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: adjutorix-cli-ruff
+        name: ADJUTORIX CLI / ruff check
+        entry: bash -lc 'cd packages/adjutorix-cli && ruff check src tests'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-cli/
+
+      - id: adjutorix-cli-format-check
+        name: ADJUTORIX CLI / ruff format check
+        entry: bash -lc 'cd packages/adjutorix-cli && ruff format --check src tests'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-cli/
+
+      - id: adjutorix-cli-mypy
+        name: ADJUTORIX CLI / mypy strict
+        entry: bash -lc 'cd packages/adjutorix-cli && mypy src'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-cli/
+
+      - id: adjutorix-cli-tests
+        name: ADJUTORIX CLI / contract tests
+        entry: bash -lc 'cd packages/adjutorix-cli && pytest -q tests/test_cli_replay.py tests/test_cli_verify.py'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-cli/
+
+      - id: adjutorix-app-verify
+        name: ADJUTORIX App / verify gate
+        entry: bash -lc 'cd packages/adjutorix-app && npm run verify'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-app/
+
+      - id: adjutorix-app-main-contracts
+        name: ADJUTORIX App / main contract tests
+        entry: bash -lc 'cd packages/adjutorix-app && npm test -- tests/main/preload_bridge.test.ts tests/main/exposed_api_contract.test.ts tests/main/renderer_policy.test.ts tests/main/invariant_enforcer.test.ts'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-app/
+
+      - id: adjutorix-app-smoke-critical
+        name: ADJUTORIX App / critical smoke tests
+        entry: bash -lc 'cd packages/adjutorix-app && npm test -- tests/smoke/patch_review_load.smoke.test.ts tests/smoke/verify_flow.smoke.test.ts tests/smoke/ledger_flow.smoke.test.ts tests/smoke/terminal_run.smoke.test.ts tests/smoke/settings_persist.smoke.test.ts tests/smoke/about_panel_render.smoke.test.ts'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^packages/adjutorix-app/
+
+      - id: adjutorix-root-test-invariants
+        name: ADJUTORIX Root / invariants and contracts
+        entry: bash -lc 'npm test --workspaces --if-present -- tests/invariants tests/contracts'
+        language: system
+        pass_filenames: false
+        stage

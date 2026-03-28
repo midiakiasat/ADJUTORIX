@@ -1,0 +1,1259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.transaction-states",
+  "version": 1,
+  "title": "ADJUTORIX Transaction State Machine Contract",
+  "description": "Canonical machine-readable contract for authoritative transaction states, phases, transitions, guards, recovery semantics, and terminal outcomes across ADJUTORIX jobs, patch flows, verification, apply, rollback, ledger recording, and crash resume.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "runtime-orchestration",
+    "replay-runtime",
+    "verify-runtime"
+  ],
+  "defaults": {
+    "unknown_state_behavior": "deny",
+    "unknown_transition_behavior": "deny",
+    "missing_guard_behavior": "deny"
+  },
+  "invariants": [
+    "Every transaction has exactly one current authoritative state.",
+    "Every state transition must be explicit, guarded, and auditable.",
+    "No terminal state may transition except through an explicit recovery or rollback transaction defined here.",
+    "No apply-like mutation may enter execution without trust, verify, replay, and confirmation guards where required.",
+    "Crash recovery must resume from persisted state, never inferred memory-only intent."
+  ],
+  "enums": {
+    "transaction_kind": [
+      "workspace_open",
+      "verify_run",
+      "replay_run",
+      "patch_review",
+      "patch_apply",
+      "rollback",
+      "command_run",
+      "settings_update",
+      "trust_update",
+      "release_promotion"
+    ],
+    "state_class": [
+      "initial",
+      "active",
+      "waiting",
+      "blocked",
+      "terminal_success",
+      "terminal_failure",
+      "terminal_abort",
+      "terminal_rollback",
+      "recovery"
+    ],
+    "state": [
+      "created",
+      "admitted",
+      "hydrating_context",
+      "awaiting_trust",
+      "awaiting_input",
+      "awaiting_verify",
+      "awaiting_replay",
+      "awaiting_confirmation",
+      "ready",
+      "scheduled",
+      "running",
+      "persisting_artifacts",
+      "persisting_ledger",
+      "completed",
+      "completed_with_warnings",
+      "denied",
+      "blocked",
+      "failed",
+      "timed_out",
+      "cancelled",
+      "rollback_pending",
+      "rolled_back",
+      "recovery_pending",
+      "recovering",
+      "superseded"
+    ],
+    "guard": [
+      "workspace_present",
+      "workspace_trusted",
+      "workspace_healthy",
+      "target_identity_resolved",
+      "policy_bound",
+      "verify_passed",
+      "verify_fresh",
+      "replay_passed",
+      "replay_deterministic",
+      "environment_compatible",
+      "confirmation_present",
+      "confirmation_fresh",
+      "scheduler_admitted",
+      "ledger_available",
+      "rollback_target_available",
+      "secrets_clean",
+      "release_attested"
+    ],
+    "event": [
+      "create",
+      "admit",
+      "hydrate_context_ok",
+      "hydrate_context_failed",
+      "trust_granted",
+      "trust_denied",
+      "input_bound",
+      "verify_started",
+      "verify_passed",
+      "verify_warned",
+      "verify_failed",
+      "verify_stale",
+      "replay_started",
+      "replay_passed",
+      "replay_failed",
+      "replay_non_deterministic",
+      "confirmation_received",
+      "confirmation_expired",
+      "scheduler_admitted",
+      "run_started",
+      "run_progressed",
+      "run_failed",
+      "run_timed_out",
+      "artifacts_persisted",
+      "ledger_persisted",
+      "complete_ok",
+      "complete_warn",
+      "deny",
+      "block",
+      "cancel",
+      "supersede",
+      "request_rollback",
+      "rollback_completed",
+      "crash_detected",
+      "resume",
+      "recovery_failed"
+    ],
+    "persistence_requirement": [
+      "none",
+      "context_only",
+      "artifacts_required",
+      "ledger_required",
+      "artifacts_and_ledger_required"
+    ],
+    "recovery_mode": [
+      "none",
+      "resume_same_state",
+      "resume_next_safe_state",
+      "force_failed",
+      "force_rollback"
+    ],
+    "decision": [
+      "allow",
+      "allow_with_warning",
+      "deny"
+    ]
+  },
+  "shared": {
+    "required_transaction_fields": [
+      "transaction_id",
+      "transaction_kind",
+      "state",
+      "state_class",
+      "created_at",
+      "updated_at",
+      "authority_surface"
+    ],
+    "required_audit_fields": [
+      "transaction_id",
+      "transaction_kind",
+      "from_state",
+      "to_state",
+      "event",
+      "evaluated_at"
+    ]
+  },
+  "state_definitions": {
+    "created": {
+      "class": "initial",
+      "description": "Transaction intent exists but has not yet been admitted by authoritative runtime policy.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "admitted": {
+      "class": "active",
+      "description": "Transaction passed initial admission checks and is now authoritative for further evaluation.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "hydrating_context": {
+      "class": "active",
+      "description": "Runtime is resolving workspace, target, policy, and environment context needed for guards.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "awaiting_trust": {
+      "class": "waiting",
+      "description": "Transaction is blocked on trust state being elevated or revalidated.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "workspace_open",
+        "verify_run",
+        "replay_run",
+        "patch_review",
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "settings_update",
+        "trust_update",
+        "release_promotion"
+      ]
+    },
+    "awaiting_input": {
+      "class": "waiting",
+      "description": "Transaction requires additional explicit scope, target, or policy-bound input before continuing.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "awaiting_verify": {
+      "class": "waiting",
+      "description": "Transaction requires fresh authoritative verification before execution may continue.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "patch_review",
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "release_promotion"
+      ]
+    },
+    "awaiting_replay": {
+      "class": "waiting",
+      "description": "Transaction requires replay/lineage evidence before execution may continue.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "verify_run",
+        "patch_review",
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ]
+    },
+    "awaiting_confirmation": {
+      "class": "waiting",
+      "description": "Transaction is ready in principle but requires explicit fresh confirmation to proceed.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "settings_update",
+        "trust_update",
+        "release_promotion"
+      ]
+    },
+    "ready": {
+      "class": "active",
+      "description": "All required guards are satisfied and the transaction may be scheduled or executed.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "scheduled": {
+      "class": "active",
+      "description": "Transaction has been admitted to the governed scheduler and is queued for execution.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "running": {
+      "class": "active",
+      "description": "Consequential execution is in progress under authoritative tracking.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "persisting_artifacts": {
+      "class": "active",
+      "description": "Execution completed sufficiently to persist generated evidence or artifacts.",
+      "terminal": false,
+      "requires_persistence": "artifacts_required",
+      "allowed_kinds": "all"
+    },
+    "persisting_ledger": {
+      "class": "active",
+      "description": "Execution and artifact persistence completed sufficiently to record authoritative ledger edges.",
+      "terminal": false,
+      "requires_persistence": "ledger_required",
+      "allowed_kinds": [
+        "verify_run",
+        "replay_run",
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "release_promotion"
+      ]
+    },
+    "completed": {
+      "class": "terminal_success",
+      "description": "Transaction reached successful terminal completion with all required persistence satisfied.",
+      "terminal": true,
+      "requires_persistence": "artifacts_and_ledger_required",
+      "allowed_kinds": "all"
+    },
+    "completed_with_warnings": {
+      "class": "terminal_success",
+      "description": "Transaction completed successfully but with non-blocking warnings captured in authoritative evidence.",
+      "terminal": true,
+      "requires_persistence": "artifacts_and_ledger_required",
+      "allowed_kinds": "all"
+    },
+    "denied": {
+      "class": "terminal_abort",
+      "description": "Transaction was explicitly denied by policy, trust, or authority rules before execution completed.",
+      "terminal": true,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "blocked": {
+      "class": "terminal_failure",
+      "description": "Transaction became non-progressable because a required guard or dependency failed irrecoverably.",
+      "terminal": true,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "failed": {
+      "class": "terminal_failure",
+      "description": "Transaction execution failed after admission or scheduling.",
+      "terminal": true,
+      "requires_persistence": "artifacts_required",
+      "allowed_kinds": "all"
+    },
+    "timed_out": {
+      "class": "terminal_failure",
+      "description": "Transaction exceeded its allowed execution or waiting deadline.",
+      "terminal": true,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "cancelled": {
+      "class": "terminal_abort",
+      "description": "Transaction was explicitly cancelled before successful completion.",
+      "terminal": true,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "rollback_pending": {
+      "class": "blocked",
+      "description": "A failure or explicit request requires rollback to a previously attested target.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ]
+    },
+    "rolled_back": {
+      "class": "terminal_rollback",
+      "description": "Transaction ended by completing an authoritative rollback path.",
+      "terminal": true,
+      "requires_persistence": "artifacts_and_ledger_required",
+      "allowed_kinds": [
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ]
+    },
+    "recovery_pending": {
+      "class": "recovery",
+      "description": "Crash or interruption was detected and persisted state requires recovery evaluation.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "recovering": {
+      "class": "recovery",
+      "description": "Runtime is reconstructing authoritative state from persisted evidence to resume or fail safely.",
+      "terminal": false,
+      "requires_persistence": "context_only",
+      "allowed_kinds": "all"
+    },
+    "superseded": {
+      "class": "terminal_abort",
+      "description": "Transaction is no longer authoritative because a newer transaction with the same scope superseded it.",
+      "terminal": true,
+      "requires_persistence": "context_only",
+      "allowed_kinds": [
+        "verify_run",
+        "replay_run",
+        "patch_review",
+        "release_promotion"
+      ]
+    }
+  },
+  "kind_profiles": {
+    "workspace_open": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "completed_with_warnings"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": false
+    },
+    "verify_run": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "completed_with_warnings"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "superseded"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": false
+    },
+    "replay_run": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "completed_with_warnings"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "superseded"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": false
+    },
+    "patch_review": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "completed_with_warnings"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "superseded"
+      ],
+      "requires_verify": true,
+      "requires_replay": true,
+      "requires_confirmation": false
+    },
+    "patch_apply": {
+      "initial_state": "created",
+      "success_states": [
+        "completed"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "rolled_back"
+      ],
+      "requires_verify": true,
+      "requires_replay": true,
+      "requires_confirmation": true
+    },
+    "rollback": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "rolled_back"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "requires_verify": true,
+      "requires_replay": true,
+      "requires_confirmation": true
+    },
+    "command_run": {
+      "initial_state": "created",
+      "success_states": [
+        "completed",
+        "completed_with_warnings"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": true
+    },
+    "settings_update": {
+      "initial_state": "created",
+      "success_states": [
+        "completed"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": true
+    },
+    "trust_update": {
+      "initial_state": "created",
+      "success_states": [
+        "completed"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled"
+      ],
+      "requires_verify": false,
+      "requires_replay": false,
+      "requires_confirmation": true
+    },
+    "release_promotion": {
+      "initial_state": "created",
+      "success_states": [
+        "completed"
+      ],
+      "failure_states": [
+        "denied",
+        "blocked",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "rolled_back"
+      ],
+      "requires_verify": true,
+      "requires_replay": true,
+      "requires_confirmation": true
+    }
+  },
+  "transitions": [
+    {
+      "from": "created",
+      "event": "admit",
+      "to": "admitted",
+      "guards": [
+        "policy_bound",
+        "target_identity_resolved"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "admitted",
+      "event": "hydrate_context_ok",
+      "to": "hydrating_context",
+      "guards": [
+        "policy_bound"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "hydrating_context",
+      "event": "trust_denied",
+      "to": "awaiting_trust",
+      "guards": [
+        "workspace_present"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_trust",
+      "event": "trust_granted",
+      "to": "awaiting_input",
+      "guards": [
+        "workspace_trusted"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "hydrating_context",
+      "event": "input_bound",
+      "to": "awaiting_input",
+      "guards": [
+        "target_identity_resolved"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_input",
+      "event": "verify_started",
+      "to": "awaiting_verify",
+      "guards": [
+        "workspace_present",
+        "target_identity_resolved"
+      ],
+      "applies_to": [
+        "patch_review",
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "release_promotion"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_verify",
+      "event": "verify_passed",
+      "to": "awaiting_replay",
+      "guards": [
+        "verify_passed",
+        "verify_fresh"
+      ],
+      "applies_to": [
+        "patch_review",
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_verify",
+      "event": "verify_passed",
+      "to": "ready",
+      "guards": [
+        "verify_passed",
+        "verify_fresh"
+      ],
+      "applies_to": [
+        "command_run"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_verify",
+      "event": "verify_warned",
+      "to": "blocked",
+      "guards": [],
+      "applies_to": [
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "awaiting_verify",
+      "event": "verify_failed",
+      "to": "failed",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "awaiting_verify",
+      "event": "verify_stale",
+      "to": "blocked",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "awaiting_replay",
+      "event": "replay_passed",
+      "to": "awaiting_confirmation",
+      "guards": [
+        "replay_passed",
+        "replay_deterministic",
+        "environment_compatible"
+      ],
+      "applies_to": [
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_replay",
+      "event": "replay_passed",
+      "to": "ready",
+      "guards": [
+        "replay_passed",
+        "replay_deterministic",
+        "environment_compatible"
+      ],
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_review"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_replay",
+      "event": "replay_failed",
+      "to": "failed",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "awaiting_replay",
+      "event": "replay_non_deterministic",
+      "to": "blocked",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "awaiting_confirmation",
+      "event": "confirmation_received",
+      "to": "ready",
+      "guards": [
+        "confirmation_present",
+        "confirmation_fresh"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "awaiting_confirmation",
+      "event": "confirmation_expired",
+      "to": "blocked",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "ready",
+      "event": "scheduler_admitted",
+      "to": "scheduled",
+      "guards": [
+        "scheduler_admitted"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "scheduled",
+      "event": "run_started",
+      "to": "running",
+      "guards": [],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "running",
+      "event": "run_failed",
+      "to": "failed",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "running",
+      "event": "run_timed_out",
+      "to": "timed_out",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    },
+    {
+      "from": "running",
+      "event": "request_rollback",
+      "to": "rollback_pending",
+      "guards": [
+        "rollback_target_available"
+      ],
+      "applies_to": [
+        "patch_apply",
+        "rollback",
+        "release_promotion"
+      ],
+      "recovery_mode": "force_rollback"
+    },
+    {
+      "from": "running",
+      "event": "artifacts_persisted",
+      "to": "persisting_artifacts",
+      "guards": [],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_artifacts",
+      "event": "ledger_persisted",
+      "to": "persisting_ledger",
+      "guards": [
+        "ledger_available"
+      ],
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_apply",
+        "rollback",
+        "command_run",
+        "release_promotion"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_artifacts",
+      "event": "complete_ok",
+      "to": "completed",
+      "guards": [],
+      "applies_to": [
+        "workspace_open",
+        "patch_review",
+        "settings_update",
+        "trust_update"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_ledger",
+      "event": "complete_ok",
+      "to": "completed",
+      "guards": [],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_ledger",
+      "event": "complete_warn",
+      "to": "completed_with_warnings",
+      "guards": [],
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_review",
+        "command_run"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "rollback_pending",
+      "event": "rollback_completed",
+      "to": "rolled_back",
+      "guards": [
+        "rollback_target_available",
+        "ledger_available"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "created",
+      "event": "deny",
+      "to": "denied",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "admitted",
+      "event": "deny",
+      "to": "denied",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "hydrating_context",
+      "event": "deny",
+      "to": "denied",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "created",
+      "event": "block",
+      "to": "blocked",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "admitted",
+      "event": "block",
+      "to": "blocked",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "ready",
+      "event": "cancel",
+      "to": "cancelled",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "scheduled",
+      "event": "cancel",
+      "to": "cancelled",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "running",
+      "event": "cancel",
+      "to": "cancelled",
+      "guards": [],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "completed",
+      "event": "supersede",
+      "to": "superseded",
+      "guards": [],
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_review",
+        "release_promotion"
+      ],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "completed_with_warnings",
+      "event": "supersede",
+      "to": "superseded",
+      "guards": [],
+      "applies_to": [
+        "verify_run",
+        "replay_run",
+        "patch_review",
+        "release_promotion"
+      ],
+      "recovery_mode": "none"
+    },
+    {
+      "from": "scheduled",
+      "event": "crash_detected",
+      "to": "recovery_pending",
+      "guards": [],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "running",
+      "event": "crash_detected",
+      "to": "recovery_pending",
+      "guards": [],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_artifacts",
+      "event": "crash_detected",
+      "to": "recovery_pending",
+      "guards": [],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "persisting_ledger",
+      "event": "crash_detected",
+      "to": "recovery_pending",
+      "guards": [],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "recovery_pending",
+      "event": "resume",
+      "to": "recovering",
+      "guards": [],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "recovering",
+      "event": "resume",
+      "to": "scheduled",
+      "guards": [
+        "scheduler_admitted"
+      ],
+      "when_previous_state_in": [
+        "scheduled"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "recovering",
+      "event": "resume",
+      "to": "running",
+      "guards": [],
+      "when_previous_state_in": [
+        "running"
+      ],
+      "recovery_mode": "resume_same_state"
+    },
+    {
+      "from": "recovering",
+      "event": "resume",
+      "to": "persisting_artifacts",
+      "guards": [],
+      "when_previous_state_in": [
+        "persisting_artifacts"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "recovering",
+      "event": "resume",
+      "to": "persisting_ledger",
+      "guards": [
+        "ledger_available"
+      ],
+      "when_previous_state_in": [
+        "persisting_ledger"
+      ],
+      "recovery_mode": "resume_next_safe_state"
+    },
+    {
+      "from": "recovering",
+      "event": "recovery_failed",
+      "to": "failed",
+      "guards": [],
+      "recovery_mode": "force_failed"
+    }
+  ],
+  "guard_definitions": {
+    "workspace_present": {
+      "description": "A workspace identity exists and is bound to the transaction."
+    },
+    "workspace_trusted": {
+      "description": "Workspace trust level satisfies minimum trust for the transaction kind."
+    },
+    "workspace_healthy": {
+      "description": "Workspace health satisfies minimum health for the transaction kind."
+    },
+    "target_identity_resolved": {
+      "description": "Target scope and identity are explicit and canonical."
+    },
+    "policy_bound": {
+      "description": "Required policy surfaces are version-bound to the transaction context."
+    },
+    "verify_passed": {
+      "description": "Fresh authoritative verification passed with blocking checks satisfied."
+    },
+    "verify_fresh": {
+      "description": "Verification evidence remains within freshness limits for this transaction kind."
+    },
+    "replay_passed": {
+      "description": "Replay or lineage evidence passed."
+    },
+    "replay_deterministic": {
+      "description": "Replay determinism state is deterministic where required."
+    },
+    "environment_compatible": {
+      "description": "Recorded and current environments are exact or compatible per policy."
+    },
+    "confirmation_present": {
+      "description": "Explicit confirmation exists for the current target and scope."
+    },
+    "confirmation_fresh": {
+      "description": "Confirmation is fresh and has not been invalidated by scope drift."
+    },
+    "scheduler_admitted": {
+      "description": "Governed scheduler accepted the transaction for execution."
+    },
+    "ledger_available": {
+      "description": "Ledger sink is available and authoritative for persistence."
+    },
+    "rollback_target_available": {
+      "description": "Rollback target exists and is explicit for the current transaction."
+    },
+    "secrets_clean": {
+      "description": "No secret policy violations block the transaction."
+    },
+    "release_attested": {
+      "description": "Release provenance, signing, and attestation requirements are satisfied."
+    }
+  },
+  "recovery_rules": {
+    "persist_required_before_terminal_success": true,
+    "persist_required_before_terminal_rollback": true,
+    "reconstruct_from": [
+      "ledger",
+      "artifact_manifest",
+      "transaction_log",
+      "verify_artifact",
+      "replay_artifact"
+    ],
+    "deny_resume_if": [
+      "persisted_state_missing",
+      "ledger_conflict_detected",
+      "workspace_identity_changed_for_non_resumable_kind"
+    ],
+    "force_failed_if": [
+      "state_reconstruction_incomplete",
+      "required_artifacts_missing",
+      "required_guards_cannot_be_revalidated"
+    ],
+    "force_rollback_if": [
+      "patch_apply_crashed_after_partial_mutation",
+      "release_promotion_crashed_after_partial_publish"
+    ]
+  },
+  "audit_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "transaction_id",
+      "transaction_kind",
+      "from_state",
+      "to_state",
+      "event",
+      "evaluated_at"
+    ],
+    "properties": {
+      "transaction_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "transaction_kind": {
+        "type": "string",
+        "enum": [
+          "workspace_open",
+          "verify_run",
+          "replay_run",
+          "patch_review",
+          "patch_apply",
+          "rollback",
+          "command_run",
+          "settings_update",
+          "trust_update",
+          "release_promotion"
+        ]
+      },
+      "from_state": {
+        "type": "string",
+        "enum": [
+          "created",
+          "admitted",
+          "hydrating_context",
+          "awaiting_trust",
+          "awaiting_input",
+          "awaiting_verify",
+          "awaiting_replay",
+          "awaiting_confirmation",
+          "ready",
+          "scheduled",
+          "running",
+          "persisting_artifacts",
+          "persisting_ledger",
+          "completed",
+          "completed_with_warnings",
+          "denied",
+          "blocked",
+          "failed",
+          "timed_out",
+          "cancelled",
+          "rollback_pending",
+          "rolled_back",
+          "recovery_pending",
+          "recovering",
+          "superseded"
+        ]
+      },
+      "to_state": {
+        "type": "string",
+        "enum": [
+          "created",
+          "admitted",
+          "hydrating_context",
+          "awaiting_trust",
+          "awaiting_input",
+          "awaiting_verify",
+          "awaiting_replay",
+          "awaiting_confirmation",
+          "ready",
+          "scheduled",
+          "running",
+          "persisting_artifacts",
+          "persisting_ledger",
+          "completed",
+          "completed_with_warnings",
+          "denied",
+          "blocked",
+          "failed",
+          "timed_out",
+          "cancelled",
+          "rollback_pending",
+          "rolled_back",
+          "recovery_pending",
+          "recovering",
+          "superseded"
+        ]
+      },
+      "event": {
+        "type": "string",
+        "enum": [
+          "create",
+          "admit",
+          "hydrate_context_ok",
+          "hydrate_context_failed",
+          "trust_granted",
+          "trust_denied",
+          "input_bound",
+          "verify_started",
+          "verify_passed",
+          "verify_warned",
+          "verify_failed",
+          "verify_stale",
+          "replay_started",
+          "replay_passed",
+          "replay_failed",
+          "replay_non_deterministic",
+          "confirmation_received",
+          "confirmation_expired",
+          "scheduler_admitted",
+          "run_started",
+          "run_progressed",
+          "run_failed",
+          "run_timed_out",
+          "artifacts_persisted",
+          "ledger_persisted",
+          "complete_ok",
+          "complete_warn",
+          "deny",
+          "block",
+          "cancel",
+          "supersede",
+          "request_rollback",
+          "rollback_completed",
+          "crash_detected",
+          "resume",
+          "recovery_failed"
+        ]
+      },
+      "guards_checked": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "decision": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "allow_with_warning",
+          "deny"
+        ]
+      },
+      "evalua

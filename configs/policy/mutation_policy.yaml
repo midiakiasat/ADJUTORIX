@@ -1,0 +1,464 @@
+version: 1
+policy_id: adjutorix.mutation-policy
+title: ADJUTORIX Mutation Policy
+description: >-
+  Canonical mutation governance policy for ADJUTORIX. This policy defines when
+  filesystem, workspace, ledger, patch, and state mutations may be requested,
+  previewed, confirmed, executed, rolled back, and attested. The policy is
+  designed to preserve the product invariants: no invisible action, no
+  unverifiable claim, no irreversible mutation without confirmation, no
+  ambiguous state, and no hidden authority.
+owners:
+  - team: core-governance
+  - team: app-runtime
+  - team: cli-runtime
+status: active
+default_decision: deny
+principles:
+  - id: no_invisible_action
+    statement: Every mutation must have an explicit visible target, scope, and consequence surface.
+  - id: no_unverifiable_claim
+    statement: No mutation may be authorized from stale, implicit, or missing evidence.
+  - id: no_irreversible_mutation_without_confirmation
+    statement: Consequential and destructive mutations require fresh, explicit confirmation.
+  - id: no_ambiguous_state
+    statement: A mutation may not proceed if workspace, ledger, verify, replay, or environment state is contradictory or degraded beyond policy thresholds.
+  - id: no_hidden_authority
+    statement: Mutation power must only flow through declared authority surfaces.
+classification:
+  severities:
+    harmless:
+      description: Non-persistent or purely local UI state adjustment with no workspace or ledger impact.
+      confirmation_required: false
+      verify_required: false
+      replay_required: false
+      trusted_workspace_required: false
+    informative:
+      description: Read-side operation or preview-producing action that does not change authoritative state.
+      confirmation_required: false
+      verify_required: false
+      replay_required: false
+      trusted_workspace_required: false
+    consequential:
+      description: Mutation that changes workspace, patch, verify, or ledger state but remains recoverable.
+      confirmation_required: true
+      verify_required: true
+      replay_required: true
+      trusted_workspace_required: true
+    destructive:
+      description: Mutation that deletes, replaces, rolls back, or materially narrows recoverability.
+      confirmation_required: true
+      verify_required: true
+      replay_required: true
+      trusted_workspace_required: true
+  action_families:
+    preview:
+      description: Produce preview or diff only.
+      mutating: false
+    stage:
+      description: Prepare mutation inputs without crossing authoritative apply boundary.
+      mutating: true
+    apply:
+      description: Execute patch, file, or workspace mutation against authoritative state.
+      mutating: true
+    rollback:
+      description: Restore authoritative state to prior approved boundary.
+      mutating: true
+    trust_elevation:
+      description: Elevate workspace trust level.
+      mutating: true
+    settings_persist:
+      description: Persist governed user or workspace settings.
+      mutating: true
+subjects:
+  workspace_files:
+    description: Files rooted in the active workspace.
+    allowed_actions:
+      - preview
+      - stage
+      - apply
+      - rollback
+  patch_set:
+    description: Patch proposals, patch review state, and patch apply artifacts.
+    allowed_actions:
+      - preview
+      - stage
+      - apply
+      - rollback
+  ledger:
+    description: Ledger selection, attestation, replay lineage, and rollback boundaries.
+    allowed_actions:
+      - preview
+      - stage
+      - apply
+      - rollback
+  verify_state:
+    description: Verification outcomes and readiness state.
+    allowed_actions:
+      - preview
+      - stage
+      - apply
+  workspace_trust:
+    description: Workspace trust metadata.
+    allowed_actions:
+      - preview
+      - trust_elevation
+  settings:
+    description: Persisted application or workspace settings.
+    allowed_actions:
+      - preview
+      - settings_persist
+authority:
+  allowed_surfaces:
+    - preload_bridge
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+  denied_surfaces:
+    - renderer_direct_fs
+    - renderer_direct_ipc_mutation
+    - renderer_direct_network_authority
+    - ad_hoc_shell_exec
+    - ungoverned_test_helper_mutation
+    - raw_git_apply_without_gate
+  requirements:
+    authority_visible: true
+    target_visible: true
+    consequence_visible: true
+    evidence_visible_for_claims: true
+workspace_requirements:
+  trusted_workspace_required_for:
+    - apply
+    - rollback
+    - trust_elevation
+    - settings_persist
+  workspace_health:
+    minimum_for_preview: degraded
+    minimum_for_stage: degraded
+    minimum_for_apply: healthy
+    minimum_for_rollback: healthy
+    minimum_for_trust_elevation: healthy
+  readonly_media:
+    preview: allow
+    stage: deny
+    apply: deny
+    rollback: deny
+    trust_elevation: deny
+  disconnected_head_behavior:
+    action: deny
+    rationale: Mutations against a workspace disconnected from authoritative head create ambiguous state.
+verification_requirements:
+  verify_status_allowed:
+    - passed
+    - warning
+  warning_policy:
+    allow_for_preview: true
+    allow_for_stage: true
+    allow_for_apply: false
+    allow_for_rollback: false
+  stale_evidence:
+    preview: warn
+    stage: deny
+    apply: deny
+    rollback: deny
+  freshness:
+    max_age_seconds:
+      preview: 3600
+      stage: 900
+      apply: 300
+      rollback: 300
+  required_checks_for_apply:
+    - replay
+    - policy
+    - diagnostics
+  required_checks_for_rollback:
+    - replay
+    - policy
+replay_requirements:
+  replayable_lineage_required_for:
+    - apply
+    - rollback
+  environment_match:
+    preview:
+      allow:
+        - exact
+        - compatible
+        - drifted
+        - unknown
+    stage:
+      allow:
+        - exact
+        - compatible
+    apply:
+      allow:
+        - exact
+        - compatible
+    rollback:
+      allow:
+        - exact
+        - compatible
+  determinism:
+    preview:
+      allow:
+        - deterministic
+        - non-deterministic
+        - unknown
+    stage:
+      allow:
+        - deterministic
+    apply:
+      allow:
+        - deterministic
+    rollback:
+      allow:
+        - deterministic
+  blocked_statuses:
+    - failed
+    - blocked
+    - diverged
+    - rolled-back
+confirmation:
+  freshness_seconds: 300
+  required_for:
+    consequential:
+      - apply
+      - rollback
+      - trust_elevation
+      - settings_persist
+    destructive:
+      - apply
+      - rollback
+  explicit_subject_match_required: true
+  explicit_scope_match_required: true
+  invalidators:
+    - target_changed
+    - diff_changed
+    - selected_seq_changed
+    - head_seq_changed
+    - environment_fingerprint_changed
+    - workspace_trust_changed
+mutation_rules:
+  - id: preview_workspace_diff
+    subject: workspace_files
+    family: preview
+    severity: informative
+    allow_when:
+      workspace_visible: true
+      target_visible: true
+    deny_when: []
+    evidence:
+      require_diff: true
+      require_attached_target_paths: true
+  - id: stage_patch_review
+    subject: patch_set
+    family: stage
+    severity: consequential
+    allow_when:
+      workspace_trusted: true
+      verify_status_in:
+        - passed
+      replay_status_in:
+        - passed
+      replay_determinism_in:
+        - deterministic
+      environment_match_in:
+        - exact
+        - compatible
+    deny_when:
+      - stale_verify_evidence
+      - disconnected_ledger_head
+      - workspace_unhealthy
+    evidence:
+      require_patch_summary: true
+      require_changed_file_list: true
+      require_governance_summary: true
+  - id: apply_patch_to_workspace
+    subject: patch_set
+    family: apply
+    severity: destructive
+    allow_when:
+      workspace_trusted: true
+      workspace_health_at_least: healthy
+      verify_status_in:
+        - passed
+      verify_apply_impact_in:
+        - ready
+      ledger_apply_impact_in:
+        - ready
+      replay_status_in:
+        - passed
+      replay_determinism_in:
+        - deterministic
+      environment_match_in:
+        - exact
+        - compatible
+      confirmation_fresh: true
+      confirmation_subject_matches: true
+      confirmation_scope_matches: true
+    deny_when:
+      - stale_verify_evidence
+      - replay_lineage_non_replayable
+      - authority_hidden
+      - consequence_hidden
+      - target_hidden
+      - readonly_workspace
+      - environment_degraded
+      - disconnected_ledger_head
+    evidence:
+      require_patch_summary: true
+      require_patch_diff: true
+      require_verify_assessment: true
+      require_replay_outcome: true
+      require_ledger_assessment: true
+      require_governance_decision: true
+      require_rollback_target_if_available: true
+  - id: rollback_workspace_to_boundary
+    subject: ledger
+    family: rollback
+    severity: destructive
+    allow_when:
+      workspace_trusted: true
+      workspace_health_at_least: healthy
+      verify_status_in:
+        - passed
+      replay_status_in:
+        - passed
+      replay_determinism_in:
+        - deterministic
+      environment_match_in:
+        - exact
+        - compatible
+      rollback_target_available: true
+      confirmation_fresh: true
+      confirmation_subject_matches: true
+      confirmation_scope_matches: true
+    deny_when:
+      - stale_verify_evidence
+      - ambiguous_rollback_target
+      - authority_hidden
+      - consequence_hidden
+      - readonly_workspace
+      - disconnected_ledger_head
+    evidence:
+      require_rollback_target: true
+      require_replay_outcome: true
+      require_governance_decision: true
+  - id: elevate_workspace_trust
+    subject: workspace_trust
+    family: trust_elevation
+    severity: consequential
+    allow_when:
+      workspace_health_at_least: healthy
+      confirmation_fresh: true
+      confirmation_subject_matches: true
+    deny_when:
+      - authority_hidden
+      - target_hidden
+      - trust_target_ambiguous
+    evidence:
+      require_workspace_identity: true
+      require_current_trust_state: true
+  - id: persist_workspace_settings
+    subject: settings
+    family: settings_persist
+    severity: consequential
+    allow_when:
+      workspace_trusted: true
+      workspace_health_at_least: healthy
+      confirmation_fresh: true
+      confirmation_subject_matches: true
+    deny_when:
+      - readonly_workspace
+      - authority_hidden
+      - target_hidden
+    evidence:
+      require_settings_diff: true
+      require_target_scope: true
+decision_matrix:
+  preview:
+    on_missing_verify: allow_with_warning
+    on_stale_evidence: allow_with_warning
+    on_environment_drift: allow_with_warning
+    on_workspace_degraded: allow_with_warning
+  stage:
+    on_missing_verify: deny
+    on_stale_evidence: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+  apply:
+    on_missing_verify: deny
+    on_stale_evidence: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_warning_verify: deny
+    on_non_deterministic_replay: deny
+    on_missing_confirmation: deny
+  rollback:
+    on_missing_verify: deny
+    on_stale_evidence: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_missing_confirmation: deny
+    on_missing_rollback_target: deny
+attestation:
+  required_fields:
+    - policy_id
+    - policy_version
+    - decision
+    - action_family
+    - subject
+    - severity
+    - target_identity
+    - workspace_id
+    - authority_surface
+    - verify_id
+    - replay_selected_seq
+    - ledger_id
+    - environment_fingerprint
+    - confirmation_id
+    - evaluated_at
+  write_targets:
+    - ledger
+    - verify_artifact
+    - mutation_audit_log
+  redact_fields:
+    - secrets
+    - tokens
+    - credential_material
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 14
+    allow_on_destructive_apply: false
+    allow_on_renderer_authority: false
+telemetry:
+  emit_on:
+    - allow
+    - deny
+    - warn
+  required_dimensions:
+    - action_family
+    - subject
+    - severity
+    - decision
+    - workspace_trust
+    - verify_status
+    - replay_status
+    - environment_match
+    - confirmation_present
+review:
+  cadence: quarterly
+  triggers:
+    - new_mutation_surface
+    - new_authority_surface
+    - replay_divergence_incident
+    - apply_gate_bypass_incident
+    - verify_gate_bypass_incident

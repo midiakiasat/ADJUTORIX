@@ -1,0 +1,614 @@
+version: 1
+policy_id: adjutorix.release-policy
+title: ADJUTORIX Release Policy
+description: >-
+  Canonical governance policy for versioning, build eligibility, artifact
+  provenance, packaging, signing, notarization, attestation, promotion,
+  publication, rollback, deprecation, and release auditability across ADJUTORIX.
+  This policy exists to ensure that a release is not merely a successful build,
+  but an explicitly verified, attributable, policy-bound, and reversible
+  shipment of governed software artifacts.
+status: active
+owners:
+  - team: core-governance
+  - team: release-engineering
+  - team: runtime-security
+  - team: ci-platform
+default_decision: deny
+principles:
+  - id: no_release_without_provenance
+    statement: Every released artifact must be traceable to a specific repository state, build environment, policy version, and attestation bundle.
+  - id: no_release_without_verification
+    statement: No artifact may be promoted unless required tests, policy guards, replay checks, and packaging validations have passed within freshness bounds.
+  - id: no_ambiguous_release_surface
+    statement: Every release must declare exactly which platforms, channels, artifact classes, and signing states are included.
+  - id: no_unsigned_authoritative_release
+    statement: Production authoritative releases must be signed, or explicitly classified as non-production and blocked from default distribution channels.
+  - id: no_irreversible_promotion_without_rollback
+    statement: Any promotable release must include rollback compatibility, prior-version mapping, and revocation procedures.
+shared_enums:
+  decision:
+    - allow
+    - allow_with_warning
+    - deny
+  release_kind:
+    - local_build
+    - ci_candidate
+    - internal_preview
+    - beta
+    - rc
+    - production
+    - hotfix
+    - rollback_release
+  release_channel:
+    - dev
+    - nightly
+    - internal
+    - beta
+    - rc
+    - stable
+    - emergency
+  artifact_kind:
+    - source_archive
+    - python_wheel
+    - python_sdist
+    - electron_bundle
+    - dmg
+    - pkg
+    - zip
+    - appimage
+    - nsis_installer
+    - portable_binary
+    - metadata_bundle
+    - sbom
+    - attestation_bundle
+  provenance_class:
+    - commit_bound
+    - tag_bound
+    - ci_run_bound
+    - unsigned_local_only
+  signing_state:
+    - unsigned
+    - locally_signed
+    - ci_signed
+    - ci_signed_and_notarized
+    - verified_signature_missing
+  verification_state:
+    - passed
+    - warning
+    - failed
+    - stale
+    - missing
+  promotion_state:
+    - build_only
+    - candidate
+    - promotable
+    - published
+    - revoked
+    - superseded
+  rollback_class:
+    - none
+    - binary_only
+    - artifact_revertible
+    - release_revertible
+  authority_surface:
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+    - ci_release_pipeline
+    - main_process_service
+  denied_surface:
+    - renderer_direct_release
+    - ad_hoc_local_upload
+    - unsigned_manual_publish
+    - ungoverned_ci_job
+classification:
+  release_kinds:
+    local_build:
+      description: Developer-local packaging output for inspection only.
+      default_channel: dev
+      sign_required: false
+      publish_allowed: false
+    ci_candidate:
+      description: CI-produced build candidate awaiting review and promotion.
+      default_channel: internal
+      sign_required: true
+      publish_allowed: false
+    internal_preview:
+      description: Signed internal distribution for scoped testing.
+      default_channel: internal
+      sign_required: true
+      publish_allowed: true
+    beta:
+      description: External or wider preview release with bounded audience.
+      default_channel: beta
+      sign_required: true
+      publish_allowed: true
+    rc:
+      description: Release candidate intended to mirror production quality.
+      default_channel: rc
+      sign_required: true
+      publish_allowed: true
+    production:
+      description: Stable release intended for default authoritative distribution.
+      default_channel: stable
+      sign_required: true
+      publish_allowed: true
+    hotfix:
+      description: Expedited production-oriented release with tightened audit requirements.
+      default_channel: emergency
+      sign_required: true
+      publish_allowed: true
+    rollback_release:
+      description: Controlled promotion of a prior known-good release or rebuild to restore service.
+      default_channel: emergency
+      sign_required: true
+      publish_allowed: true
+versioning:
+  scheme: semver
+  require_annotated_tag_for:
+    - rc
+    - production
+    - hotfix
+    - rollback_release
+  prerelease_identifiers:
+    beta:
+      - beta
+    rc:
+      - rc
+    nightly:
+      - nightly
+  tag_format: v{major}.{minor}.{patch}[-{prerelease}.{number}]
+  version_source_priority:
+    - annotated_tag
+    - package_manifest
+    - ci_injected_candidate_version
+  deny_when:
+    - version_missing
+    - version_non_semver
+    - tag_manifest_mismatch
+    - duplicate_version_on_same_channel
+eligibility:
+  repository_state:
+    require_clean_checkout: true
+    require_generated_artifact_guard_passed: true
+    require_workspace_clean_guard_passed: true
+    require_contract_drift_guard_passed: true
+    require_replay_determinism_guard_passed: true
+    require_renderer_authority_guard_passed: true
+    require_apply_gate_guard_passed: true
+    require_verify_gate_guard_passed: true
+    require_scheduler_guard_passed: true
+  required_ci_jobs:
+    - repo-guard
+    - js-quality
+    - python-cli-quality
+    - app-smoke-electron
+    - integration-agent-cli
+    - package-artifacts
+  freshness:
+    max_verification_age_seconds:
+      ci_candidate: 3600
+      internal_preview: 3600
+      beta: 1800
+      rc: 1800
+      production: 900
+      hotfix: 900
+      rollback_release: 900
+  deny_if:
+    - required_ci_job_missing
+    - required_ci_job_failed
+    - verification_state_in:
+        - failed
+        - stale
+        - missing
+    - mutable_workspace_used_for_authoritative_release
+provenance:
+  required_fields:
+    - release_id
+    - release_kind
+    - release_channel
+    - version
+    - git_commit
+    - git_tree_digest
+    - policy_id
+    - policy_version
+    - build_pipeline_id
+    - build_started_at
+    - build_finished_at
+    - build_environment_fingerprint
+    - artifact_manifest
+    - verification_summary
+    - signing_summary
+    - sbom_reference
+    - attestation_bundle_reference
+  build_environment:
+    require_ephemeral_or_attested_ci: true
+    require_environment_fingerprint: true
+    require_toolchain_versions:
+      - node
+      - npm
+      - python
+      - pip
+      - electron_builder
+  deny_if:
+    - git_commit_missing
+    - artifact_manifest_missing
+    - build_environment_fingerprint_missing
+    - attestation_bundle_missing_for_promotable_release
+artifacts:
+  required_by_release_kind:
+    ci_candidate:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    internal_preview:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - dmg
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    beta:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - dmg
+      - zip
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    rc:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - dmg
+      - zip
+      - pkg
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    production:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - dmg
+      - zip
+      - pkg
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    hotfix:
+      - python_wheel
+      - python_sdist
+      - electron_bundle
+      - dmg
+      - pkg
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+    rollback_release:
+      - metadata_bundle
+      - sbom
+      - attestation_bundle
+  required_checks:
+    checksums_required: true
+    sha256_required: true
+    manifest_required: true
+    artifact_size_nonzero: true
+    platform_matrix_visible: true
+  platform_requirements:
+    macos:
+      require_dmg_for:
+        - internal_preview
+        - beta
+        - rc
+        - production
+        - hotfix
+      require_pkg_for:
+        - rc
+        - production
+        - hotfix
+      require_notarization_for:
+        - production
+        - hotfix
+    windows:
+      require_installer_or_portable_for:
+        - beta
+        - rc
+        - production
+    linux:
+      require_appimage_or_archive_for:
+        - beta
+        - rc
+        - production
+signing:
+  production_requirements:
+    require_signing: true
+    require_signature_verification: true
+    require_signing_identity_visible: true
+    require_ci_managed_identity: true
+  macos:
+    allow_signing_states:
+      local_build:
+        - unsigned
+        - locally_signed
+      ci_candidate:
+        - ci_signed
+      internal_preview:
+        - ci_signed
+      beta:
+        - ci_signed
+      rc:
+        - ci_signed
+      production:
+        - ci_signed_and_notarized
+      hotfix:
+        - ci_signed_and_notarized
+      rollback_release:
+        - ci_signed_and_notarized
+  python:
+    require_wheel_integrity: true
+    require_sdist_integrity: true
+    require_hash_manifest: true
+  deny_if:
+    - signing_state_missing_for_required_release
+    - signing_identity_unapproved
+    - signature_verification_failed
+verification:
+  required_evidence:
+    - repo_guard_summary
+    - lint_summary
+    - typecheck_summary
+    - unit_test_summary
+    - smoke_test_summary
+    - replay_determinism_summary
+    - packaging_summary
+    - policy_guard_summary
+  allowed_verification_state_by_release_kind:
+    local_build:
+      - passed
+      - warning
+    ci_candidate:
+      - passed
+    internal_preview:
+      - passed
+    beta:
+      - passed
+    rc:
+      - passed
+    production:
+      - passed
+    hotfix:
+      - passed
+    rollback_release:
+      - passed
+  warning_policy:
+    local_build:
+      allow_with_warning: true
+    ci_candidate:
+      allow_with_warning: false
+    internal_preview:
+      allow_with_warning: false
+    beta:
+      allow_with_warning: false
+    rc:
+      allow_with_warning: false
+    production:
+      allow_with_warning: false
+    hotfix:
+      allow_with_warning: false
+    rollback_release:
+      allow_with_warning: false
+publication:
+  allowed_surfaces:
+    - ci_release_pipeline
+    - governed_cli_command
+  denied_surfaces:
+    - renderer_direct_release
+    - ad_hoc_local_upload
+    - unsigned_manual_publish
+    - ungoverned_ci_job
+  channel_rules:
+    dev:
+      publish_allowed: false
+    nightly:
+      publish_allowed: true
+      audience: internal
+    internal:
+      publish_allowed: true
+      audience: internal
+    beta:
+      publish_allowed: true
+      audience: bounded_external
+    rc:
+      publish_allowed: true
+      audience: staged_external
+    stable:
+      publish_allowed: true
+      audience: default_external
+    emergency:
+      publish_allowed: true
+      audience: staged_external
+  require_manual_approval_for:
+    - production
+    - hotfix
+    - rollback_release
+  require_two_person_review_for:
+    - production
+    - hotfix
+    - rollback_release
+promotion:
+  states:
+    build_only:
+      description: Artifact exists but is not eligible for publication.
+    candidate:
+      description: Artifact has passed build and verification, awaiting approval.
+    promotable:
+      description: Artifact has approvals and may be published to its target channel.
+    published:
+      description: Artifact has been released to its target channel.
+    revoked:
+      description: Artifact has been explicitly withdrawn.
+    superseded:
+      description: Artifact is no longer the latest approved release for its channel.
+  transitions:
+    - from: build_only
+      to: candidate
+      require:
+        - required_artifacts_present
+        - verification_passed
+        - provenance_complete
+    - from: candidate
+      to: promotable
+      require:
+        - manual_approval_if_required
+        - signing_complete
+        - attestation_complete
+    - from: promotable
+      to: published
+      require:
+        - publication_surface_approved
+        - channel_open
+        - rollback_plan_present
+    - from: published
+      to: revoked
+      require:
+        - revocation_reason
+        - incident_or_policy_reference
+rollback:
+  requirements:
+    rollback_class_required_for:
+      - production
+      - hotfix
+      - rollback_release
+    require_prior_known_good_release: true
+    require_channel_mapping: true
+    require_migration_or_downgrade_notes: true
+    require_revocation_procedure: true
+  deny_if:
+    - no_prior_known_good_release
+    - incompatible_state_migration_unknown
+    - artifact_integrity_missing
+hotfix:
+  additional_requirements:
+    require_incident_reference: true
+    require_scope_narrowing_statement: true
+    require_diff_summary: true
+    require_post_release_followup_owner: true
+  allow_shortcuts:
+    reduced_channel_matrix: true
+  deny_shortcuts:
+    - skip_signing
+    - skip_attestation
+    - skip_policy_guards
+local_build_policy:
+  allow_unsigned: true
+  publish_allowed: false
+  must_stamp_nonproduction: true
+  require_local_output_path_isolated: true
+  require_artifact_banner_non_authoritative: true
+metadata_and_sbom:
+  require_metadata_bundle: true
+  metadata_fields:
+    - release_notes
+    - artifact_manifest
+    - checksums
+    - supported_platforms
+    - signing_state
+    - verification_state
+    - provenance_summary
+    - rollback_summary
+  require_sbom_for:
+    - ci_candidate
+    - internal_preview
+    - beta
+    - rc
+    - production
+    - hotfix
+  sbom_requirements:
+    format_allowlist:
+      - spdx-json
+      - cyclonedx-json
+    require_top_level_components: true
+    require_dependency_hashes_if_available: true
+attestation:
+  required_fields:
+    - policy_id
+    - policy_version
+    - release_id
+    - release_kind
+    - release_channel
+    - version
+    - decision
+    - git_commit
+    - build_pipeline_id
+    - build_environment_fingerprint
+    - artifact_manifest_digest
+    - verification_summary_digest
+    - signing_summary_digest
+    - evaluated_at
+  write_targets:
+    - release_audit_log
+    - metadata_bundle
+    - attestation_bundle
+  redact_fields:
+    - secrets
+    - tokens
+    - signing_credentials
+revocation:
+  triggers:
+    - signature_verification_failed_post_publish
+    - secret_leak_detected_in_artifact
+    - provenance_gap_detected
+    - severe_runtime_regression
+    - policy_bypass_detected
+  required_actions:
+    - mark_release_revoked
+    - notify_channel_consumers
+    - link_replacement_or_rollback_release
+    - preserve_audit_trail
+telemetry:
+  emit_on:
+    - candidate_created
+    - promoted
+    - published
+    - revoked
+    - superseded
+    - denied
+  required_dimensions:
+    - release_kind
+    - release_channel
+    - version
+    - signing_state
+    - verification_state
+    - promotion_state
+    - authority_surface
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 7
+    allow_unsigned_production: false
+    allow_missing_attestation_for_production: false
+    allow_missing_sbom_for_production: false
+    allow_renderer_publish_surface: false
+review:
+  cadence: quarterly
+  triggers:
+    - new_release_channel
+    - signing_incident
+    - notarization_incident
+    - provenance_gap_incident
+    - rollback_failure_incident
+    - supply_chain_incident

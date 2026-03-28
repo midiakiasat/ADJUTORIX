@@ -1,0 +1,265 @@
+/*
+ADJUTORIX APP — ASSETS / splash.png (GENERATOR + VALIDATION)
+
+Deterministic generation of a high-resolution splash screen and strict
+validation of its structural + visual invariants.
+
+Design:
+- Resolution: 1920x1080 (16:9), sRGB, RGBA
+- Purely deterministic vector → raster pipeline (no randomness, no time)
+- Pixel-stable output across environments (given same sharp version)
+- No external fonts (embed paths), no system dependencies
+
+Pipeline:
+1) Build canonical SVG scene (gradients, grid, logo mark, title glyph paths)
+2) Rasterize via sharp with fixed options
+3) Write PNG (max compression, no adaptive filtering)
+4) Validate (signature, dimensions, channels) and hash
+
+CLI:
+  node ./assets/splash.png.js build ./assets/splash.png
+  node ./assets/splash.png.js validate ./assets/splash.png
+  node ./assets/splash.png.js check ./assets/splash.png
+
+NO PLACEHOLDERS.
+*/
+
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+let sharp = null;
+try { sharp = (await import('sharp')).default; } catch {}
+
+// ---------------------------------------------------------------------------
+// CONSTANTS
+// ---------------------------------------------------------------------------
+
+const WIDTH = 1920;
+const HEIGHT = 1080;
+const ASPECT = WIDTH / HEIGHT;
+
+// ---------------------------------------------------------------------------
+// UTIL
+// ---------------------------------------------------------------------------
+
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(`splash.png:${msg}`);
+}
+
+// ---------------------------------------------------------------------------
+// DETERMINISTIC SVG SCENE
+// ---------------------------------------------------------------------------
+
+function buildSVG() {
+  // No randomness. All geometry is derived from constants.
+  const gridStep = 48;
+  const cols = Math.ceil(WIDTH / gridStep);
+  const rows = Math.ceil(HEIGHT / gridStep);
+
+  // Precompute grid lines
+  let grid = '';
+  for (let i = 0; i <= cols; i++) {
+    const x = i * gridStep;
+    grid += `<line x1="${x}" y1="0" x2="${x}" y2="${HEIGHT}" />`;
+  }
+  for (let j = 0; j <= rows; j++) {
+    const y = j * gridStep;
+    grid += `<line x1="0" y1="${y}" x2="${WIDTH}" y2="${y}" />`;
+  }
+
+  // Deterministic logo geometry (no fonts)
+  const cx = WIDTH / 2;
+  const cy = HEIGHT / 2;
+  const R = 260;
+  const r = 160;
+
+  // A-like mark composed of two triangles and a crossbar
+  const A_left = `M ${cx - 260} ${cy + 220} L ${cx - 40} ${cy - 260} L ${cx + 40} ${cy - 260} L ${cx - 180} ${cy + 220} Z`;
+  const A_right = `M ${cx + 260} ${cy + 220} L ${cx + 40} ${cy - 260} L ${cx - 40} ${cy - 260} L ${cx + 180} ${cy + 220} Z`;
+  const A_bar = `M ${cx - 120} ${cy - 20} L ${cx + 120} ${cy - 20} L ${cx + 120} ${cy + 60} L ${cx - 120} ${cy + 60} Z`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B0E14"/>
+      <stop offset="100%" stop-color="#1B2230"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#88C0D0" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#88C0D0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5E81AC"/>
+      <stop offset="100%" stop-color="#88C0D0"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="24" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
+
+  <!-- Subtle grid (deterministic) -->
+  <g stroke="#2A3347" stroke-width="1" opacity="0.25">
+    ${grid}
+  </g>
+
+  <!-- Center glow -->
+  <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#glow)" filter="url(#soft)"/>
+
+  <!-- Concentric rings -->
+  <g fill="none" stroke="url(#accent)" stroke-width="3" opacity="0.55">
+    <circle cx="${cx}" cy="${cy}" r="${R}" />
+    <circle cx="${cx}" cy="${cy}" r="${r}" />
+  </g>
+
+  <!-- Deterministic logo mark -->
+  <g fill="#ECEFF4" opacity="0.95">
+    <path d="${A_left}" />
+    <path d="${A_right}" />
+    <path d="${A_bar}" fill="#88C0D0" />
+  </g>
+
+  <!-- Title (vector paths for 'ADJUTORIX') -->
+  <g fill="#D8DEE9" opacity="0.9">
+    <!-- Simplified geometric glyphs (monoline) -->
+    <g transform="translate(${cx - 420}, ${cy + 360}) scale(1)">
+      <!-- A -->
+      <path d="M 0 0 L 40 -120 L 80 0 L 60 0 L 50 -30 L 30 -30 L 20 0 Z" />
+      <!-- D -->
+      <path d="M 110 0 L 110 -120 L 150 -120 Q 200 -120 200 -60 Q 200 0 150 0 Z M 140 -100 L 150 -100 Q 170 -100 170 -60 Q 170 -20 150 -20 L 140 -20 Z" />
+      <!-- J -->
+      <path d="M 240 -120 L 280 -120 L 280 -30 Q 280 10 250 20 Q 220 30 200 10 L 210 -10 Q 225 5 240 -5 Q 250 -10 250 -30 Z" />
+      <!-- U -->
+      <path d="M 310 -120 L 350 -120 L 350 -40 Q 350 0 310 0 Q 270 0 270 -40 L 270 -120 L 300 -120 L 300 -40 Q 300 -20 310 -20 Q 320 -20 320 -40 Z" />
+      <!-- T -->
+      <path d="M 370 -120 L 450 -120 L 450 -90 L 420 -90 L 420 0 L 400 0 L 400 -90 L 370 -90 Z" />
+      <!-- O -->
+      <path d="M 480 -120 Q 520 -120 520 -60 Q 520 0 480 0 Q 440 0 440 -60 Q 440 -120 480 -120 Z M 480 -100 Q 460 -100 460 -60 Q 460 -20 480 -20 Q 500 -20 500 -60 Q 500 -100 480 -100 Z" />
+      <!-- R -->
+      <path d="M 550 0 L 550 -120 L 600 -120 Q 630 -120 630 -90 Q 630 -70 610 -60 Q 630 -50 640 0 L 610 0 Q 600 -40 580 -40 L 580 0 Z M 580 -100 L 600 -100 Q 610 -100 610 -90 Q 610 -80 600 -80 L 580 -80 Z" />
+      <!-- I -->
+      <path d="M 670 -120 L 700 -120 L 700 0 L 670 0 Z" />
+      <!-- X -->
+      <path d="M 730 -120 L 760 -120 L 790 -70 L 820 -120 L 850 -120 L 810 -60 L 850 0 L 820 0 L 790 -50 L 760 0 L 730 0 L 770 -60 Z" />
+    </g>
+  </g>
+
+</svg>`;
+}
+
+// ---------------------------------------------------------------------------
+// GENERATION
+// ---------------------------------------------------------------------------
+
+async function generate(outPath) {
+  assert(sharp, 'sharp_required');
+
+  const svg = buildSVG();
+
+  const buf = await sharp(Buffer.from(svg))
+    .resize(WIDTH, HEIGHT, { fit: 'cover' })
+    .png({ compressionLevel: 9, adaptiveFiltering: false, palette: false })
+    .toBuffer();
+
+  fs.writeFileSync(outPath, buf);
+
+  return {
+    path: outPath,
+    bytes: buf.length,
+    hash: sha256(buf),
+    width: WIDTH,
+    height: HEIGHT,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// VALIDATION
+// ---------------------------------------------------------------------------
+
+async function validate(p) {
+  assert(fs.existsSync(p), 'file_not_found');
+  const buf = fs.readFileSync(p);
+
+  // PNG signature
+  const sig = buf.subarray(0, 8).toString('hex');
+  assert(sig === '89504e470d0a1a0a', 'invalid_png_signature');
+
+  if (!sharp) {
+    return { hash: sha256(buf), bytes: buf.length };
+  }
+
+  const meta = await sharp(buf).metadata();
+  assert(meta.width === WIDTH && meta.height === HEIGHT, 'invalid_dimensions');
+  assert(meta.channels === 4, 'rgba_required');
+
+  return {
+    width: meta.width,
+    height: meta.height,
+    channels: meta.channels,
+    bytes: buf.length,
+    hash: sha256(buf),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DETERMINISM CHECK
+// ---------------------------------------------------------------------------
+
+async function check(outPath) {
+  const a = await generate(outPath);
+  const b = await generate(outPath);
+  assert(a.hash === b.hash, 'nondeterministic_output');
+  return { ok: true, hash: a.hash };
+}
+
+// ---------------------------------------------------------------------------
+// CLI
+// ---------------------------------------------------------------------------
+
+async function main(argv) {
+  const [cmd, a] = argv.slice(2);
+
+  if (cmd === 'build') {
+    assert(a, 'usage: build <output.png>');
+    const res = await generate(path.resolve(a));
+    process.stdout.write(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === 'validate') {
+    assert(a, 'usage: validate <splash.png>');
+    const res = await validate(path.resolve(a));
+    process.stdout.write(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === 'check') {
+    assert(a, 'usage: check <splash.png>');
+    const res = await check(path.resolve(a));
+    process.stdout.write(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  throw new Error('unknown_command');
+}
+
+if (process.argv[1]?.endsWith('splash.png.js')) {
+  main(process.argv).catch(err => {
+    process.stderr.write(String(err.message || err));
+    process.exit(1);
+  });
+}
+
+export {
+  generate,
+  validate,
+  check
+};

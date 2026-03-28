@@ -1,0 +1,987 @@
+version: 1
+catalog_id: adjutorix.event-catalog
+title: ADJUTORIX Event Catalog
+description: >-
+  Canonical machine-readable catalog of domain events emitted across ADJUTORIX.
+  This catalog defines event identity, producer surfaces, semantic meaning,
+  required payload fields, correlation requirements, severity, retention class,
+  redaction constraints, and downstream consumption intent. Its purpose is to
+  ensure that emitted events form a governed, reconstructible timeline across
+  UI, runtime, scheduler, verify, replay, ledger, governance, security,
+  recovery, and release flows.
+status: active
+owners:
+  - team: core-governance
+  - team: runtime-observability
+  - team: agent-runtime
+  - team: app-runtime
+  - team: release-engineering
+defaults:
+  unknown_event_behavior: deny
+  missing_required_field_behavior: deny
+  unknown_producer_behavior: deny
+  default_retention_class: operational
+authoritative_time:
+  timezone: UTC
+  timestamp_format: rfc3339
+invariants:
+  - id: no_undeclared_events
+    statement: No runtime surface may emit an event not declared in this catalog.
+  - id: no_secret_event_payload
+    statement: Events must not contain plaintext secrets, tokens, raw credentials, or unredacted sensitive material.
+  - id: no_ambiguous_causality
+    statement: Consequential events must include stable correlation identifiers sufficient to reconstruct causality.
+  - id: no_inconsistent_semantics
+    statement: Event names, severities, outcomes, and payload meanings must remain stable across producers.
+  - id: no_hidden_authority_transitions
+    statement: Governance, mutation, verify, replay, release, and recovery transitions must surface as explicit events.
+shared_enums:
+  producer:
+    - renderer
+    - preload
+    - main
+    - agent
+    - cli
+    - scheduler
+    - verify
+    - replay
+    - ledger
+    - governance
+    - security
+    - release
+    - recovery
+    - observability
+  category:
+    - app.lifecycle
+    - ui.interaction
+    - workspace
+    - watcher
+    - rpc
+    - scheduler
+    - transaction
+    - verify
+    - replay
+    - ledger
+    - governance
+    - command
+    - terminal
+    - settings
+    - trust
+    - security
+    - release
+    - recovery
+    - health
+    - diagnostics
+    - observability
+  severity:
+    - trace
+    - debug
+    - info
+    - warn
+    - error
+    - fatal
+  event_kind:
+    - state_transition
+    - command
+    - observation
+    - anomaly
+    - audit
+    - user_action
+    - lifecycle
+    - metric_signal
+  retention_class:
+    - ephemeral
+    - operational
+    - audit
+    - security
+    - release
+  privacy_class:
+    - public_nonsecret
+    - internal_masked
+    - audit_masked
+    - security_masked
+  outcome:
+    - success
+    - warning
+    - denied
+    - failed
+    - blocked
+    - timed_out
+    - cancelled
+    - recovered
+    - rolled_back
+correlation_policies:
+  common_optional_fields:
+    - request_id
+    - correlation_id
+    - transaction_id
+    - workspace_id
+    - verify_id
+    - replay_id
+    - ledger_id
+    - release_id
+    - command_id
+  forbidden_fields:
+    - token
+    - secret
+    - password
+    - passphrase
+    - private_key
+    - argv_plaintext
+    - raw_env
+payload_types:
+  non_empty_string:
+    type: string
+    min_length: 1
+  timestamp:
+    type: string
+    format: date-time
+  sha256_hex:
+    type: string
+    pattern: '^[a-f0-9]{64}$'
+  decision:
+    type: string
+    enum: [allow, allow_with_warning, deny]
+  verify_status:
+    type: string
+    enum: [pending, running, passed, warning, failed, blocked, stale, superseded]
+  replay_status:
+    type: string
+    enum: [pending, running, passed, warning, failed, blocked, stale, superseded]
+  apply_readiness:
+    type: string
+    enum: [ready, caution, blocked, unknown]
+  environment_match:
+    type: string
+    enum: [exact, compatible, drifted, unknown]
+required_base_fields:
+  - event_id
+  - event_name
+  - version
+  - producer
+  - category
+  - severity
+  - event_kind
+  - occurred_at
+  - message
+events:
+  - event_name: app.started
+    version: 1
+    title: Application Started
+    producer: main
+    category: app.lifecycle
+    severity: info
+    event_kind: lifecycle
+    retention_class: operational
+    privacy_class: public_nonsecret
+    description: Main application process started and initialized runtime bootstrap.
+    required_fields:
+      runtime_mode:
+        type: string
+        enum: [development, test, production]
+      app_version:
+        use: non_empty_string
+      build_id:
+        use: non_empty_string
+    optional_fields:
+      release_channel:
+        type: string
+      unpackaged:
+        type: boolean
+    correlations: []
+
+  - event_name: app.shutdown_initiated
+    version: 1
+    title: Application Shutdown Initiated
+    producer: main
+    category: app.lifecycle
+    severity: info
+    event_kind: lifecycle
+    retention_class: operational
+    privacy_class: public_nonsecret
+    description: Coordinated shutdown has started.
+    required_fields:
+      reason:
+        use: non_empty_string
+    optional_fields:
+      outstanding_transactions:
+        type: integer
+        minimum: 0
+    correlations:
+      recommended:
+        - transaction_id
+
+  - event_name: workspace.open_requested
+    version: 1
+    title: Workspace Open Requested
+    producer: renderer
+    category: workspace
+    severity: info
+    event_kind: user_action
+    retention_class: operational
+    privacy_class: internal_masked
+    description: User or caller requested that a workspace be opened.
+    required_fields:
+      candidate_root:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      recommended:
+        - correlation_id
+
+  - event_name: workspace.open_evaluated
+    version: 1
+    title: Workspace Open Evaluated
+    producer: workspace
+    category: workspace
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Workspace policy evaluation completed for an open request.
+    required_fields:
+      decision:
+        use: decision
+      workspace_health:
+        type: string
+        enum: [healthy, degraded, unhealthy, blocked]
+      trust_level:
+        type: string
+        enum: [none, observed, tentative, trusted, elevated, quarantined, revoked]
+      canonical_root_path:
+        use: non_empty_string
+    optional_fields:
+      reasons:
+        type: array
+        items: {type: string}
+    correlations:
+      required:
+        - workspace_id
+        - correlation_id
+
+  - event_name: workspace.trust_changed
+    version: 1
+    title: Workspace Trust Changed
+    producer: governance
+    category: trust
+    severity: warn
+    event_kind: state_transition
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Workspace trust level changed due to explicit decision or invalidation.
+    required_fields:
+      previous_trust:
+        type: string
+        enum: [none, observed, tentative, trusted, elevated, quarantined, revoked]
+      new_trust:
+        type: string
+        enum: [none, observed, tentative, trusted, elevated, quarantined, revoked]
+      reason:
+        use: non_empty_string
+    optional_fields:
+      decision:
+        use: decision
+    correlations:
+      required:
+        - workspace_id
+        - transaction_id
+
+  - event_name: watcher.mode_changed
+    version: 1
+    title: Watcher Mode Changed
+    producer: workspace
+    category: watcher
+    severity: warn
+    event_kind: state_transition
+    retention_class: operational
+    privacy_class: internal_masked
+    description: File watching mode changed, typically due to degradation or recovery.
+    required_fields:
+      previous_mode:
+        type: string
+        enum: [disabled, local_fs_events, polling_fallback]
+      new_mode:
+        type: string
+        enum: [disabled, local_fs_events, polling_fallback]
+    optional_fields:
+      reason:
+        use: non_empty_string
+    correlations:
+      required:
+        - workspace_id
+
+  - event_name: rpc.request_received
+    version: 1
+    title: RPC Request Received
+    producer: agent
+    category: rpc
+    severity: debug
+    event_kind: observation
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Governed RPC request arrived at the agent boundary.
+    required_fields:
+      method:
+        use: non_empty_string
+      client:
+        use: non_empty_string
+    optional_fields:
+      payload_digest:
+        use: sha256_hex
+    correlations:
+      required:
+        - request_id
+        - correlation_id
+
+  - event_name: rpc.request_completed
+    version: 1
+    title: RPC Request Completed
+    producer: agent
+    category: rpc
+    severity: info
+    event_kind: audit
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Governed RPC request completed with a terminal outcome.
+    required_fields:
+      method:
+        use: non_empty_string
+      outcome:
+        type: string
+        enum: [success, warning, denied, failed, blocked, timed_out, cancelled]
+      duration_ms:
+        type: integer
+        minimum: 0
+    optional_fields:
+      error_code:
+        type: string
+    correlations:
+      required:
+        - request_id
+        - correlation_id
+
+  - event_name: scheduler.job_admitted
+    version: 1
+    title: Scheduler Job Admitted
+    producer: scheduler
+    category: scheduler
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Scheduler admitted a job into a governed queue.
+    required_fields:
+      job_class:
+        use: non_empty_string
+      queue_id:
+        use: non_empty_string
+      priority:
+        type: string
+        enum: [p0, p1, p2, p3, p4]
+      admission_result:
+        type: string
+        enum: [allow, allow_with_warning, defer, deny]
+    optional_fields:
+      resource_leases:
+        type: array
+        items: {type: string}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: scheduler.job_started
+    version: 1
+    title: Scheduler Job Started
+    producer: scheduler
+    category: scheduler
+    severity: info
+    event_kind: state_transition
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Scheduler transitioned a job into running state.
+    required_fields:
+      job_class:
+        use: non_empty_string
+      queue_id:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: scheduler.job_timed_out
+    version: 1
+    title: Scheduler Job Timed Out
+    producer: scheduler
+    category: scheduler
+    severity: error
+    event_kind: anomaly
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Scheduler enforced timeout for a running or stalled job.
+    required_fields:
+      job_class:
+        use: non_empty_string
+      timeout_ms:
+        type: integer
+        minimum: 0
+      action:
+        type: string
+        enum: [persist_and_fail, request_recovery, request_rollback, cancel]
+    optional_fields: {}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: transaction.state_changed
+    version: 1
+    title: Transaction State Changed
+    producer: governance
+    category: transaction
+    severity: info
+    event_kind: state_transition
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Authoritative transaction state transition occurred.
+    required_fields:
+      transaction_kind:
+        use: non_empty_string
+      from_state:
+        use: non_empty_string
+      to_state:
+        use: non_empty_string
+      event:
+        use: non_empty_string
+    optional_fields:
+      guards_checked:
+        type: array
+        items: {type: string}
+    correlations:
+      required:
+        - transaction_id
+        - workspace_id
+
+  - event_name: verify.run_started
+    version: 1
+    title: Verify Run Started
+    producer: verify
+    category: verify
+    severity: info
+    event_kind: state_transition
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Governed verification started for an explicit scope.
+    required_fields:
+      verify_kind:
+        type: string
+        enum: [informational, mutation_guard, release_guard]
+      scope_kind:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - verify_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: verify.run_completed
+    version: 1
+    title: Verify Run Completed
+    producer: verify
+    category: verify
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Governed verification completed with an authoritative status.
+    required_fields:
+      verify_kind:
+        type: string
+        enum: [informational, mutation_guard, release_guard]
+      verify_status:
+        use: verify_status
+      apply_readiness:
+        use: apply_readiness
+      environment_match:
+        use: environment_match
+      duration_ms:
+        type: integer
+        minimum: 0
+      fresh:
+        type: boolean
+    optional_fields:
+      blocking_failures:
+        type: integer
+        minimum: 0
+      warnings:
+        type: integer
+        minimum: 0
+    correlations:
+      required:
+        - verify_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: verify.result_stale
+    version: 1
+    title: Verify Result Stale
+    producer: verify
+    category: verify
+    severity: warn
+    event_kind: anomaly
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Previously authoritative verify result became stale under policy freshness rules.
+    required_fields:
+      verify_kind:
+        type: string
+        enum: [informational, mutation_guard, release_guard]
+      stale_reasons:
+        type: array
+        items:
+          type: string
+          enum: [age_exceeded, environment_changed, selected_seq_changed, workspace_identity_changed, target_identity_changed, required_evidence_not_fresh]
+    optional_fields: {}
+    correlations:
+      required:
+        - verify_id
+        - workspace_id
+
+  - event_name: replay.run_started
+    version: 1
+    title: Replay Run Started
+    producer: replay
+    category: replay
+    severity: info
+    event_kind: state_transition
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Governed replay or lineage evaluation started.
+    required_fields:
+      scope_kind:
+        use: non_empty_string
+    optional_fields:
+      selected_seq:
+        type: integer
+        minimum: 0
+    correlations:
+      required:
+        - replay_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: replay.run_completed
+    version: 1
+    title: Replay Run Completed
+    producer: replay
+    category: replay
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Governed replay completed with determinism and lineage outcome.
+    required_fields:
+      replay_status:
+        use: replay_status
+      determinism_state:
+        type: string
+        enum: [deterministic, non_deterministic, unknown]
+      replayable_lineage:
+        type: boolean
+      environment_match:
+        use: environment_match
+      duration_ms:
+        type: integer
+        minimum: 0
+    optional_fields: {}
+    correlations:
+      required:
+        - replay_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: replay.non_deterministic_detected
+    version: 1
+    title: Replay Non-deterministic Detected
+    producer: replay
+    category: replay
+    severity: error
+    event_kind: anomaly
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Replay produced a non-deterministic result where deterministic replay may be required.
+    required_fields:
+      determinism_state:
+        type: string
+        enum: [deterministic, non_deterministic, unknown]
+      consequence:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - replay_id
+        - transaction_id
+
+  - event_name: ledger.entry_persisted
+    version: 1
+    title: Ledger Entry Persisted
+    producer: ledger
+    category: ledger
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Authoritative ledger entry and associated edges were persisted.
+    required_fields:
+      seq:
+        type: integer
+        minimum: 0
+      edge_count:
+        type: integer
+        minimum: 0
+      duration_ms:
+        type: integer
+        minimum: 0
+    optional_fields: {}
+    correlations:
+      required:
+        - ledger_id
+        - transaction_id
+
+  - event_name: governance.decision_emitted
+    version: 1
+    title: Governance Decision Emitted
+    producer: governance
+    category: governance
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Governed allow, warn, or deny decision was produced.
+    required_fields:
+      decision_kind:
+        use: non_empty_string
+      decision:
+        use: decision
+      blocking_failures:
+        type: integer
+        minimum: 0
+      authority_surface:
+        use: non_empty_string
+    optional_fields:
+      rules_evaluated:
+        type: array
+        items: {type: string}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: governance.denial_emitted
+    version: 1
+    title: Governance Denial Emitted
+    producer: governance
+    category: governance
+    severity: warn
+    event_kind: anomaly
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Governance denied a requested action.
+    required_fields:
+      decision_kind:
+        use: non_empty_string
+      decision:
+        type: string
+        enum: [deny]
+      enforcement:
+        type: string
+        enum: [block, reject, quarantine, revoke]
+      reason:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: command.run_started
+    version: 1
+    title: Governed Command Started
+    producer: command
+    category: command
+    severity: info
+    event_kind: state_transition
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Governed command execution began.
+    required_fields:
+      profile_id:
+        use: non_empty_string
+      cwd_digest:
+        use: sha256_hex
+    optional_fields: {}
+    correlations:
+      required:
+        - command_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: command.run_completed
+    version: 1
+    title: Governed Command Completed
+    producer: command
+    category: command
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Governed command completed with terminal outcome and evidence digests.
+    required_fields:
+      outcome:
+        type: string
+        enum: [success, warning, failed, timed_out, cancelled]
+      exit_code:
+        type: integer
+      duration_ms:
+        type: integer
+        minimum: 0
+      stdout_digest:
+        use: sha256_hex
+      stderr_digest:
+        use: sha256_hex
+    optional_fields:
+      changed_file_count:
+        type: integer
+        minimum: 0
+    correlations:
+      required:
+        - command_id
+        - transaction_id
+        - workspace_id
+
+  - event_name: security.secret_redaction_applied
+    version: 1
+    title: Secret Redaction Applied
+    producer: security
+    category: security
+    severity: warn
+    event_kind: audit
+    retention_class: security
+    privacy_class: security_masked
+    description: Sensitive material was detected and redacted from a governed surface.
+    required_fields:
+      source_surface:
+        use: non_empty_string
+      strategy:
+        type: string
+        enum: [constant_mask, prefix4_suffix4, fingerprint_only, basename_only, drop_field]
+    optional_fields:
+      secret_class:
+        use: non_empty_string
+    correlations:
+      recommended:
+        - transaction_id
+        - command_id
+
+  - event_name: security.policy_violation_detected
+    version: 1
+    title: Security Policy Violation Detected
+    producer: security
+    category: security
+    severity: error
+    event_kind: anomaly
+    retention_class: security
+    privacy_class: security_masked
+    description: Security or secrets policy violation was detected and surfaced.
+    required_fields:
+      policy_surface:
+        use: non_empty_string
+      violation_kind:
+        use: non_empty_string
+      outcome:
+        type: string
+        enum: [denied, blocked, failed, quarantined]
+    optional_fields: {}
+    correlations:
+      recommended:
+        - transaction_id
+        - workspace_id
+
+  - event_name: release.promotion_started
+    version: 1
+    title: Release Promotion Started
+    producer: release
+    category: release
+    severity: info
+    event_kind: state_transition
+    retention_class: release
+    privacy_class: audit_masked
+    description: Governed release promotion workflow began.
+    required_fields:
+      release_channel:
+        type: string
+        enum: [dev, nightly, internal, beta, rc, stable, emergency]
+      version_string:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - release_id
+        - transaction_id
+
+  - event_name: release.promotion_completed
+    version: 1
+    title: Release Promotion Completed
+    producer: release
+    category: release
+    severity: info
+    event_kind: audit
+    retention_class: release
+    privacy_class: audit_masked
+    description: Release promotion ended with terminal outcome.
+    required_fields:
+      release_channel:
+        type: string
+        enum: [dev, nightly, internal, beta, rc, stable, emergency]
+      outcome:
+        type: string
+        enum: [success, warning, failed, blocked, rolled_back, timed_out]
+      duration_ms:
+        type: integer
+        minimum: 0
+      signing_state:
+        use: non_empty_string
+      verification_state:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - release_id
+        - transaction_id
+
+  - event_name: release.rollback_triggered
+    version: 1
+    title: Release Rollback Triggered
+    producer: release
+    category: release
+    severity: error
+    event_kind: anomaly
+    retention_class: release
+    privacy_class: audit_masked
+    description: Release workflow triggered rollback or revocation path.
+    required_fields:
+      reason:
+        use: non_empty_string
+      trigger_kind:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - release_id
+        - transaction_id
+
+  - event_name: recovery.entered
+    version: 1
+    title: Recovery Entered
+    producer: recovery
+    category: recovery
+    severity: warn
+    event_kind: state_transition
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Runtime entered crash/interruption recovery flow for a transaction.
+    required_fields:
+      cause:
+        use: non_empty_string
+      previous_state:
+        use: non_empty_string
+    optional_fields: {}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: recovery.completed
+    version: 1
+    title: Recovery Completed
+    producer: recovery
+    category: recovery
+    severity: info
+    event_kind: audit
+    retention_class: audit
+    privacy_class: audit_masked
+    description: Recovery concluded with resumed, failed, or rolled-back outcome.
+    required_fields:
+      outcome:
+        type: string
+        enum: [recovered, failed, rolled_back, blocked]
+      duration_ms:
+        type: integer
+        minimum: 0
+    optional_fields: {}
+    correlations:
+      required:
+        - transaction_id
+
+  - event_name: diagnostics.snapshot_refreshed
+    version: 1
+    title: Diagnostics Snapshot Refreshed
+    producer: diagnostics
+    category: diagnostics
+    severity: info
+    event_kind: observation
+    retention_class: operational
+    privacy_class: internal_masked
+    description: Diagnostics snapshot was refreshed for a workspace or scope.
+    required_fields:
+      diagnostics_count:
+        type: integer
+        minimum: 0
+      blocking_diagnostics_count:
+        type: integer
+        minimum: 0
+    optional_fields: {}
+    correlations:
+      required:
+        - workspace_id
+
+  - event_name: health.status_evaluated
+    version: 1
+    title: Health Status Evaluated
+    producer: observability
+    category: health
+    severity: info
+    event_kind: observation
+    retention_class: operational
+    privacy_class: public_nonsecret
+    description: Health subsystem evaluated current runtime status.
+    required_fields:
+      health_state:
+        use: non_empty_string
+    optional_fields:
+      degraded_reasons:
+        type: array
+        items: {type: string}
+    correlations: []
+validation_rules:
+  require_event_name_unique: true
+  require_version_positive_integer: true
+  require_required_fields_nonempty: true
+  require_correlations_not_in_forbidden_fields: true
+  event_name_format: '^[a-z]+(\.[a-z0-9_]+)+$'
+retention_policies:
+  ephemeral:
+    max_days: 1
+  operational:
+    max_days: 14
+  audit:
+    max_days: 30
+  security:
+    max_days: 30
+  release:
+    max_days: 90
+review:
+  cadence: quarterly
+  triggers:
+    - new_runtime_surface
+    - new_governance_transition
+    - incident_postmortem_gap
+    - release_workflow_change
+    - security_violation_without_event

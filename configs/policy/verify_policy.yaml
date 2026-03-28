@@ -1,0 +1,563 @@
+version: 1
+policy_id: adjutorix.verify-policy
+title: ADJUTORIX Verification Policy
+description: >-
+  Canonical governance policy for verification in ADJUTORIX. This policy defines
+  how verify requests are scoped, what evidence classes are required, how check
+  outcomes are aggregated, how freshness and environment match constrain trust,
+  how apply-readiness is derived, and which surfaces may attest or consume
+  verification results. The policy exists to ensure that 'verified' is a single,
+  authoritative, replay-aware state rather than an informal summary of loosely
+  related checks.
+status: active
+owners:
+  - team: core-governance
+  - team: verify-runtime
+  - team: replay-runtime
+  - team: app-runtime
+default_decision: deny
+principles:
+  - id: no_verify_without_scope
+    statement: Every verification run must bind to an explicit subject, target scope, workspace identity, and environment fingerprint.
+  - id: no_verify_without_evidence
+    statement: No verification conclusion may be emitted without declared evidence artifacts for every blocking check.
+  - id: no_apply_readiness_without_verify_authority
+    statement: Apply-readiness may only be derived from governed verification aggregation, never inferred from partial command success.
+  - id: no_stale_verify_claim
+    statement: Verification claims expire by policy and become non-authoritative when freshness or environment constraints are violated.
+  - id: no_replay_blind_verification
+    statement: Verification for consequential mutation must incorporate replay/lineage evidence, not merely local test pass state.
+shared_enums:
+  decision:
+    - allow
+    - allow_with_warning
+    - deny
+  verify_status:
+    - pending
+    - running
+    - passed
+    - warning
+    - failed
+    - blocked
+    - stale
+    - superseded
+  check_status:
+    - pending
+    - running
+    - passed
+    - warning
+    - failed
+    - blocked
+    - skipped
+  severity:
+    - info
+    - warning
+    - error
+    - fatal
+  scope_kind:
+    - patch
+    - workspace
+    - ledger_selection
+    - release_candidate
+    - targeted_files
+    - command_result
+  evidence_kind:
+    - replay
+    - policy
+    - diagnostics
+    - tests
+    - typecheck
+    - lint
+    - build
+    - environment
+    - ledger
+    - artifact
+    - command
+    - secret_scan
+    - workspace_health
+  environment_match:
+    - exact
+    - compatible
+    - drifted
+    - unknown
+  determinism_state:
+    - deterministic
+    - non_deterministic
+    - unknown
+  apply_readiness:
+    - ready
+    - caution
+    - blocked
+    - unknown
+  authority_surface:
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+  denied_surface:
+    - renderer_direct_verify_decision
+    - ad_hoc_shell_summary
+    - raw_test_exit_inference
+classification:
+  verify_kinds:
+    informational:
+      description: Verification intended for preview, inspection, or non-mutating confidence signals.
+      apply_readiness_allowed: false
+      replay_required: false
+      confirmation_required: false
+    mutation_guard:
+      description: Verification intended to govern patch apply, rollback, or consequential workspace mutation.
+      apply_readiness_allowed: true
+      replay_required: true
+      confirmation_required: false
+    release_guard:
+      description: Verification intended to govern packaging, promotion, or publication.
+      apply_readiness_allowed: false
+      replay_required: true
+      confirmation_required: false
+  check_classes:
+    replay:
+      blocking_default: true
+      description: Replay lineage, determinism, and environment-compatibility assessment.
+    policy:
+      blocking_default: true
+      description: Policy guards covering authority, mutation, contract, scheduler, and bypass surfaces.
+    diagnostics:
+      blocking_default: true
+      description: Parser, compiler, runtime, and workspace diagnostics relevant to the target scope.
+    tests:
+      blocking_default: true
+      description: Contract, unit, smoke, replay, and invariant test outcomes.
+    build:
+      blocking_default: false
+      description: Build or packaging success relevant to target scope.
+    environment:
+      blocking_default: true
+      description: Environment fingerprint, toolchain, and trust compatibility.
+    secrets:
+      blocking_default: true
+      description: Secret exposure and masking policy compliance.
+identity:
+  required_fields:
+    - verify_id
+    - verify_kind
+    - scope_kind
+    - target_identity
+    - workspace_id
+    - authority_surface
+    - recorded_environment_fingerprint
+  optional_fields:
+    - patch_id
+    - ledger_id
+    - selected_seq
+    - command_id
+    - release_id
+scope_requirements:
+  patch:
+    required_fields:
+      - patch_id
+      - workspace_id
+    allowed_target_classes:
+      - patch_set
+      - workspace_file
+  workspace:
+    required_fields:
+      - workspace_id
+    allowed_target_classes:
+      - workspace_file
+      - workspace_directory
+      - settings_blob
+  ledger_selection:
+    required_fields:
+      - ledger_id
+      - selected_seq
+    allowed_target_classes:
+      - ledger_entry
+      - ledger_selection
+  release_candidate:
+    required_fields:
+      - release_id
+      - version
+    allowed_target_classes:
+      - exported_artifact
+      - metadata_bundle
+  targeted_files:
+    required_fields:
+      - workspace_id
+      - file_list
+    allowed_target_classes:
+      - workspace_file
+  command_result:
+    required_fields:
+      - command_id
+      - workspace_id
+    allowed_target_classes:
+      - command_invocation
+authority:
+  allowed_surfaces:
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+  denied_surfaces:
+    - renderer_direct_verify_decision
+    - ad_hoc_shell_summary
+    - raw_test_exit_inference
+  requirements:
+    verify_scope_visible: true
+    target_identity_visible: true
+    evidence_summary_visible: true
+    blocking_checks_visible: true
+    aggregate_rule_visible: true
+workspace_requirements:
+  trusted_workspace_required_for:
+    - mutation_guard
+    - release_guard
+  minimum_health:
+    informational: degraded
+    mutation_guard: healthy
+    release_guard: healthy
+  readonly_media:
+    informational: allow
+    mutation_guard: allow_with_warning
+    release_guard: deny
+  deny_when:
+    - workspace_identity_ambiguous
+    - workspace_blocked
+environment_requirements:
+  fingerprint_required: true
+  environment_match_policy:
+    informational:
+      allow:
+        - exact
+        - compatible
+        - drifted
+        - unknown
+    mutation_guard:
+      allow:
+        - exact
+        - compatible
+    release_guard:
+      allow:
+        - exact
+  determinism_policy:
+    informational:
+      allow:
+        - deterministic
+        - non_deterministic
+        - unknown
+    mutation_guard:
+      allow:
+        - deterministic
+    release_guard:
+      allow:
+        - deterministic
+  freshness_seconds:
+    informational: 3600
+    mutation_guard: 300
+    release_guard: 900
+evidence_requirements:
+  common_required_fields:
+    - id
+    - title
+    - kind
+    - summary
+    - payload_digest_or_equivalent
+    - fresh
+  per_check_class:
+    replay:
+      required:
+        - selected_seq
+        - determinism_state
+        - environment_match
+        - replayable_lineage
+    policy:
+      required:
+        - guard_summary
+        - policy_version_set
+        - deny_findings_count
+    diagnostics:
+      required:
+        - diagnostics_count
+        - blocking_diagnostics_count
+    tests:
+      required:
+        - suite_count
+        - passed_count
+        - failed_count
+    environment:
+      required:
+        - recorded_environment_fingerprint
+        - current_environment_fingerprint
+        - toolchain_summary
+    secrets:
+      required:
+        - scan_summary
+        - exposure_count
+required_checks:
+  informational:
+    minimum:
+      - diagnostics
+      - environment
+    optional:
+      - tests
+      - replay
+      - policy
+  mutation_guard:
+    minimum:
+      - replay
+      - policy
+      - diagnostics
+      - environment
+      - tests
+      - secrets
+    optional:
+      - build
+      - ledger
+  release_guard:
+    minimum:
+      - replay
+      - policy
+      - diagnostics
+      - environment
+      - tests
+      - build
+      - secrets
+      - artifact
+    optional:
+      - ledger
+aggregation:
+  status_rules:
+    - id: blocked_if_required_check_missing
+      when:
+        required_check_missing: true
+      result_status: blocked
+      apply_readiness: blocked
+    - id: blocked_if_fatal_check
+      when:
+        any_check_status_in:
+          - blocked
+        any_check_severity_in:
+          - fatal
+      result_status: blocked
+      apply_readiness: blocked
+    - id: failed_if_any_blocking_failed
+      when:
+        any_blocking_check_status_in:
+          - failed
+      result_status: failed
+      apply_readiness: blocked
+    - id: warning_if_only_nonblocking_warning
+      when:
+        no_blocking_check_failed: true
+        any_check_status_in:
+          - warning
+      result_status: warning
+      apply_readiness: caution
+    - id: passed_if_all_blocking_passed
+      when:
+        all_blocking_checks_status_in:
+          - passed
+      result_status: passed
+      apply_readiness: ready
+  supersession:
+    newer_verify_same_scope_supersedes: true
+    require_same_target_identity: true
+    require_same_workspace_id: true
+    require_same_verify_kind: true
+blocking_logic:
+  default_blocking_by_class:
+    replay: true
+    policy: true
+    diagnostics: true
+    tests: true
+    environment: true
+    secrets: true
+    build: false
+    ledger: false
+    artifact: false
+  overrides:
+    informational:
+      diagnostics: true
+      environment: true
+      tests: false
+      replay: false
+      policy: false
+    release_guard:
+      build: true
+      artifact: true
+apply_readiness:
+  derivation:
+    ready_when:
+      verify_status: passed
+      environment_match_in:
+        - exact
+        - compatible
+      determinism_state_in:
+        - deterministic
+      replayable_lineage: true
+      fresh_evidence: true
+    caution_when:
+      verify_status: warning
+    blocked_when:
+      verify_status_in:
+        - failed
+        - blocked
+        - stale
+        - superseded
+  deny_if:
+    - verify_kind_not_mutation_guard
+    - replay_check_missing
+    - policy_check_missing
+    - explicit_apply_readiness_override_from_nonverify_surface
+freshness:
+  stale_conditions:
+    - age_exceeds_policy_limit
+    - environment_fingerprint_changed
+    - selected_seq_changed
+    - workspace_identity_changed
+    - target_identity_changed
+    - required_evidence_marked_not_fresh
+  stale_behavior:
+    informational: allow_with_warning
+    mutation_guard: deny
+    release_guard: deny
+consumption_rules:
+  allowed_consumers:
+    preview_ui:
+      may_consume_statuses:
+        - passed
+        - warning
+        - failed
+        - blocked
+        - stale
+      may_consume_apply_readiness: false
+    mutation_gate:
+      may_consume_statuses:
+        - passed
+        - warning
+      may_consume_apply_readiness: true
+      additional_requirements:
+        - verify_kind_is_mutation_guard
+        - freshness_within_limit
+    release_gate:
+      may_consume_statuses:
+        - passed
+      may_consume_apply_readiness: false
+      additional_requirements:
+        - verify_kind_is_release_guard
+        - freshness_within_limit
+  denied_consumers:
+    - renderer_direct_apply_decision
+    - raw_command_exit_code_only
+    - ad_hoc_test_summary_only
+commands_and_checks:
+  command_exit_handling:
+    raw_exit_code_is_insufficient: true
+    require_command_binding_to_check: true
+    require_stdout_stderr_digest: true
+  test_handling:
+    require_suite_identity: true
+    require_total_counts: true
+    require_failed_case_visibility_for_blocking_failures: true
+  diagnostics_handling:
+    require_path_binding: true
+    require_severity_binding: true
+    require_blocking_classification: true
+secrets_and_redaction:
+  plain_secret_in_evidence: deny
+  allowed_secret_representations:
+    - prefix_suffix_mask
+    - fingerprint_only
+    - present_boolean
+  redact_fields:
+    - tokens
+    - passwords
+    - private_keys
+attestation:
+  required_fields:
+    - policy_id
+    - policy_version
+    - verify_id
+    - verify_kind
+    - scope_kind
+    - target_identity
+    - workspace_id
+    - authority_surface
+    - verify_status
+    - apply_readiness
+    - recorded_environment_fingerprint
+    - current_environment_fingerprint
+    - evaluated_at
+  write_targets:
+    - verify_artifact
+    - ledger
+    - governance_log
+  forbid_plaintext_secret_storage: true
+denials:
+  - id: deny-missing-scope
+    when:
+      target_identity_missing: true
+    decision: deny
+    reason: Verification without target scope is non-authoritative.
+  - id: deny-missing-required-check
+    when:
+      required_check_missing: true
+    decision: deny
+    reason: Required evidence classes may not be inferred.
+  - id: deny-ad-hoc-apply-readiness
+    when:
+      apply_readiness_claimed_by_nonverify_surface: true
+    decision: deny
+    reason: Apply-readiness is derived only by governed verify aggregation.
+  - id: deny-stale-mutation-guard
+    when:
+      verify_kind: mutation_guard
+      verify_status: stale
+    decision: deny
+    reason: Stale verification cannot govern consequential mutation.
+  - id: deny-environment-drift-for-release
+    when:
+      verify_kind: release_guard
+      environment_match_in:
+        - drifted
+        - unknown
+    decision: deny
+    reason: Release verification requires exact environment identity.
+telemetry:
+  emit_on:
+    - started
+    - completed
+    - superseded
+    - stale
+    - denied
+  required_dimensions:
+    - verify_kind
+    - scope_kind
+    - verify_status
+    - apply_readiness
+    - environment_match
+    - determinism_state
+    - authority_surface
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 7
+    allow_missing_replay_for_mutation_guard: false
+    allow_plaintext_secret_evidence: false
+    allow_renderer_verify_decision: false
+review:
+  cadence: quarterly
+  triggers:
+    - new_check_class
+    - apply_gate_incident
+    - replay_drift_incident
+    - verify_freshness_incident
+    - release_verification_incident

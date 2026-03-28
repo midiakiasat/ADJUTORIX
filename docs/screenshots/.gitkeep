@@ -1,8 +1,0 @@
-# This file ensures the screenshots directory is tracked by git.
-
-# Place UI, workflow, and debugging screenshots here.
-# Naming convention:
-# YYYYMMDD_feature_description.png
-
-# Example:
-# 20260130_agent_panel_main.png

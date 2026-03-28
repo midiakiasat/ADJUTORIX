@@ -1,0 +1,393 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# ADJUTORIX pre-push gate
+#
+# Purpose:
+# - enforce a high-signal local gate immediately before code leaves the workstation
+# - catch contract drift, governance bypass, renderer authority regression, dirty workspace state,
+#   and critical smoke breakage before remote CI becomes the first line of defense
+# - provide one canonical push-time decision that is stricter than pre-commit but faster than full packaging
+# - fail closed on partial execution, missing toolchain, or skipped critical stages
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+readonly ROOT_DIR
+readonly START_TS="$(date +%s)"
+
+FORCE_COLOR="${FORCE_COLOR:-1}"
+CI="${CI:-false}"
+export FORCE_COLOR CI
+
+NODE_BIN="${NODE_BIN:-node}"
+NPM_BIN="${NPM_BIN:-npm}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTEST_BIN="${PYTEST_BIN:-pytest}"
+RUFF_BIN="${RUFF_BIN:-ruff}"
+MYPY_BIN="${MYPY_BIN:-mypy}"
+XVFB_RUN_BIN="${XVFB_RUN_BIN:-xvfb-run}"
+
+INSTALL_DEPS="${INSTALL_DEPS:-0}"
+STRICT_DIRTY_CHECK="${STRICT_DIRTY_CHECK:-1}"
+RUN_WORKSPACE_GUARDS="${RUN_WORKSPACE_GUARDS:-1}"
+RUN_POLICY_GUARDS="${RUN_POLICY_GUARDS:-1}"
+RUN_CONTRACT_GUARD="${RUN_CONTRACT_GUARD:-1}"
+RUN_DETERMINISM_GUARD="${RUN_DETERMINISM_GUARD:-1}"
+RUN_JS_FAST="${RUN_JS_FAST:-1}"
+RUN_PY_FAST="${RUN_PY_FAST:-1}"
+RUN_APP_CRITICAL_SMOKE="${RUN_APP_CRITICAL_SMOKE:-1}"
+RUN_CLI_CRITICAL_TESTS="${RUN_CLI_CRITICAL_TESTS:-1}"
+RUN_REPO_CHECK="${RUN_REPO_CHECK:-1}"
+
+STATUS_WORKSPACE_GUARDS="pending"
+STATUS_POLICY_GUARDS="pending"
+STATUS_CONTRACT_GUARD="pending"
+STATUS_DETERMINISM_GUARD="pending"
+STATUS_JS_FAST="pending"
+STATUS_PY_FAST="pending"
+STATUS_APP_CRITICAL_SMOKE="pending"
+STATUS_CLI_CRITICAL_TESTS="pending"
+STATUS_REPO_CHECK="pending"
+
+CURRENT_STAGE="bootstrap"
+
+color() {
+  local code="$1"
+  shift
+  if [[ "$FORCE_COLOR" == "0" ]]; then
+    printf '%s' "$*"
+  else
+    printf '\033[%sm%s\033[0m' "$code" "$*"
+  fi
+}
+
+log() {
+  printf '%s %s\n' "$(color '36' '[adjutorix-pre-push]')" "$*"
+}
+
+ok() {
+  printf '%s %s\n' "$(color '32' '[ok]')" "$*"
+}
+
+warn() {
+  printf '%s %s\n' "$(color '33' '[warn]')" "$*"
+}
+
+err() {
+  printf '%s %s\n' "$(color '31' '[error]')" "$*" >&2
+}
+
+die() {
+  err "$*"
+  exit 1
+}
+
+section() {
+  printf '\n%s\n' "$(color '1;37' "== $* ==")"
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+run() {
+  log "$*"
+  "$@"
+}
+
+mark_success() {
+  local name="$1"
+  printf -v "STATUS_${name}" '%s' "success"
+}
+
+mark_skipped() {
+  local name="$1"
+  printf -v "STATUS_${name}" '%s' "skipped"
+}
+
+print_summary() {
+  local end_ts elapsed
+  end_ts="$(date +%s)"
+  elapsed="$((end_ts - START_TS))"
+
+  printf '\n%s\n' "$(color '1;37' '== Pre-push Summary ==')"
+  printf '  %-26s %s\n' 'workspace_guards' "$STATUS_WORKSPACE_GUARDS"
+  printf '  %-26s %s\n' 'policy_guards' "$STATUS_POLICY_GUARDS"
+  printf '  %-26s %s\n' 'contract_guard' "$STATUS_CONTRACT_GUARD"
+  printf '  %-26s %s\n' 'determinism_guard' "$STATUS_DETERMINISM_GUARD"
+  printf '  %-26s %s\n' 'js_fast' "$STATUS_JS_FAST"
+  printf '  %-26s %s\n' 'py_fast' "$STATUS_PY_FAST"
+  printf '  %-26s %s\n' 'app_critical_smoke' "$STATUS_APP_CRITICAL_SMOKE"
+  printf '  %-26s %s\n' 'cli_critical_tests' "$STATUS_CLI_CRITICAL_TESTS"
+  printf '  %-26s %s\n' 'repo_check' "$STATUS_REPO_CHECK"
+  printf '  %-26s %ss\n' 'elapsed' "$elapsed"
+}
+
+cleanup() {
+  local exit_code="$?"
+  if [[ "$exit_code" -ne 0 ]]; then
+    err "pre-push failed during stage: $CURRENT_STAGE"
+    print_summary >&2 || true
+  fi
+  exit "$exit_code"
+}
+trap cleanup EXIT
+trap 'err "Command failed at line $LINENO during stage: $CURRENT_STAGE"' ERR
+
+assert_repo_root() {
+  [[ -f "$ROOT_DIR/package.json" ]] || die "Missing package.json at repo root"
+  [[ -d "$ROOT_DIR/packages/adjutorix-app" ]] || die "Missing packages/adjutorix-app"
+  [[ -d "$ROOT_DIR/packages/adjutorix-cli" ]] || die "Missing packages/adjutorix-cli"
+  git rev-parse --show-toplevel >/dev/null 2>&1 || die "Not inside a git worktree"
+}
+
+assert_toolchain() {
+  section "Toolchain"
+  require_cmd "$NODE_BIN"
+  require_cmd "$NPM_BIN"
+  require_cmd "$PYTHON_BIN"
+  require_cmd "$PYTEST_BIN"
+  require_cmd "$RUFF_BIN"
+  require_cmd "$MYPY_BIN"
+  require_cmd "$XVFB_RUN_BIN"
+  run "$NODE_BIN" --version
+  run "$NPM_BIN" --version
+  run "$PYTHON_BIN" --version
+}
+
+install_dependencies() {
+  if [[ "$INSTALL_DEPS" != "1" ]]; then
+    warn "Skipping dependency installation because INSTALL_DEPS=$INSTALL_DEPS"
+    return
+  fi
+
+  section "Dependency installation"
+  CURRENT_STAGE="install_js"
+  run "$NPM_BIN" ci
+
+  CURRENT_STAGE="install_python_cli"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-cli"
+    run "$PYTHON_BIN" -m pip install -e .[dev]
+  )
+
+  ok "Dependencies installed"
+}
+
+assert_clean_git_state_before() {
+  if [[ "$STRICT_DIRTY_CHECK" != "1" ]]; then
+    warn "Skipping pre-run dirty tree check because STRICT_DIRTY_CHECK=$STRICT_DIRTY_CHECK"
+    return
+  fi
+
+  CURRENT_STAGE="pre_dirty_check"
+  local status
+  status="$(git status --porcelain=v1)"
+  [[ -z "$status" ]] || die "Working tree is dirty before pre-push gate begins. Commit or stash changes first."
+}
+
+run_workspace_guards() {
+  if [[ "$RUN_WORKSPACE_GUARDS" != "1" ]]; then
+    mark_skipped WORKSPACE_GUARDS
+    warn "Skipping workspace guards"
+    return
+  fi
+
+  section "Workspace guards"
+  CURRENT_STAGE="guard_workspace_clean"
+  run bash "$ROOT_DIR/configs/ci/guard_workspace_clean.sh"
+
+  CURRENT_STAGE="guard_generated_artifacts"
+  run bash "$ROOT_DIR/configs/ci/guard_generated_artifacts.sh"
+
+  mark_success WORKSPACE_GUARDS
+  ok "Workspace guards passed"
+}
+
+run_policy_guards() {
+  if [[ "$RUN_POLICY_GUARDS" != "1" ]]; then
+    mark_skipped POLICY_GUARDS
+    warn "Skipping policy guards"
+    return
+  fi
+
+  section "Governance and authority guards"
+  CURRENT_STAGE="guard_no_direct_write"
+  run bash "$ROOT_DIR/configs/ci/guard_no_direct_write.sh"
+
+  CURRENT_STAGE="guard_scheduler_bypass"
+  run bash "$ROOT_DIR/configs/ci/guard_scheduler_bypass.sh"
+
+  CURRENT_STAGE="guard_apply_gate_bypass"
+  run bash "$ROOT_DIR/configs/ci/guard_apply_gate_bypass.sh"
+
+  CURRENT_STAGE="guard_verify_gate_bypass"
+  run bash "$ROOT_DIR/configs/ci/guard_verify_gate_bypass.sh"
+
+  CURRENT_STAGE="guard_renderer_authority"
+  run bash "$ROOT_DIR/configs/ci/guard_renderer_authority.sh"
+
+  mark_success POLICY_GUARDS
+  ok "Policy guards passed"
+}
+
+run_contract_guard() {
+  if [[ "$RUN_CONTRACT_GUARD" != "1" ]]; then
+    mark_skipped CONTRACT_GUARD
+    warn "Skipping contract drift guard"
+    return
+  fi
+
+  section "Contract drift"
+  CURRENT_STAGE="guard_contract_drift"
+  run bash "$ROOT_DIR/configs/ci/guard_contract_drift.sh"
+  mark_success CONTRACT_GUARD
+  ok "Contract drift guard passed"
+}
+
+run_determinism_guard() {
+  if [[ "$RUN_DETERMINISM_GUARD" != "1" ]]; then
+    mark_skipped DETERMINISM_GUARD
+    warn "Skipping replay determinism guard"
+    return
+  fi
+
+  section "Replay determinism"
+  CURRENT_STAGE="guard_replay_determinism"
+  run bash "$ROOT_DIR/configs/ci/guard_replay_determinism.sh"
+  mark_success DETERMINISM_GUARD
+  ok "Replay determinism guard passed"
+}
+
+run_repo_check() {
+  if [[ "$RUN_REPO_CHECK" != "1" ]]; then
+    mark_skipped REPO_CHECK
+    warn "Skipping structural repo check"
+    return
+  fi
+
+  section "Repository structure"
+  CURRENT_STAGE="repo_check"
+  run bash "$ROOT_DIR/configs/ci/check.sh"
+  mark_success REPO_CHECK
+  ok "Repository structure check passed"
+}
+
+run_js_fast() {
+  if [[ "$RUN_JS_FAST" != "1" ]]; then
+    mark_skipped JS_FAST
+    warn "Skipping JS fast gate"
+    return
+  fi
+
+  section "JS fast gate"
+  CURRENT_STAGE="js_lint"
+  run "$NPM_BIN" run lint --workspaces --if-present
+
+  CURRENT_STAGE="js_typecheck"
+  run "$NPM_BIN" run typecheck --workspaces --if-present
+
+  CURRENT_STAGE="app_verify_gate"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-app"
+    run "$NPM_BIN" run verify
+  )
+
+  mark_success JS_FAST
+  ok "JS fast gate passed"
+}
+
+run_py_fast() {
+  if [[ "$RUN_PY_FAST" != "1" ]]; then
+    mark_skipped PY_FAST
+    warn "Skipping Python fast gate"
+    return
+  fi
+
+  section "Python fast gate"
+  CURRENT_STAGE="cli_ruff_check"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-cli"
+    run "$RUFF_BIN" check src tests
+  )
+
+  CURRENT_STAGE="cli_ruff_format"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-cli"
+    run "$RUFF_BIN" format --check src tests
+  )
+
+  CURRENT_STAGE="cli_mypy"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-cli"
+    run "$MYPY_BIN" src
+  )
+
+  mark_success PY_FAST
+  ok "Python fast gate passed"
+}
+
+run_app_critical_smoke() {
+  if [[ "$RUN_APP_CRITICAL_SMOKE" != "1" ]]; then
+    mark_skipped APP_CRITICAL_SMOKE
+    warn "Skipping critical app smoke"
+    return
+  fi
+
+  section "Critical app smoke"
+  CURRENT_STAGE="app_critical_smoke"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-app"
+    run "$XVFB_RUN_BIN" -a "$NPM_BIN" test -- \
+      tests/smoke/patch_review_load.smoke.test.ts \
+      tests/smoke/verify_flow.smoke.test.ts \
+      tests/smoke/ledger_flow.smoke.test.ts \
+      tests/smoke/terminal_run.smoke.test.ts \
+      tests/smoke/settings_persist.smoke.test.ts \
+      tests/smoke/about_panel_render.smoke.test.ts
+  )
+
+  mark_success APP_CRITICAL_SMOKE
+  ok "Critical app smoke passed"
+}
+
+run_cli_critical_tests() {
+  if [[ "$RUN_CLI_CRITICAL_TESTS" != "1" ]]; then
+    mark_skipped CLI_CRITICAL_TESTS
+    warn "Skipping critical CLI tests"
+    return
+  fi
+
+  section "Critical CLI tests"
+  CURRENT_STAGE="cli_critical_tests"
+  (
+    cd "$ROOT_DIR/packages/adjutorix-cli"
+    run "$PYTEST_BIN" -q tests/test_cli_replay.py tests/test_cli_verify.py
+  )
+
+  mark_success CLI_CRITICAL_TESTS
+  ok "Critical CLI tests passed"
+}
+
+main() {
+  assert_repo_root
+  assert_toolchain
+  assert_clean_git_state_before
+  install_dependencies
+
+  run_workspace_guards
+  run_policy_guards
+  run_contract_guard
+  run_determinism_guard
+  run_repo_check
+  run_js_fast
+  run_py_fast
+  run_app_critical_smoke
+  run_cli_critical_tests
+
+  print_summary
+  ok "ADJUTORIX pre-push gate passed"
+}
+
+main "$@"

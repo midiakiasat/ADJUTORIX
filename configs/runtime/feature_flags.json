@@ -1,0 +1,722 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "registry_id": "adjutorix.feature-flags",
+  "version": 1,
+  "title": "ADJUTORIX Runtime Feature Flag Registry",
+  "description": "Canonical machine-readable registry of runtime feature flags across app, preload, main process, agent, CLI, CI, and release surfaces. This registry defines flag identity, ownership, scope, defaults, allowed values, rollout intent, safety class, dependencies, incompatibilities, and observability requirements.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "app-runtime",
+    "agent-runtime",
+    "cli-runtime",
+    "release-engineering"
+  ],
+  "defaults": {
+    "unknown_flag_behavior": "deny",
+    "missing_flag_behavior": "use_default",
+    "unscoped_flag_behavior": "deny",
+    "default_source_of_truth": "registry"
+  },
+  "invariants": [
+    "No runtime behavior may depend on an undeclared flag.",
+    "No flag may silently widen authority boundaries without explicit safety classification.",
+    "No flag may override policy denial semantics unless explicitly classified as test-only and isolated from production.",
+    "Every non-static flag must declare rollout intent, owner, and observability fields.",
+    "Every renderer-visible flag must be explicitly marked non-secret and safe for exposure."
+  ],
+  "enums": {
+    "surface": [
+      "renderer",
+      "preload",
+      "main",
+      "agent",
+      "cli",
+      "ci",
+      "release",
+      "shared"
+    ],
+    "flag_type": [
+      "boolean",
+      "string",
+      "integer",
+      "enum"
+    ],
+    "safety_class": [
+      "ui_only",
+      "operational",
+      "governance_sensitive",
+      "authority_sensitive",
+      "test_only",
+      "release_sensitive"
+    ],
+    "stability": [
+      "experimental",
+      "internal",
+      "beta",
+      "stable",
+      "deprecated"
+    ],
+    "rollout_strategy": [
+      "static_default",
+      "env_override",
+      "build_time",
+      "test_harness_only",
+      "release_channel_gated",
+      "manual_allowlist"
+    ],
+    "decision": [
+      "allow",
+      "allow_with_warning",
+      "deny"
+    ]
+  },
+  "resolution_order": [
+    "test_harness_override",
+    "explicit_env",
+    "release_channel_default",
+    "registry_default"
+  ],
+  "shared_rules": {
+    "renderer_exposed_prefix": "VITE_",
+    "renderer_exposed_must_be_non_secret": true,
+    "authority_sensitive_requires_main_or_agent_scope": true,
+    "test_only_forbidden_in_production": true,
+    "deprecated_flags_require_replacement_or_removal_plan": true
+  },
+  "flag_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "env_name",
+      "title",
+      "description",
+      "surface",
+      "flag_type",
+      "safety_class",
+      "stability",
+      "default",
+      "rollout_strategy",
+      "owner",
+      "observability"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9_.-]+$"
+      },
+      "env_name": {
+        "type": "string",
+        "pattern": "^[A-Z0-9_]+$"
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1
+      },
+      "surface": {
+        "type": "string",
+        "enum": [
+          "renderer",
+          "preload",
+          "main",
+          "agent",
+          "cli",
+          "ci",
+          "release",
+          "shared"
+        ]
+      },
+      "flag_type": {
+        "type": "string",
+        "enum": [
+          "boolean",
+          "string",
+          "integer",
+          "enum"
+        ]
+      },
+      "safety_class": {
+        "type": "string",
+        "enum": [
+          "ui_only",
+          "operational",
+          "governance_sensitive",
+          "authority_sensitive",
+          "test_only",
+          "release_sensitive"
+        ]
+      },
+      "stability": {
+        "type": "string",
+        "enum": [
+          "experimental",
+          "internal",
+          "beta",
+          "stable",
+          "deprecated"
+        ]
+      },
+      "default": {},
+      "allowed_values": {
+        "type": "array",
+        "items": {}
+      },
+      "minimum": {
+        "type": "integer"
+      },
+      "maximum": {
+        "type": "integer"
+      },
+      "rollout_strategy": {
+        "type": "string",
+        "enum": [
+          "static_default",
+          "env_override",
+          "build_time",
+          "test_harness_only",
+          "release_channel_gated",
+          "manual_allowlist"
+        ]
+      },
+      "release_channel_defaults": {
+        "type": "object",
+        "additionalProperties": {}
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "depends_on": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true
+      },
+      "conflicts_with": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true
+      },
+      "constraints": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "observability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "emit_in_health",
+          "emit_in_diagnostics",
+          "redact_value"
+        ],
+        "properties": {
+          "emit_in_health": {
+            "type": "boolean"
+          },
+          "emit_in_diagnostics": {
+            "type": "boolean"
+          },
+          "redact_value": {
+            "type": "boolean"
+          },
+          "log_on_change": {
+            "type": "boolean"
+          }
+        }
+      },
+      "deprecation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "replacement_flag": {
+            "type": "string"
+          },
+          "remove_after_version": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "flags": [
+    {
+      "id": "app.devtools.enabled",
+      "env_name": "VITE_ENABLE_DEVTOOLS",
+      "title": "Enable Renderer Devtools Affordances",
+      "description": "Enables non-secret renderer-side development affordances such as debug panels and extra UI diagnostics.",
+      "surface": "renderer",
+      "flag_type": "boolean",
+      "safety_class": "ui_only",
+      "stability": "stable",
+      "default": false,
+      "rollout_strategy": "env_override",
+      "release_channel_defaults": {
+        "dev": true,
+        "nightly": true,
+        "internal": true,
+        "beta": false,
+        "rc": false,
+        "stable": false,
+        "emergency": false
+      },
+      "owner": "app-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "app.mock_runtime.enabled",
+      "env_name": "VITE_ENABLE_MOCK_RUNTIME",
+      "title": "Enable Mock Runtime Adapters",
+      "description": "Routes renderer/runtime requests to mock adapters for local development and controlled UI testing instead of real governed services.",
+      "surface": "renderer",
+      "flag_type": "boolean",
+      "safety_class": "test_only",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "test_harness_only",
+      "owner": "app-runtime",
+      "constraints": [
+        "forbidden_when_runtime_mode=production",
+        "forbidden_when_release_channel_in=stable,rc,beta,emergency"
+      ],
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "governance.strict_mode",
+      "env_name": "ADJUTORIX_STRICT_GOVERNANCE",
+      "title": "Strict Governance Mode",
+      "description": "Rejects non-governed fallbacks and forces the runtime to fail closed on missing policy bindings or bypass-like execution paths.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "governance_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "core-governance",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "governance.debug_ui.enabled",
+      "env_name": "ADJUTORIX_ENABLE_GOVERNANCE_DEBUG",
+      "title": "Enable Governance Debug Surfaces",
+      "description": "Enables extra governance explanations, banners, and diagnostics intended for internal debugging and policy inspection.",
+      "surface": "main",
+      "flag_type": "boolean",
+      "safety_class": "governance_sensitive",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "env_override",
+      "release_channel_defaults": {
+        "dev": true,
+        "nightly": true,
+        "internal": true,
+        "beta": false,
+        "rc": false,
+        "stable": false,
+        "emergency": false
+      },
+      "owner": "core-governance",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "preload.trace_bridge",
+      "env_name": "ADJUTORIX_TRACE_PRELOAD_BRIDGE",
+      "title": "Trace Preload Bridge",
+      "description": "Emits additional main-process debug logs for preload bridge calls, argument summaries, and response timing without exposing secret values.",
+      "surface": "preload",
+      "flag_type": "boolean",
+      "safety_class": "operational",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "env_override",
+      "owner": "app-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "session.restore.mode",
+      "env_name": "ADJUTORIX_SESSION_RESTORE_MODE",
+      "title": "Session Restore Mode",
+      "description": "Controls how previously persisted workspace session state may be restored at runtime.",
+      "surface": "main",
+      "flag_type": "enum",
+      "safety_class": "governance_sensitive",
+      "stability": "stable",
+      "default": "trust_gated_restore",
+      "allowed_values": [
+        "disabled",
+        "safe_restore",
+        "trust_gated_restore",
+        "explicit_only"
+      ],
+      "rollout_strategy": "env_override",
+      "owner": "workspace-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "agent.health_endpoint.enabled",
+      "env_name": "ADJUTORIX_ENABLE_HEALTH_ENDPOINT",
+      "title": "Enable Agent Health Endpoint",
+      "description": "Exposes local agent health status for governed clients and observability tooling.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "operational",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "agent-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "agent.crash_resume.enabled",
+      "env_name": "ADJUTORIX_ENABLE_CRASH_RESUME",
+      "title": "Enable Crash Resume",
+      "description": "Allows the agent to reconstruct persisted transaction state after interruption and resume or fail safely under recovery rules.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "governance_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "runtime-orchestration",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "agent.in_memory_ledger.enabled",
+      "env_name": "ADJUTORIX_USE_IN_MEMORY_LEDGER",
+      "title": "Use In-Memory Ledger",
+      "description": "Allows the agent to replace persistent ledger storage with ephemeral in-memory storage for isolated tests only.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "test_only",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "test_harness_only",
+      "owner": "replay-runtime",
+      "constraints": [
+        "forbidden_when_agent_mode=production",
+        "forbidden_when_release_channel_in=stable,rc,beta,emergency"
+      ],
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "replay.strict_mode",
+      "env_name": "ADJUTORIX_REPLAY_STRICT_MODE",
+      "title": "Strict Replay Mode",
+      "description": "Upgrades replay drift, determinism ambiguity, and lineage gaps to hard failures for governed flows.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "governance_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "replay-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "verify.block_on_environment_drift",
+      "env_name": "ADJUTORIX_BLOCK_ON_ENVIRONMENT_DRIFT",
+      "title": "Block on Environment Drift",
+      "description": "Blocks mutation-guard and release-guard flows when current environment fingerprint is not policy-compatible with recorded evidence.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "governance_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "verify-runtime",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "command.strict_policy",
+      "env_name": "ADJUTORIX_STRICT_COMMAND_POLICY",
+      "title": "Strict Command Policy",
+      "description": "Rejects raw shell wrappers, forbidden executables, and undeclared command execution shortcuts instead of allowing development fallbacks.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "authority_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "runtime-orchestration",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "secrets.keychain.enabled",
+      "env_name": "ADJUTORIX_ENABLE_KEYCHAIN",
+      "title": "Enable Keychain Resolution",
+      "description": "Allows main or agent runtime to resolve approved secrets through OS-backed keychain bridges instead of requiring alternate injection paths.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "authority_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "runtime-security",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": true,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "secrets.env_filtering.enabled",
+      "env_name": "ADJUTORIX_FILTER_ENV_SECRETS",
+      "title": "Filter Environment Secrets",
+      "description": "Prevents child process launches and diagnostic surfaces from inheriting undeclared sensitive environment variables by default.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "authority_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "runtime-security",
+      "depends_on": [
+        "command.strict_policy"
+      ],
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "logging.json.enabled",
+      "env_name": "ADJUTORIX_AGENT_JSON_LOGS",
+      "title": "Enable JSON Agent Logs",
+      "description": "Emits structured JSON logs for the agent instead of human-oriented plain text logs.",
+      "surface": "agent",
+      "flag_type": "boolean",
+      "safety_class": "operational",
+      "stability": "beta",
+      "default": false,
+      "rollout_strategy": "env_override",
+      "owner": "agent-runtime",
+      "observability": {
+        "emit_in_health": false,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "logging.governance_audit.mirror_local",
+      "env_name": "ADJUTORIX_LOCAL_GOVERNANCE_AUDIT",
+      "title": "Mirror Governance Audit Locally",
+      "description": "Mirrors governance decisions to a local debug/audit sink in addition to authoritative artifact destinations.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "operational",
+      "stability": "internal",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "core-governance",
+      "observability": {
+        "emit_in_health": false,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "notifications.enabled",
+      "env_name": "ADJUTORIX_ENABLE_NOTIFICATIONS",
+      "title": "Enable Local Notifications",
+      "description": "Allows local desktop notifications for bounded runtime events such as long-running governed job completion.",
+      "surface": "main",
+      "flag_type": "boolean",
+      "safety_class": "ui_only",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "app-runtime",
+      "observability": {
+        "emit_in_health": false,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "links.external.allowed",
+      "env_name": "ADJUTORIX_ALLOW_EXTERNAL_LINKS",
+      "title": "Allow External Links",
+      "description": "Allows governed wrappers to open approved external links from application surfaces.",
+      "surface": "main",
+      "flag_type": "boolean",
+      "safety_class": "operational",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "env_override",
+      "owner": "app-runtime",
+      "observability": {
+        "emit_in_health": false,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "runtime.under_test",
+      "env_name": "ADJUTORIX_UNDER_TEST",
+      "title": "Runtime Under Test",
+      "description": "Marks the process as executing under automated harness conditions and enables test-specific isolation assumptions.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "test_only",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "test_harness_only",
+      "owner": "core-governance",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "runtime.test_mode",
+      "env_name": "ADJUTORIX_TEST_MODE",
+      "title": "Enable Test Mode",
+      "description": "Enables deterministic fixtures, relaxed interactive prompts, and hermetic test accommodations under controlled environments only.",
+      "surface": "shared",
+      "flag_type": "boolean",
+      "safety_class": "test_only",
+      "stability": "internal",
+      "default": false,
+      "rollout_strategy": "test_harness_only",
+      "owner": "core-governance",
+      "depends_on": [
+        "runtime.under_test"
+      ],
+      "constraints": [
+        "forbidden_when_runtime_mode=production"
+      ],
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    },
+    {
+      "id": "release.unpackaged",
+      "env_name": "ADJUTORIX_UNPACKAGED",
+      "title": "Unpackaged Runtime Marker",
+      "description": "Marks the application runtime as an unpackaged local/dev build and disables production packaging assumptions.",
+      "surface": "release",
+      "flag_type": "boolean",
+      "safety_class": "release_sensitive",
+      "stability": "stable",
+      "default": true,
+      "rollout_strategy": "build_time",
+      "owner": "release-engineering",
+      "observability": {
+        "emit_in_health": true,
+        "emit_in_diagnostics": true,
+        "redact_value": false,
+        "log_on_change": true
+      }
+    }
+  ],
+  "validation_rules": {
+    "renderer_flags_must_use_vite_prefix": true,
+    "renderer_flags_must_have_redact_value_false": true,
+    "test_only_flags_must_not_have_stability_stable": true,
+    "authority_sensitive_flags_must_not_have_surface_renderer": true,
+    "deprecated_flags_require_deprecation_block": true,
+    "enum_flags_require_allowed_values": true,
+    "integer_flags_require_minimum_and_maximum": false
+  },
+  "compatibility": {
+    "forbidden_combinations": [
+      {
+        "flags": [
+          "app.mock_runtime.enabled",
+          "release.unpackaged"
+        ],
+        "when": "release_channel in stable,rc,beta,emergency",
+        "reason": "Mock runtime may not coexist with distributable or authoritative release behavior."
+      },
+      {
+        "flags": [
+          "runtime.test_mode",
+          "governance.strict_mode"
+        ],
+        "when": "explicit relaxation requested",
+        "reason": "Test mode must not be used as a covert path to disable strict governance; any relaxation must remain explicit elsewhere."
+      }
+    ]
+  }
+}

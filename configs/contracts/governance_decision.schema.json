@@ -1,0 +1,825 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.dev/schemas/governance_decision.schema.json",
+  "title": "ADJUTORIX Governance Decision",
+  "description": "Canonical schema for authoritative governance decisions in ADJUTORIX. A governance decision is the policy-bound, auditable envelope that records who evaluated what, under which policy versions, with which evidence and guards, and what allow/warn/deny outcome was reached.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "decision_id",
+    "decision_kind",
+    "subject",
+    "target",
+    "authority",
+    "outcome",
+    "policy_context",
+    "evaluation",
+    "attestation"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "adjutorix.governance-decision"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "decision_id": {
+      "$ref": "#/$defs/non_empty_string"
+    },
+    "decision_kind": {
+      "type": "string",
+      "enum": [
+        "mutation_gate",
+        "command_gate",
+        "verify_gate",
+        "replay_gate",
+        "workspace_gate",
+        "trust_gate",
+        "release_gate",
+        "secret_gate",
+        "rpc_gate",
+        "export_gate"
+      ]
+    },
+    "subject": {
+      "$ref": "#/$defs/subject_binding"
+    },
+    "target": {
+      "$ref": "#/$defs/target_binding"
+    },
+    "authority": {
+      "$ref": "#/$defs/authority_binding"
+    },
+    "outcome": {
+      "$ref": "#/$defs/outcome"
+    },
+    "policy_context": {
+      "$ref": "#/$defs/policy_context"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/evaluation"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact_ref"
+      }
+    },
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(x|ext)_[A-Za-z0-9_.-]+$"
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "decision": {
+                "const": "allow"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evaluation": {
+            "properties": {
+              "blocking_failures": {
+                "const": 0
+              }
+            },
+            "required": [
+              "blocking_failures"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "decision": {
+                "const": "deny"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "enforcement": {
+                "type": "string",
+                "enum": [
+                  "block",
+                  "reject",
+                  "quarantine",
+                  "revoke"
+                ]
+              }
+            },
+            "required": [
+              "enforcement"
+            ]
+          },
+          "evaluation": {
+            "properties": {
+              "blocking_failures": {
+                "minimum": 1
+              }
+            },
+            "required": [
+              "blocking_failures"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_kind": {
+            "enum": [
+              "mutation_gate",
+              "command_gate",
+              "release_gate",
+              "trust_gate"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evaluation": {
+            "required": [
+              "guards",
+              "environment",
+              "trust",
+              "confirmation"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_kind": {
+            "const": "verify_gate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evaluation": {
+            "required": [
+              "verify_summary"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision_kind": {
+            "const": "replay_gate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evaluation": {
+            "required": [
+              "replay_summary"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "patch",
+            "verify_result",
+            "replay_result",
+            "command_profile",
+            "command_invocation",
+            "release_candidate",
+            "artifact",
+            "settings_scope",
+            "secret_source",
+            "rpc_method",
+            "user_actor",
+            "authority_surface"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "display_name": {
+          "type": "string"
+        }
+      }
+    },
+    "target_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_kind",
+        "identity",
+        "scope_summary"
+      ],
+      "properties": {
+        "target_kind": {
+          "type": "string",
+          "enum": [
+            "workspace_file",
+            "workspace_directory",
+            "patch_set",
+            "ledger_entry",
+            "ledger_selection",
+            "verify_scope",
+            "release_artifact",
+            "settings_blob",
+            "secret_material",
+            "rpc_capability",
+            "command_vector",
+            "export_bundle"
+          ]
+        },
+        "identity": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "scope_summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relative_workspace_path"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "relative_workspace_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "authority_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "actor",
+        "request_id",
+        "evaluated_at"
+      ],
+      "properties": {
+        "surface": {
+          "type": "string",
+          "enum": [
+            "preload_bridge",
+            "main_process_service",
+            "governed_cli_command",
+            "governed_agent_rpc",
+            "governed_scheduler_job",
+            "ci_release_pipeline",
+            "os_keychain_bridge"
+          ]
+        },
+        "actor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "user",
+                "service",
+                "ci",
+                "scheduler",
+                "system"
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "display_name": {
+              "type": "string"
+            }
+          }
+        },
+        "request_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "headline"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "headline": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "enforcement": {
+          "type": "string",
+          "enum": [
+            "none",
+            "block",
+            "reject",
+            "quarantine",
+            "revoke"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "policy_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_bindings",
+        "default_decision",
+        "rules_evaluated"
+      ],
+      "properties": {
+        "policy_bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "trust_policy"
+          ],
+          "properties": {
+            "workspace_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "mutation_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "command_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "verify_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "trust_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "release_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "secrets_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "governed_targets": {
+              "$ref": "#/$defs/non_empty_string"
+            }
+          }
+        },
+        "default_decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "rules_evaluated": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blocking_failures",
+        "evidence",
+        "evaluated_at"
+      ],
+      "properties": {
+        "blocking_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "guard_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard_result"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence_item"
+          }
+        },
+        "environment": {
+          "$ref": "#/$defs/environment_binding"
+        },
+        "trust": {
+          "$ref": "#/$defs/trust_binding"
+        },
+        "confirmation": {
+          "$ref": "#/$defs/confirmation_binding"
+        },
+        "verify_summary": {
+          "$ref": "#/$defs/verify_summary_ref"
+        },
+        "replay_summary": {
+          "$ref": "#/$defs/replay_summary_ref"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "guard_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "guard_id",
+        "status",
+        "summary"
+      ],
+      "properties": {
+        "guard_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "kind",
+        "fresh",
+        "payload_digest",
+        "summary"
+      ],
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "verify",
+            "replay",
+            "policy",
+            "diagnostics",
+            "ledger",
+            "workspace_health",
+            "secret_scan",
+            "command_audit",
+            "release_attestation",
+            "confirmation"
+          ]
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "environment_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorded_environment_fingerprint",
+        "current_environment_fingerprint",
+        "environment_match"
+      ],
+      "properties": {
+        "recorded_environment_fingerprint": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "current_environment_fingerprint": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "environment_match": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "compatible",
+            "drifted",
+            "unknown"
+          ]
+        },
+        "toolchain": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "trust_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trust_level",
+        "validity_state"
+      ],
+      "properties": {
+        "trust_level": {
+          "type": "string",
+          "enum": [
+            "none",
+            "observed",
+            "tentative",
+            "trusted",
+            "elevated",
+            "quarantined",
+            "revoked"
+          ]
+        },
+        "validity_state": {
+          "type": "string",
+          "enum": [
+            "valid",
+            "expiring",
+            "stale",
+            "invalidated",
+            "revoked"
+          ]
+        },
+        "workspace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "confirmation_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "present"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "confirmation_id": {
+          "type": "string"
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "confirmed_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "verify_summary_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verify_id",
+        "status",
+        "apply_readiness"
+      ],
+      "properties": {
+        "verify_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "stale",
+            "superseded"
+          ]
+        },
+        "apply_readiness": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "caution",
+            "blocked",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "replay_summary_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_status",
+        "determinism_state",
+        "replayable_lineage"
+      ],
+      "properties": {
+        "replay_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "stale",
+            "superseded"
+          ]
+        },
+        "determinism_state": {
+          "type": "string",
+          "enum": [
+            "deterministic",
+            "non_deterministic",
+            "unknown"
+          ]
+        },
+        "replayable_lineage": {
+          "type": "boolean"
+        }
+      }
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_kind",
+        "artifact_id"
+      ],
+      "properties": {
+        "artifact_kind": {
+          "type": "string",
+          "enum": [
+            "verify_artifact",
+            "replay_artifact",
+            "governance_log",
+            "release_metadata",
+            "command_audit",
+            "security_audit"
+          ]
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256_hex"
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_at",
+        "decision_hash",
+        "evidence_digest"
+      ],
+      "properties": {
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "decision_hash": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "evidence_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "type": "string"
+            },
+            "key_id": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

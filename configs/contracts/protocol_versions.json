@@ -1,0 +1,873 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.protocol-versions",
+  "version": 1,
+  "title": "ADJUTORIX Protocol and Surface Version Registry",
+  "description": "Canonical machine-readable registry of versioned protocols, contracts, policy surfaces, artifact formats, and compatibility rules across ADJUTORIX. This file is the single source of truth for cross-component negotiation and drift detection.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "agent-runtime",
+    "app-runtime",
+    "cli-runtime",
+    "release-engineering"
+  ],
+  "defaults": {
+    "compatibility_decision": "deny",
+    "missing_version_behavior": "deny",
+    "unknown_surface_behavior": "deny"
+  },
+  "invariants": [
+    "No authoritative cross-surface interaction without explicit version binding.",
+    "No compatibility decision may be inferred from semantic similarity alone.",
+    "No policy-bearing surface may version independently without being listed here.",
+    "Every breaking change must declare minimum and maximum compatible peers.",
+    "Every persisted artifact format must map to at least one reader compatibility rule."
+  ],
+  "enums": {
+    "surface_kind": [
+      "rpc",
+      "preload_api",
+      "renderer_bridge",
+      "ledger_format",
+      "verify_format",
+      "replay_format",
+      "workspace_state",
+      "settings_format",
+      "policy_surface",
+      "artifact_manifest",
+      "release_metadata",
+      "cli_protocol",
+      "command_audit_format",
+      "diagnostics_format"
+    ],
+    "stability": [
+      "experimental",
+      "internal",
+      "beta",
+      "stable",
+      "deprecated",
+      "retired"
+    ],
+    "compatibility": [
+      "exact",
+      "forward_compatible",
+      "backward_compatible",
+      "conditionally_compatible",
+      "incompatible"
+    ],
+    "change_kind": [
+      "patch",
+      "minor",
+      "major",
+      "schema_only",
+      "policy_only",
+      "format_break"
+    ],
+    "consumer": [
+      "adjutorix-app-main",
+      "adjutorix-app-preload",
+      "adjutorix-app-renderer",
+      "adjutorix-cli",
+      "adjutorix-agent",
+      "adjutorix-ci",
+      "adjutorix-release-pipeline"
+    ]
+  },
+  "global_rules": {
+    "version_scheme": "semver",
+    "require_semver_strings": true,
+    "breaking_change_requires_major_bump": true,
+    "deprecated_surfaces_require_replacement_reference": true,
+    "retired_surfaces_must_not_be_default": true,
+    "policy_surfaces_must_increment_on_rule_meaning_change": true,
+    "persisted_formats_must_define_reader_compatibility": true
+  },
+  "surfaces": [
+    {
+      "id": "rpc.jsonrpc.adjutorix",
+      "kind": "rpc",
+      "title": "Governed JSON-RPC Surface",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "transport": "jsonrpc-2.0",
+      "owned_by": "agent-runtime",
+      "contract_ref": "configs/contracts/rpc_capabilities.json",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "exact_match_required_for": [
+          "method_presence",
+          "error_code_meanings",
+          "audit_envelope_required_fields"
+        ],
+        "forward_compatible_if": [
+          "new_optional_methods_only",
+          "new_optional_response_fields_only"
+        ],
+        "incompatible_if": [
+          "required_param_removed",
+          "required_response_field_removed",
+          "error_code_reused_with_new_meaning",
+          "policy_binding_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-ci": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial governed RPC contract with explicit policy, trust, verify, replay, and audit bindings."
+        }
+      ]
+    },
+    {
+      "id": "preload.api.adjutorix",
+      "kind": "preload_api",
+      "title": "Preload Exposed API Surface",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "app-runtime",
+      "contract_ref": "packages/adjutorix-app/tests/main/exposed_api_contract.test.ts",
+      "default_for": [
+        "adjutorix-app-preload",
+        "adjutorix-app-renderer"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_methods_added",
+          "new_optional_fields_added"
+        ],
+        "incompatible_if": [
+          "method_removed",
+          "method_renamed",
+          "return_shape_broken",
+          "authority_surface_expanded_without_new_version"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-app-renderer": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Single governed preload root with renderer-safe request surfaces only."
+        }
+      ]
+    },
+    {
+      "id": "renderer.bridge.runtime",
+      "kind": "renderer_bridge",
+      "title": "Renderer Runtime Bridge Contract",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "app-runtime",
+      "contract_ref": "packages/adjutorix-app/tests/main/preload_bridge.test.ts",
+      "default_for": [
+        "adjutorix-app-renderer"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_non_authoritative_events_added",
+          "new_optional_status_fields_added"
+        ],
+        "incompatible_if": [
+          "event_name_reused",
+          "authority_boundary_changed",
+          "required_runtime_state_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-app-renderer": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Baseline renderer runtime state and governed request bridge."
+        }
+      ]
+    },
+    {
+      "id": "ledger.format.core",
+      "kind": "ledger_format",
+      "title": "Ledger Entry and Selection Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "replay-runtime",
+      "contract_ref": "tests/contracts/ledger_edges_contract.test.ts",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "backward_compatible_if": [
+          "new_optional_entry_fields_added",
+          "new_optional_attestation_fields_added"
+        ],
+        "incompatible_if": [
+          "sequence_semantics_changed",
+          "edge_meaning_changed",
+          "rollback_target_shape_changed",
+          "required_entry_field_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Baseline ledger semantics with sequence, lineage, and rollback support."
+        }
+      ]
+    },
+    {
+      "id": "verify.format.core",
+      "kind": "verify_format",
+      "title": "Verify Result Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "verify-runtime",
+      "contract_ref": "configs/policy/verify_policy.yaml",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main",
+        "adjutorix-release-pipeline"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_evidence_classes_added",
+          "new_optional_summary_fields_added"
+        ],
+        "incompatible_if": [
+          "verify_status_meaning_changed",
+          "apply_readiness_meaning_changed",
+          "required_evidence_binding_removed",
+          "freshness_semantics_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-release-pipeline": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial verify result contract with apply-readiness and freshness semantics."
+        }
+      ]
+    },
+    {
+      "id": "replay.format.core",
+      "kind": "replay_format",
+      "title": "Replay Outcome Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "replay-runtime",
+      "contract_ref": "tests/replay/deterministic_replay.test.ts",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_replay_annotations_added"
+        ],
+        "incompatible_if": [
+          "determinism_state_meaning_changed",
+          "replayable_lineage_semantics_changed",
+          "environment_match_contract_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Baseline replay contract with determinism, lineage, and environment compatibility."
+        }
+      ]
+    },
+    {
+      "id": "workspace.state.session",
+      "kind": "workspace_state",
+      "title": "Workspace Session Restore Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "workspace-runtime",
+      "contract_ref": "configs/policy/workspace_policy.yaml",
+      "default_for": [
+        "adjutorix-app-main",
+        "adjutorix-app-renderer"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_session_fields_added"
+        ],
+        "incompatible_if": [
+          "identity_binding_removed",
+          "trust_gated_restore_semantics_changed",
+          "persisted_secret_rule_weakened_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Baseline workspace session persistence and restore gating contract."
+        }
+      ]
+    },
+    {
+      "id": "settings.format.governed",
+      "kind": "settings_format",
+      "title": "Governed Settings Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "app-runtime",
+      "contract_ref": "configs/policy/workspace_policy.yaml",
+      "default_for": [
+        "adjutorix-app-main",
+        "adjutorix-cli"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_settings_keys_added"
+        ],
+        "incompatible_if": [
+          "setting_scope_meaning_changed",
+          "secret_storage_rule_changed_without_major",
+          "required_key_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Governed application and workspace settings persistence baseline."
+        }
+      ]
+    },
+    {
+      "id": "policy.surface.mutation",
+      "kind": "policy_surface",
+      "title": "Mutation Policy Surface",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "core-governance",
+      "contract_ref": "configs/policy/mutation_policy.yaml",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "conditionally_compatible_if": [
+          "new_rules_added_without_reinterpreting_existing_decisions"
+        ],
+        "incompatible_if": [
+          "decision_meaning_changed",
+          "confirmation_semantics_changed",
+          "default_decision_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-agent": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "policy_only",
+          "status": "current",
+          "notes": "Initial canonical mutation governance semantics."
+        }
+      ]
+    },
+    {
+      "id": "policy.surface.command",
+      "kind": "policy_surface",
+      "title": "Command Policy Surface",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "core-governance",
+      "contract_ref": "configs/policy/command_policy.yaml",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "conditionally_compatible_if": [
+          "new_profiles_added_without_reinterpreting_existing_profiles"
+        ],
+        "incompatible_if": [
+          "effect_class_meaning_changed",
+          "network_profile_meaning_changed",
+          "default_decision_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-agent": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "policy_only",
+          "status": "current",
+          "notes": "Initial canonical command execution governance semantics."
+        }
+      ]
+    },
+    {
+      "id": "policy.surface.verify",
+      "kind": "policy_surface",
+      "title": "Verify Policy Surface",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "core-governance",
+      "contract_ref": "configs/policy/verify_policy.yaml",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main",
+        "adjutorix-release-pipeline"
+      ],
+      "compatibility_rules": {
+        "conditionally_compatible_if": [
+          "new_optional_check_classes_added"
+        ],
+        "incompatible_if": [
+          "apply_readiness_meaning_changed",
+          "freshness_semantics_changed",
+          "required_check_set_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-agent": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-release-pipeline": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "policy_only",
+          "status": "current",
+          "notes": "Initial canonical verification aggregation semantics."
+        }
+      ]
+    },
+    {
+      "id": "artifact.manifest.release",
+      "kind": "artifact_manifest",
+      "title": "Release Artifact Manifest Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "release-engineering",
+      "contract_ref": "configs/policy/release_policy.yaml",
+      "default_for": [
+        "adjutorix-release-pipeline",
+        "adjutorix-ci"
+      ],
+      "compatibility_rules": {
+        "backward_compatible_if": [
+          "new_optional_manifest_fields_added"
+        ],
+        "incompatible_if": [
+          "checksum_field_removed",
+          "artifact_kind_meaning_changed",
+          "platform_matrix_contract_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-release-pipeline": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-ci": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial manifest format for governed release artifact sets."
+        }
+      ]
+    },
+    {
+      "id": "release.metadata.bundle",
+      "kind": "release_metadata",
+      "title": "Release Metadata Bundle Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "release-engineering",
+      "contract_ref": "configs/policy/release_policy.yaml",
+      "default_for": [
+        "adjutorix-release-pipeline",
+        "adjutorix-ci"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_release_metadata_sections_added"
+        ],
+        "incompatible_if": [
+          "provenance_summary_removed",
+          "signing_summary_removed",
+          "rollback_summary_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-release-pipeline": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial metadata bundle for attestable governed releases."
+        }
+      ]
+    },
+    {
+      "id": "cli.protocol.runtime",
+      "kind": "cli_protocol",
+      "title": "CLI Runtime Output and Negotiation Protocol",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "cli-runtime",
+      "contract_ref": "packages/adjutorix-cli/tests/test_cli_replay.py",
+      "default_for": [
+        "adjutorix-cli",
+        "adjutorix-agent"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_json_fields_added",
+          "new_optional_output_sections_added"
+        ],
+        "incompatible_if": [
+          "machine_output_shape_changed",
+          "required_json_field_removed",
+          "exit_code_contract_changed_without_major"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-agent": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-ci": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial CLI machine-readable output and negotiation semantics."
+        }
+      ]
+    },
+    {
+      "id": "audit.command.format",
+      "kind": "command_audit_format",
+      "title": "Command Audit Record Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "runtime-orchestration",
+      "contract_ref": "configs/policy/command_policy.yaml",
+      "default_for": [
+        "adjutorix-agent",
+        "adjutorix-cli",
+        "adjutorix-app-main"
+      ],
+      "compatibility_rules": {
+        "backward_compatible_if": [
+          "new_optional_audit_dimensions_added"
+        ],
+        "incompatible_if": [
+          "required_redaction_fields_removed",
+          "decision_meaning_changed",
+          "digest_field_semantics_changed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-agent": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial governed command audit record format."
+        }
+      ]
+    },
+    {
+      "id": "diagnostics.format.snapshot",
+      "kind": "diagnostics_format",
+      "title": "Diagnostics Snapshot Format",
+      "stability": "stable",
+      "current_version": "1.0.0",
+      "current_protocol_integer": 1,
+      "owned_by": "verify-runtime",
+      "contract_ref": "packages/adjutorix-app/tests/smoke/diagnostics_roundtrip.smoke.test.ts",
+      "default_for": [
+        "adjutorix-app-main",
+        "adjutorix-agent",
+        "adjutorix-cli"
+      ],
+      "compatibility_rules": {
+        "forward_compatible_if": [
+          "new_optional_diagnostic_annotations_added"
+        ],
+        "incompatible_if": [
+          "severity_scale_changed",
+          "path_binding_removed",
+          "blocking_classification_removed"
+        ]
+      },
+      "supported_consumers": {
+        "adjutorix-app-main": {
+          "min": "1.0.0",
+          "max": "1.x"
+        },
+        "adjutorix-cli": {
+          "min": "1.0.0",
+          "max": "1.x"
+        }
+      },
+      "history": [
+        {
+          "version": "1.0.0",
+          "change_kind": "major",
+          "status": "current",
+          "notes": "Initial diagnostics snapshot contract."
+        }
+      ]
+    }
+  ],
+  "compatibility_matrix": {
+    "adjutorix-app-main": {
+      "requires": {
+        "rpc.jsonrpc.adjutorix": "1.x",
+        "ledger.format.core": "1.x",
+        "verify.format.core": "1.x",
+        "replay.format.core": "1.x",
+        "workspace.state.session": "1.x",
+        "settings.format.governed": "1.x",
+        "diagnostics.format.snapshot": "1.x"
+      }
+    },
+    "adjutorix-app-preload": {
+      "requires": {
+        "preload.api.adjutorix": "1.x",
+        "renderer.bridge.runtime": "1.x"
+      }
+    },
+    "adjutorix-app-renderer": {
+      "requires": {
+        "preload.api.adjutorix": "1.x",
+        "renderer.bridge.runtime": "1.x",
+        "workspace.state.session": "1.x"
+      }
+    },
+    "adjutorix-cli": {
+      "requires": {
+        "rpc.jsonrpc.adjutorix": "1.x",
+        "ledger.format.core": "1.x",
+        "verify.format.core": "1.x",
+        "replay.format.core": "1.x",
+        "cli.protocol.runtime": "1.x",
+        "audit.command.format": "1.x"
+      }
+    },
+    "adjutorix-agent": {
+      "requires": {
+        "rpc.jsonrpc.adjutorix": "1.x",
+        "ledger.format.core": "1.x",
+        "verify.format.core": "1.x",
+        "replay.format.core": "1.x",
+        "policy.surface.mutation": "1.x",
+        "policy.surface.command": "1.x",
+        "policy.surface.verify": "1.x",
+        "audit.command.format": "1.x"
+      }
+    },
+    "adjutorix-release-pipeline": {
+      "requires": {
+        "verify.format.core": "1.x",
+        "policy.surface.verify": "1.x",
+        "artifact.manifest.release": "1.x",
+        "release.metadata.bundle": "1.x"
+      }
+    }
+  },
+  "negotiation": {
+    "strategy": "highest_mutually_supported_major_within_declared_ranges",
+    "deny_if": [
+      "no_intersection",
+      "required_surface_missing",
+      "surface_retired",
+      "surface_stability_below_required_level"
+    ],
+    "stability_requirements": {
+      "adjutorix-release-pipeline": "stable",
+      "adjutorix-app-main": "stable",
+      "adjutorix-cli": "stable",
+      "adjutorix-agent": "stable",
+      "adjutorix-app-renderer": "stable",
+      "adjutorix-app-preload": "stable"
+    }
+  },
+  "drift_guards": {
+    "require_contract_drift_guard": true,
+    "require_protocol_registry_update_on_breaking_change": true,
+    "require_history_entry_on_version_change": true,
+    "require_consumer_range_update_when_needed": true
+  }
+}

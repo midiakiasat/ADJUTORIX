@@ -1,0 +1,154 @@
+appId: io.adjutorix.desktop
+productName: ADJUTORIX
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+directories:
+  app: packages/adjutorix-app
+  buildResources: packages/adjutorix-app/build
+  output: dist/electron-builder
+files:
+  - from: packages/adjutorix-app
+    filter:
+      - package.json
+      - dist/**
+      - out/**
+      - build/**
+      - resources/**
+      - '!**/*.map'
+      - '!**/*.tsbuildinfo'
+      - '!**/__tests__/**'
+      - '!**/tests/**'
+      - '!**/*.test.*'
+      - '!**/*.spec.*'
+      - '!node_modules/.cache/**'
+      - '!coverage/**'
+  - from: packages/adjutorix-cli/dist
+    to: resources/cli
+    filter:
+      - '*.whl'
+      - '*.tar.gz'
+extraMetadata:
+  name: adjutorix
+  productName: ADJUTORIX
+  description: Governed AI workspace for replayable, verifiable, authority-bounded execution.
+asar: true
+asarUnpack:
+  - resources/**
+  - dist-native/**
+compression: maximum
+removePackageKeywords: true
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+publish: never
+generateUpdatesFilesForAllChannels: false
+electronLanguages:
+  - en
+extraResources:
+  - from: docs
+    to: docs
+    filter:
+      - ARCHITECTURE.md
+      - LEDGER_AND_REPLAY.md
+      - NO_MERCY_CHECKLIST.md
+  - from: configs
+    to: configs
+    filter:
+      - ci/**
+      - hooks/**
+      - tooling/**
+extraFiles: []
+protocols:
+  - name: ADJUTORIX Workspace Link
+    schemes:
+      - adjutorix
+fileAssociations:
+  - ext: adjx
+    name: ADJUTORIX Workspace Bundle
+    description: ADJUTORIX governed workspace session bundle
+    role: Editor
+  - ext: adjledger
+    name: ADJUTORIX Ledger Snapshot
+    description: ADJUTORIX ledger and replay snapshot
+    role: Viewer
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: packages/adjutorix-app/build/entitlements.mac.plist
+  entitlementsInherit: packages/adjutorix-app/build/entitlements.mac.plist
+  darkModeSupport: true
+  type: distribution
+  icon: packages/adjutorix-app/build/icon.icns
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  extendInfo:
+    NSCameraUsageDescription: ADJUTORIX does not require camera access.
+    NSMicrophoneUsageDescription: ADJUTORIX does not require microphone access.
+    NSDocumentsFolderUsageDescription: ADJUTORIX accesses workspace files the user explicitly opens.
+    NSDownloadsFolderUsageDescription: ADJUTORIX may export governed artifacts to user-selected locations.
+    NSUserNotificationUsageDescription: ADJUTORIX may show local notifications for long-running governed actions.
+    ADJUTORIXGovernedSurface: true
+    ADJUTORIXReplayable: true
+dmg:
+  sign: false
+  writeUpdateInfo: false
+  title: ADJUTORIX ${version}
+  icon: packages/adjutorix-app/build/icon.icns
+  backgroundColor: '#111827'
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: packages/adjutorix-app/build/icon.ico
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  verifyUpdateCodeSignature: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  runAfterFinish: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: ADJUTORIX
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: tar.gz
+      arch:
+        - x64
+  category: Development
+  icon: packages/adjutorix-app/build/icons
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  synopsis: Governed AI workspace with replay, verification, and authority boundaries
+  description: |
+    ADJUTORIX is a governed AI workspace focused on verifiable state transitions,
+    replayable execution, policy-gated mutation, and auditable developer workflows.
+appImage:
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+afterPack: packages/adjutorix-app/build/after-pack.cjs
+afterSign: packages/adjutorix-app/build/after-sign.cjs
+artifactBuildCompleted:
+  - echo "ADJUTORIX packaging artifact completed:

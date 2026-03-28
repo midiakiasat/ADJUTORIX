@@ -1,0 +1,669 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.runtime-limits",
+  "version": 1,
+  "title": "ADJUTORIX Runtime Limits Registry",
+  "description": "Canonical machine-readable registry of hard and soft runtime limits across app, preload, main process, agent, CLI, scheduler, verify, replay, ledger, command execution, watchers, artifacts, and release flows. This registry defines bounded operational envelopes so governed behavior fails predictably rather than degrading into ambiguous state.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "runtime-orchestration",
+    "app-runtime",
+    "agent-runtime",
+    "release-engineering"
+  ],
+  "defaults": {
+    "unknown_limit_behavior": "deny",
+    "missing_limit_behavior": "deny",
+    "unit_system": "binary_bytes_and_milliseconds"
+  },
+  "invariants": [
+    "Every consequential runtime surface must operate within declared size, time, count, and concurrency bounds.",
+    "Soft limits may warn or degrade behavior, but hard limits must fail closed with explicit reason codes.",
+    "No limit may silently expand by environment or release channel without being declared here.",
+    "Timeouts, queue depth, and persistence bounds must be chosen to preserve recoverability and deterministic auditability.",
+    "Renderer-visible limits may guide UX but may not weaken authoritative main or agent enforcement."
+  ],
+  "enums": {
+    "scope": [
+      "renderer",
+      "preload",
+      "main",
+      "agent",
+      "cli",
+      "scheduler",
+      "verify",
+      "replay",
+      "ledger",
+      "workspace",
+      "watcher",
+      "command",
+      "terminal",
+      "release",
+      "logging",
+      "diagnostics",
+      "rpc"
+    ],
+    "limit_type": [
+      "count",
+      "bytes",
+      "milliseconds",
+      "seconds",
+      "percentage",
+      "string_length"
+    ],
+    "enforcement": [
+      "hard_fail",
+      "warn_and_degrade",
+      "warn_only"
+    ],
+    "release_channel": [
+      "dev",
+      "nightly",
+      "internal",
+      "beta",
+      "rc",
+      "stable",
+      "emergency"
+    ]
+  },
+  "limit_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "scope",
+      "title",
+      "description",
+      "type",
+      "default",
+      "enforcement",
+      "owner"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9_.-]+$"
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "renderer",
+          "preload",
+          "main",
+          "agent",
+          "cli",
+          "scheduler",
+          "verify",
+          "replay",
+          "ledger",
+          "workspace",
+          "watcher",
+          "command",
+          "terminal",
+          "release",
+          "logging",
+          "diagnostics",
+          "rpc"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1
+      },
+      "type": {
+        "type": "string",
+        "enum": [
+          "count",
+          "bytes",
+          "milliseconds",
+          "seconds",
+          "percentage",
+          "string_length"
+        ]
+      },
+      "default": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "minimum": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maximum": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "enforcement": {
+        "type": "string",
+        "enum": [
+          "hard_fail",
+          "warn_and_degrade",
+          "warn_only"
+        ]
+      },
+      "release_channel_overrides": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "reason_code": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      }
+    }
+  },
+  "limits": [
+    {
+      "id": "rpc.max_request_bytes",
+      "scope": "rpc",
+      "title": "Maximum RPC Request Size",
+      "description": "Upper bound for a single JSON-RPC request body accepted by the governed agent surface.",
+      "type": "bytes",
+      "default": 1048576,
+      "minimum": 65536,
+      "maximum": 8388608,
+      "enforcement": "hard_fail",
+      "owner": "agent-runtime",
+      "reason_code": "rpc_request_too_large"
+    },
+    {
+      "id": "rpc.max_response_bytes",
+      "scope": "rpc",
+      "title": "Maximum RPC Response Size",
+      "description": "Upper bound for a single JSON-RPC response payload before callers must use artifact references or pagination.",
+      "type": "bytes",
+      "default": 2097152,
+      "minimum": 131072,
+      "maximum": 16777216,
+      "enforcement": "hard_fail",
+      "owner": "agent-runtime",
+      "reason_code": "rpc_response_too_large"
+    },
+    {
+      "id": "rpc.request_timeout_ms",
+      "scope": "rpc",
+      "title": "Default RPC Request Timeout",
+      "description": "Default per-request timeout for synchronous RPC handling unless method-specific orchestration takes over.",
+      "type": "milliseconds",
+      "default": 30000,
+      "minimum": 1000,
+      "maximum": 300000,
+      "enforcement": "hard_fail",
+      "owner": "agent-runtime",
+      "reason_code": "rpc_request_timeout"
+    },
+    {
+      "id": "scheduler.max_concurrent_jobs",
+      "scope": "scheduler",
+      "title": "Maximum Concurrent Jobs",
+      "description": "Upper bound for simultaneously running governed jobs in the scheduler.",
+      "type": "count",
+      "default": 4,
+      "minimum": 1,
+      "maximum": 64,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "scheduler_concurrency_exceeded"
+    },
+    {
+      "id": "scheduler.max_queued_jobs",
+      "scope": "scheduler",
+      "title": "Maximum Queued Jobs",
+      "description": "Upper bound for admitted but not yet running jobs retained by the scheduler.",
+      "type": "count",
+      "default": 128,
+      "minimum": 1,
+      "maximum": 4096,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "scheduler_queue_exceeded"
+    },
+    {
+      "id": "scheduler.poll_interval_ms",
+      "scope": "scheduler",
+      "title": "Scheduler Poll Interval",
+      "description": "Internal scheduler polling interval for queue advancement and timeout checks.",
+      "type": "milliseconds",
+      "default": 250,
+      "minimum": 50,
+      "maximum": 5000,
+      "enforcement": "warn_only",
+      "owner": "runtime-orchestration"
+    },
+    {
+      "id": "scheduler.job_heartbeat_interval_ms",
+      "scope": "scheduler",
+      "title": "Job Heartbeat Interval",
+      "description": "Expected interval between heartbeats for running governed jobs.",
+      "type": "milliseconds",
+      "default": 1000,
+      "minimum": 100,
+      "maximum": 10000,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-orchestration"
+    },
+    {
+      "id": "scheduler.default_job_timeout_ms",
+      "scope": "scheduler",
+      "title": "Default Job Timeout",
+      "description": "Upper bound for long-running jobs before timeout handling is enforced if no stricter profile applies.",
+      "type": "milliseconds",
+      "default": 1800000,
+      "minimum": 1000,
+      "maximum": 14400000,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "job_timeout"
+    },
+    {
+      "id": "workspace.max_recent_workspaces",
+      "scope": "workspace",
+      "title": "Maximum Remembered Workspaces",
+      "description": "Maximum number of recent workspace entries persisted for session restore and recent-open lists.",
+      "type": "count",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 200,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "workspace.large_file_count_threshold",
+      "scope": "workspace",
+      "title": "Large Workspace File Count Threshold",
+      "description": "File count threshold beyond which workspace classification becomes degraded and watch/scan behavior may narrow.",
+      "type": "count",
+      "default": 200000,
+      "minimum": 1000,
+      "maximum": 5000000,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "workspace.large_total_bytes_threshold",
+      "scope": "workspace",
+      "title": "Large Workspace Total Bytes Threshold",
+      "description": "Total workspace size threshold beyond which scans and UI behaviors may degrade.",
+      "type": "bytes",
+      "default": 2147483648,
+      "minimum": 104857600,
+      "maximum": 1099511627776,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "workspace.preview_max_bytes",
+      "scope": "workspace",
+      "title": "Maximum Inline Preview Size",
+      "description": "Maximum file size eligible for inline preview without requiring alternate handling.",
+      "type": "bytes",
+      "default": 1048576,
+      "minimum": 4096,
+      "maximum": 16777216,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "workspace.inline_diff_max_bytes",
+      "scope": "workspace",
+      "title": "Maximum Inline Diff Size",
+      "description": "Maximum diff payload size rendered inline before artifact or summarized rendering is required.",
+      "type": "bytes",
+      "default": 524288,
+      "minimum": 4096,
+      "maximum": 8388608,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "workspace.mutation_extra_confirmation_bytes",
+      "scope": "workspace",
+      "title": "Mutation Extra Confirmation Threshold",
+      "description": "File size above which mutation requires stronger UX warning or extra confirmation semantics.",
+      "type": "bytes",
+      "default": 2097152,
+      "minimum": 65536,
+      "maximum": 134217728,
+      "enforcement": "warn_and_degrade",
+      "owner": "core-governance"
+    },
+    {
+      "id": "watcher.poll_interval_ms",
+      "scope": "watcher",
+      "title": "Watcher Poll Interval",
+      "description": "Polling interval used when native file watching is unavailable.",
+      "type": "milliseconds",
+      "default": 1500,
+      "minimum": 100,
+      "maximum": 10000,
+      "enforcement": "warn_only",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "watcher.max_watch_file_bytes",
+      "scope": "watcher",
+      "title": "Maximum Watched File Size",
+      "description": "Files larger than this are excluded from detailed watcher-driven incremental handling.",
+      "type": "bytes",
+      "default": 10485760,
+      "minimum": 65536,
+      "maximum": 1073741824,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "watcher.coalesce_burst_window_ms",
+      "scope": "watcher",
+      "title": "Watcher Burst Coalescing Window",
+      "description": "Time window used to coalesce watcher bursts into a single governed update batch.",
+      "type": "milliseconds",
+      "default": 250,
+      "minimum": 10,
+      "maximum": 5000,
+      "enforcement": "warn_only",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "command.default_timeout_ms",
+      "scope": "command",
+      "title": "Default Command Timeout",
+      "description": "Default timeout for governed command execution unless stricter command-profile limits apply.",
+      "type": "milliseconds",
+      "default": 600000,
+      "minimum": 1000,
+      "maximum": 7200000,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "command_timeout"
+    },
+    {
+      "id": "command.max_capture_bytes",
+      "scope": "command",
+      "title": "Maximum Command Output Capture",
+      "description": "Upper bound for captured stdout/stderr retained as authoritative command evidence before truncation handling applies.",
+      "type": "bytes",
+      "default": 1048576,
+      "minimum": 4096,
+      "maximum": 67108864,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-orchestration"
+    },
+    {
+      "id": "terminal.max_buffer_bytes",
+      "scope": "terminal",
+      "title": "Maximum Terminal Session Buffer",
+      "description": "Upper bound for terminal transcript bytes retained in memory per interactive session.",
+      "type": "bytes",
+      "default": 1048576,
+      "minimum": 65536,
+      "maximum": 67108864,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "verify.mutation_guard_max_age_seconds",
+      "scope": "verify",
+      "title": "Mutation Guard Verify Freshness",
+      "description": "Maximum age for mutation-guard verify results before they become stale for consequential actions.",
+      "type": "seconds",
+      "default": 300,
+      "minimum": 30,
+      "maximum": 86400,
+      "enforcement": "hard_fail",
+      "owner": "verify-runtime",
+      "reason_code": "verify_stale"
+    },
+    {
+      "id": "verify.release_guard_max_age_seconds",
+      "scope": "verify",
+      "title": "Release Guard Verify Freshness",
+      "description": "Maximum age for release-guard verify results before they become stale for release promotion.",
+      "type": "seconds",
+      "default": 900,
+      "minimum": 30,
+      "maximum": 86400,
+      "enforcement": "hard_fail",
+      "owner": "verify-runtime",
+      "reason_code": "release_verify_stale"
+    },
+    {
+      "id": "verify.max_check_items",
+      "scope": "verify",
+      "title": "Maximum Verify Check Items",
+      "description": "Upper bound for serialized check items inside a compact verify summary before artifact indirection is required.",
+      "type": "count",
+      "default": 512,
+      "minimum": 1,
+      "maximum": 100000,
+      "enforcement": "warn_and_degrade",
+      "owner": "verify-runtime"
+    },
+    {
+      "id": "replay.max_steps",
+      "scope": "replay",
+      "title": "Maximum Replay Steps",
+      "description": "Upper bound for replay step count processed in a single authoritative replay run before segmented replay is required.",
+      "type": "count",
+      "default": 10000,
+      "minimum": 1,
+      "maximum": 1000000,
+      "enforcement": "hard_fail",
+      "owner": "replay-runtime",
+      "reason_code": "replay_steps_exceeded"
+    },
+    {
+      "id": "replay.max_artifact_bytes",
+      "scope": "replay",
+      "title": "Maximum Replay Artifact Size",
+      "description": "Upper bound for a single replay artifact before segmentation or summary-only output is required.",
+      "type": "bytes",
+      "default": 10485760,
+      "minimum": 65536,
+      "maximum": 268435456,
+      "enforcement": "warn_and_degrade",
+      "owner": "replay-runtime"
+    },
+    {
+      "id": "ledger.max_entry_payload_bytes",
+      "scope": "ledger",
+      "title": "Maximum Ledger Entry Payload",
+      "description": "Upper bound for a single ledger entry payload before referenced artifact indirection is required.",
+      "type": "bytes",
+      "default": 262144,
+      "minimum": 4096,
+      "maximum": 16777216,
+      "enforcement": "hard_fail",
+      "owner": "replay-runtime",
+      "reason_code": "ledger_entry_too_large"
+    },
+    {
+      "id": "ledger.max_edges_per_entry",
+      "scope": "ledger",
+      "title": "Maximum Ledger Edges per Entry",
+      "description": "Upper bound for graph edges attached to a single ledger entry before edge compaction or artifact indirection is required.",
+      "type": "count",
+      "default": 256,
+      "minimum": 1,
+      "maximum": 16384,
+      "enforcement": "warn_and_degrade",
+      "owner": "replay-runtime"
+    },
+    {
+      "id": "diagnostics.max_items_inline",
+      "scope": "diagnostics",
+      "title": "Maximum Inline Diagnostics Items",
+      "description": "Upper bound for inline diagnostics items returned directly to UI or RPC consumers before pagination or artifacts are required.",
+      "type": "count",
+      "default": 1000,
+      "minimum": 1,
+      "maximum": 100000,
+      "enforcement": "warn_and_degrade",
+      "owner": "verify-runtime"
+    },
+    {
+      "id": "diagnostics.max_payload_bytes",
+      "scope": "diagnostics",
+      "title": "Maximum Diagnostics Payload Size",
+      "description": "Upper bound for a diagnostics payload before indirection, summarization, or pagination is required.",
+      "type": "bytes",
+      "default": 2097152,
+      "minimum": 4096,
+      "maximum": 67108864,
+      "enforcement": "warn_and_degrade",
+      "owner": "verify-runtime"
+    },
+    {
+      "id": "logging.runtime_file_max_bytes",
+      "scope": "logging",
+      "title": "Maximum Runtime Log File Size",
+      "description": "Rotation threshold for general runtime structured log files.",
+      "type": "bytes",
+      "default": 10485760,
+      "minimum": 1048576,
+      "maximum": 1073741824,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-security"
+    },
+    {
+      "id": "logging.runtime_file_max_count",
+      "scope": "logging",
+      "title": "Maximum Runtime Log File Count",
+      "description": "Number of rotated runtime log files retained before older files are pruned.",
+      "type": "count",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 1000,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-security"
+    },
+    {
+      "id": "logging.audit_retention_days",
+      "scope": "logging",
+      "title": "Audit Log Retention",
+      "description": "Retention window for local audit-oriented structured logs.",
+      "type": "count",
+      "default": 30,
+      "minimum": 1,
+      "maximum": 3650,
+      "enforcement": "warn_only",
+      "owner": "runtime-security"
+    },
+    {
+      "id": "release.max_artifact_manifest_items",
+      "scope": "release",
+      "title": "Maximum Release Artifact Manifest Items",
+      "description": "Upper bound for artifacts listed directly in a single release manifest before bundle partitioning is required.",
+      "type": "count",
+      "default": 512,
+      "minimum": 1,
+      "maximum": 10000,
+      "enforcement": "warn_and_degrade",
+      "owner": "release-engineering"
+    },
+    {
+      "id": "release.max_metadata_bundle_bytes",
+      "scope": "release",
+      "title": "Maximum Release Metadata Bundle Size",
+      "description": "Upper bound for release metadata bundle size before artifact decomposition is required.",
+      "type": "bytes",
+      "default": 5242880,
+      "minimum": 65536,
+      "maximum": 268435456,
+      "enforcement": "warn_and_degrade",
+      "owner": "release-engineering"
+    },
+    {
+      "id": "renderer.max_open_tabs",
+      "scope": "renderer",
+      "title": "Maximum Open Editor Tabs",
+      "description": "Soft cap for simultaneously open editor tabs before the UI warns and may deprioritize restoration behavior.",
+      "type": "count",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 5000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "renderer.max_outline_items_inline",
+      "scope": "renderer",
+      "title": "Maximum Inline Outline Items",
+      "description": "Upper bound for outline items rendered inline before summarization or virtualization is required.",
+      "type": "count",
+      "default": 2000,
+      "minimum": 1,
+      "maximum": 100000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "preload.max_bridge_payload_bytes",
+      "scope": "preload",
+      "title": "Maximum Preload Bridge Payload",
+      "description": "Upper bound for a single request or response payload crossing the preload bridge without artifact indirection.",
+      "type": "bytes",
+      "default": 524288,
+      "minimum": 4096,
+      "maximum": 8388608,
+      "enforcement": "hard_fail",
+      "owner": "app-runtime",
+      "reason_code": "preload_payload_too_large"
+    },
+    {
+      "id": "main.max_recent_notifications",
+      "scope": "main",
+      "title": "Maximum Recent Notifications",
+      "description": "Soft cap on retained recent app notifications for UI recall/history surfaces.",
+      "type": "count",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 5000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "cli.max_machine_output_bytes",
+      "scope": "cli",
+      "title": "Maximum CLI Machine Output",
+      "description": "Upper bound for machine-readable CLI stdout before output must switch to artifact reference mode.",
+      "type": "bytes",
+      "default": 2097152,
+      "minimum": 4096,
+      "maximum": 67108864,
+      "enforcement": "hard_fail",
+      "owner": "cli-runtime",
+      "reason_code": "cli_machine_output_too_large"
+    },
+    {
+      "id": "agent.health_eval_interval_ms",
+      "scope": "agent",
+      "title": "Agent Health Evaluation Interval",
+      "description": "Internal agent health evaluation interval for readiness and degraded-state reporting.",
+      "type": "milliseconds",
+      "default": 5000,
+      "minimum": 100,
+      "maximum": 60000,
+      "enforcement": "warn_only",
+      "owner": "agent-runtime"
+    }
+  ],
+  "validation_rules": {
+    "hard_fail_limits_require_reason_code": true,
+    "default_must_be_within_min_max_when_present": true,
+    "release_channel_overrides_must_preserve_nonzero_bounds": true,
+    "renderer_limits_must_not_exceed_authoritative_main_or_agent_envelopes_when_same_concern": true
+  }
+}

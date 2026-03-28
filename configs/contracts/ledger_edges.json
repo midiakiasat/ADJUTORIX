@@ -1,0 +1,871 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.ledger-edges",
+  "version": 1,
+  "title": "ADJUTORIX Ledger Edge Contract",
+  "description": "Canonical machine-readable contract for authoritative ledger graph edges in ADJUTORIX. This contract defines the allowed edge kinds, source and target node classes, causality semantics, replay/verify/apply/rollback lineage requirements, persistence guarantees, and validation rules for graph integrity.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "replay-runtime",
+    "verify-runtime",
+    "runtime-orchestration"
+  ],
+  "defaults": {
+    "unknown_edge_behavior": "deny",
+    "unknown_node_kind_behavior": "deny",
+    "missing_attestation_behavior": "deny"
+  },
+  "invariants": [
+    "Every persisted edge must connect two explicitly typed ledger nodes.",
+    "Every consequential transaction must produce a causally meaningful lineage edge set.",
+    "No edge may imply authority, verification, or replay semantics outside its declared kind.",
+    "Rollback and supersession must be represented explicitly, never inferred from timestamp order alone.",
+    "The ledger graph must remain acyclic for causal, derivation, and supersession edges unless a dedicated cycle-bearing edge kind is explicitly introduced in a future major version."
+  ],
+  "enums": {
+    "node_kind": [
+      "transaction",
+      "workspace_snapshot",
+      "patch_artifact",
+      "verify_result",
+      "replay_result",
+      "command_record",
+      "settings_record",
+      "trust_record",
+      "release_record",
+      "artifact_record",
+      "confirmation_record",
+      "recovery_record"
+    ],
+    "edge_kind": [
+      "caused_by",
+      "derived_from",
+      "verified_by",
+      "replayed_by",
+      "applies_to",
+      "produced",
+      "persisted_as",
+      "confirmed_by",
+      "supersedes",
+      "rolled_back_by",
+      "recovers",
+      "targets",
+      "depends_on",
+      "attests"
+    ],
+    "edge_class": [
+      "causal",
+      "derivation",
+      "verification",
+      "replay",
+      "targeting",
+      "persistence",
+      "confirmation",
+      "supersession",
+      "rollback",
+      "recovery",
+      "attestation"
+    ],
+    "strength": [
+      "required",
+      "recommended",
+      "optional"
+    ],
+    "replay_semantics": [
+      "none",
+      "observational",
+      "required_for_apply",
+      "required_for_release"
+    ],
+    "verify_semantics": [
+      "none",
+      "informational",
+      "blocking_mutation",
+      "blocking_release"
+    ],
+    "directionality": [
+      "forward_only"
+    ]
+  },
+  "shared": {
+    "required_edge_fields": [
+      "edge_id",
+      "edge_kind",
+      "edge_class",
+      "from",
+      "to",
+      "created_at",
+      "created_by",
+      "attestation"
+    ],
+    "required_node_ref_fields": [
+      "node_kind",
+      "node_id"
+    ]
+  },
+  "node_reference": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "node_kind",
+      "node_id"
+    ],
+    "properties": {
+      "node_kind": {
+        "type": "string",
+        "enum": [
+          "transaction",
+          "workspace_snapshot",
+          "patch_artifact",
+          "verify_result",
+          "replay_result",
+          "command_record",
+          "settings_record",
+          "trust_record",
+          "release_record",
+          "artifact_record",
+          "confirmation_record",
+          "recovery_record"
+        ]
+      },
+      "node_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "ledger_id": {
+        "type": "string"
+      },
+      "seq": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "attestation": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "evaluated_at",
+      "policy_bindings",
+      "edge_hash"
+    ],
+    "properties": {
+      "evaluated_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "policy_bindings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mutation_policy",
+          "verify_policy",
+          "trust_policy"
+        ],
+        "properties": {
+          "mutation_policy": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verify_policy": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trust_policy": {
+            "type": "string",
+            "minLength": 1
+          },
+          "release_policy": {
+            "type": "string"
+          },
+          "workspace_policy": {
+            "type": "string"
+          }
+        }
+      },
+      "edge_hash": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "signature": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "type": "string"
+          },
+          "key_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "edge_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "edge_id",
+      "edge_kind",
+      "edge_class",
+      "from",
+      "to",
+      "created_at",
+      "created_by",
+      "semantics",
+      "attestation"
+    ],
+    "properties": {
+      "edge_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "edge_kind": {
+        "type": "string",
+        "enum": [
+          "caused_by",
+          "derived_from",
+          "verified_by",
+          "replayed_by",
+          "applies_to",
+          "produced",
+          "persisted_as",
+          "confirmed_by",
+          "supersedes",
+          "rolled_back_by",
+          "recovers",
+          "targets",
+          "depends_on",
+          "attests"
+        ]
+      },
+      "edge_class": {
+        "type": "string",
+        "enum": [
+          "causal",
+          "derivation",
+          "verification",
+          "replay",
+          "targeting",
+          "persistence",
+          "confirmation",
+          "supersession",
+          "rollback",
+          "recovery",
+          "attestation"
+        ]
+      },
+      "from": {
+        "$ref": "#/$defs/node_reference"
+      },
+      "to": {
+        "$ref": "#/$defs/node_reference"
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "created_by": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "service",
+              "ci",
+              "scheduler",
+              "system"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      },
+      "strength": {
+        "type": "string",
+        "enum": [
+          "required",
+          "recommended",
+          "optional"
+        ],
+        "default": "required"
+      },
+      "semantics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "directionality",
+          "verify_semantics",
+          "replay_semantics"
+        ],
+        "properties": {
+          "directionality": {
+            "type": "string",
+            "enum": [
+              "forward_only"
+            ]
+          },
+          "verify_semantics": {
+            "type": "string",
+            "enum": [
+              "none",
+              "informational",
+              "blocking_mutation",
+              "blocking_release"
+            ]
+          },
+          "replay_semantics": {
+            "type": "string",
+            "enum": [
+              "none",
+              "observational",
+              "required_for_apply",
+              "required_for_release"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "verify_id": {
+            "type": "string"
+          },
+          "replay_id": {
+            "type": "string"
+          },
+          "confirmation_id": {
+            "type": "string"
+          },
+          "selected_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "head_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "environment_fingerprint": {
+            "type": "string"
+          }
+        }
+      },
+      "attestation": {
+        "$ref": "#/$defs/attestation"
+      }
+    }
+  },
+  "edge_kinds": {
+    "caused_by": {
+      "edge_class": "causal",
+      "description": "Represents direct causal ancestry between transactions or records.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "transaction"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "transaction"
+        },
+        {
+          "from": "release_record",
+          "to": "transaction"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "none",
+      "replay_semantics": "observational"
+    },
+    "derived_from": {
+      "edge_class": "derivation",
+      "description": "Represents structural derivation or materialization from prior source artifacts or snapshots.",
+      "allowed_pairs": [
+        {
+          "from": "patch_artifact",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "verify_result",
+          "to": "patch_artifact"
+        },
+        {
+          "from": "artifact_record",
+          "to": "release_record"
+        },
+        {
+          "from": "workspace_snapshot",
+          "to": "workspace_snapshot"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "informational",
+      "replay_semantics": "observational"
+    },
+    "verified_by": {
+      "edge_class": "verification",
+      "description": "Binds a target node to an authoritative verify result.",
+      "allowed_pairs": [
+        {
+          "from": "patch_artifact",
+          "to": "verify_result"
+        },
+        {
+          "from": "transaction",
+          "to": "verify_result"
+        },
+        {
+          "from": "release_record",
+          "to": "verify_result"
+        },
+        {
+          "from": "command_record",
+          "to": "verify_result"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "blocking_mutation",
+      "replay_semantics": "none"
+    },
+    "replayed_by": {
+      "edge_class": "replay",
+      "description": "Binds a target node to replay or lineage evidence.",
+      "allowed_pairs": [
+        {
+          "from": "patch_artifact",
+          "to": "replay_result"
+        },
+        {
+          "from": "transaction",
+          "to": "replay_result"
+        },
+        {
+          "from": "release_record",
+          "to": "replay_result"
+        },
+        {
+          "from": "workspace_snapshot",
+          "to": "replay_result"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "none",
+      "replay_semantics": "required_for_apply"
+    },
+    "applies_to": {
+      "edge_class": "targeting",
+      "description": "Connects an apply-capable transaction or patch artifact to its explicit target snapshot or artifact.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "rollback",
+          "to": "workspace_snapshot",
+          "alias_only": true
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "blocking_mutation",
+      "replay_semantics": "required_for_apply"
+    },
+    "produced": {
+      "edge_class": "persistence",
+      "description": "Represents a transaction producing a new artifact or record.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "patch_artifact"
+        },
+        {
+          "from": "transaction",
+          "to": "verify_result"
+        },
+        {
+          "from": "transaction",
+          "to": "replay_result"
+        },
+        {
+          "from": "transaction",
+          "to": "artifact_record"
+        },
+        {
+          "from": "transaction",
+          "to": "command_record"
+        },
+        {
+          "from": "transaction",
+          "to": "settings_record"
+        },
+        {
+          "from": "transaction",
+          "to": "trust_record"
+        },
+        {
+          "from": "transaction",
+          "to": "release_record"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "none",
+      "replay_semantics": "observational"
+    },
+    "persisted_as": {
+      "edge_class": "persistence",
+      "description": "Connects an in-memory or transactional record to its persisted artifact form.",
+      "allowed_pairs": [
+        {
+          "from": "verify_result",
+          "to": "artifact_record"
+        },
+        {
+          "from": "replay_result",
+          "to": "artifact_record"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "artifact_record"
+        },
+        {
+          "from": "release_record",
+          "to": "artifact_record"
+        }
+      ],
+      "strength": "recommended",
+      "verify_semantics": "informational",
+      "replay_semantics": "observational"
+    },
+    "confirmed_by": {
+      "edge_class": "confirmation",
+      "description": "Connects a consequential transaction or patch artifact to explicit confirmation lineage.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "confirmation_record"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "confirmation_record"
+        },
+        {
+          "from": "release_record",
+          "to": "confirmation_record"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "blocking_mutation",
+      "replay_semantics": "none"
+    },
+    "supersedes": {
+      "edge_class": "supersession",
+      "description": "Represents authoritative replacement of a prior result or review by a newer one of the same scope.",
+      "allowed_pairs": [
+        {
+          "from": "verify_result",
+          "to": "verify_result"
+        },
+        {
+          "from": "replay_result",
+          "to": "replay_result"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "patch_artifact"
+        },
+        {
+          "from": "release_record",
+          "to": "release_record"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "informational",
+      "replay_semantics": "informational"
+    },
+    "rolled_back_by": {
+      "edge_class": "rollback",
+      "description": "Represents that a prior transaction or artifact was explicitly rolled back by a later authoritative record.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "transaction"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "transaction"
+        },
+        {
+          "from": "release_record",
+          "to": "transaction"
+        },
+        {
+          "from": "workspace_snapshot",
+          "to": "transaction"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "blocking_mutation",
+      "replay_semantics": "required_for_apply"
+    },
+    "recovers": {
+      "edge_class": "recovery",
+      "description": "Represents crash or interruption recovery lineage from a failed or incomplete transaction to a recovery record or resumed transaction.",
+      "allowed_pairs": [
+        {
+          "from": "recovery_record",
+          "to": "transaction"
+        },
+        {
+          "from": "transaction",
+          "to": "recovery_record"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "informational",
+      "replay_semantics": "observational"
+    },
+    "targets": {
+      "edge_class": "targeting",
+      "description": "Represents an explicit target binding for command, verify, or patch scope.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "verify_result",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "command_record",
+          "to": "workspace_snapshot"
+        },
+        {
+          "from": "patch_artifact",
+          "to": "workspace_snapshot"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "informational",
+      "replay_semantics": "observational"
+    },
+    "depends_on": {
+      "edge_class": "causal",
+      "description": "Represents an explicit prerequisite dependency that must hold before the source node is authoritative.",
+      "allowed_pairs": [
+        {
+          "from": "transaction",
+          "to": "verify_result"
+        },
+        {
+          "from": "transaction",
+          "to": "replay_result"
+        },
+        {
+          "from": "transaction",
+          "to": "confirmation_record"
+        },
+        {
+          "from": "release_record",
+          "to": "artifact_record"
+        }
+      ],
+      "strength": "required",
+      "verify_semantics": "blocking_mutation",
+      "replay_semantics": "required_for_release"
+    },
+    "attests": {
+      "edge_class": "attestation",
+      "description": "Represents explicit attestation coverage over another node or edge-bearing record.",
+      "allowed_pairs": [
+        {
+          "from": "artifact_record",
+          "to": "transaction"
+        },
+        {
+          "from": "artifact_record",
+          "to": "verify_result"
+        },
+        {
+          "from": "artifact_record",
+          "to": "replay_result"
+        },
+        {
+          "from": "artifact_record",
+          "to": "release_record"
+        }
+      ],
+      "strength": "recommended",
+      "verify_semantics": "informational",
+      "replay_semantics": "observational"
+    }
+  },
+  "validation_rules": {
+    "unique_edge_id": true,
+    "forbid_self_edges": [
+      "caused_by",
+      "derived_from",
+      "verified_by",
+      "replayed_by",
+      "supersedes",
+      "rolled_back_by",
+      "depends_on"
+    ],
+    "acyclic_edge_classes": [
+      "causal",
+      "derivation",
+      "verification",
+      "replay",
+      "targeting",
+      "persistence",
+      "confirmation",
+      "supersession",
+      "rollback",
+      "recovery",
+      "attestation"
+    ],
+    "require_matching_edge_class_to_kind": true,
+    "require_allowed_pair_match": true,
+    "require_attestation": true,
+    "require_monotonic_seq_if_present": true,
+    "require_same_ledger_if_seq_bound": true,
+    "deny_if": [
+      "edge_kind_unknown",
+      "edge_class_unknown",
+      "node_kind_unknown",
+      "attestation_missing",
+      "from_to_pair_not_allowed",
+      "cyclic_edge_detected_in_acyclic_class",
+      "duplicate_semantically_equivalent_required_edge"
+    ]
+  },
+  "required_edge_sets": {
+    "patch_apply_transaction": {
+      "description": "Minimum lineage edge set required for an authoritative patch apply transaction.",
+      "edges": [
+        {
+          "kind": "applies_to",
+          "strength": "required"
+        },
+        {
+          "kind": "verified_by",
+          "strength": "required"
+        },
+        {
+          "kind": "replayed_by",
+          "strength": "required"
+        },
+        {
+          "kind": "confirmed_by",
+          "strength": "required"
+        },
+        {
+          "kind": "produced",
+          "strength": "required"
+        }
+      ]
+    },
+    "verify_transaction": {
+      "description": "Minimum edge set for authoritative verification output.",
+      "edges": [
+        {
+          "kind": "targets",
+          "strength": "required"
+        },
+        {
+          "kind": "produced",
+          "strength": "required"
+        }
+      ]
+    },
+    "replay_transaction": {
+      "description": "Minimum edge set for authoritative replay output.",
+      "edges": [
+        {
+          "kind": "targets",
+          "strength": "required"
+        },
+        {
+          "kind": "produced",
+          "strength": "required"
+        }
+      ]
+    },
+    "rollback_transaction": {
+      "description": "Minimum edge set for authoritative rollback lineage.",
+      "edges": [
+        {
+          "kind": "rolled_back_by",
+          "strength": "required"
+        },
+        {
+          "kind": "produced",
+          "strength": "required"
+        },
+        {
+          "kind": "replayed_by",
+          "strength": "required"
+        }
+      ]
+    },
+    "release_promotion_transaction": {
+      "description": "Minimum edge set for an authoritative release promotion.",
+      "edges": [
+        {
+          "kind": "depends_on",
+          "strength": "required"
+        },
+        {
+          "kind": "verified_by",
+          "strength": "required"
+        },
+        {
+          "kind": "replayed_by",
+          "strength": "required"
+        },
+        {
+          "kind": "produced",
+          "strength": "required"
+        },
+        {
+          "kind": "attests",
+          "strength": "recommended"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "node_reference": {
+      "$ref": "#/node_reference"
+    },
+    "attestation": {
+      "$ref": "#/attestation"
+    },
+    "edge_schema": {
+      "$re

@@ -1,0 +1,764 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.logging-config",
+  "version": 1,
+  "title": "ADJUTORIX Structured Logging Configuration",
+  "description": "Canonical machine-readable configuration for structured logging across ADJUTORIX app, agent, CLI, scheduler, verify, replay, ledger, governance, command execution, and release surfaces. This file defines sinks, schemas, redaction, retention, routing, sampling, and category-level policies so logs remain auditable, privacy-safe, and operationally useful.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "agent-runtime",
+    "app-runtime",
+    "cli-runtime",
+    "runtime-security"
+  ],
+  "defaults": {
+    "format": "jsonl",
+    "timezone": "UTC",
+    "unknown_category_behavior": "deny",
+    "unknown_field_behavior": "drop_and_warn",
+    "secret_redaction_mode": "strict"
+  },
+  "invariants": [
+    "No plaintext secrets in any sink.",
+    "Every consequential event must carry correlation, authority, and policy context.",
+    "Log shape must be stable enough for automated parsing and incident replay.",
+    "Debug verbosity may increase detail but may not weaken redaction rules.",
+    "Governance, verify, replay, and transaction logs must remain causally joinable by identifiers."
+  ],
+  "enums": {
+    "level": [
+      "trace",
+      "debug",
+      "info",
+      "warn",
+      "error",
+      "fatal"
+    ],
+    "format": [
+      "jsonl"
+    ],
+    "sink_kind": [
+      "stderr",
+      "stdout",
+      "rotating_file",
+      "audit_file",
+      "security_file"
+    ],
+    "category": [
+      "app.lifecycle",
+      "app.window",
+      "preload.bridge",
+      "renderer.runtime",
+      "agent.http",
+      "agent.rpc",
+      "workspace",
+      "watcher",
+      "command",
+      "terminal",
+      "verify",
+      "replay",
+      "ledger",
+      "transaction",
+      "governance",
+      "security",
+      "settings",
+      "release",
+      "scheduler",
+      "health",
+      "diagnostics",
+      "crash"
+    ],
+    "redaction_strategy": [
+      "none",
+      "constant_mask",
+      "prefix4_suffix4",
+      "fingerprint_only",
+      "basename_only",
+      "drop_field"
+    ],
+    "retention_unit": [
+      "days",
+      "files",
+      "bytes"
+    ]
+  },
+  "base_event_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ts",
+      "level",
+      "category",
+      "message",
+      "service",
+      "runtime_mode"
+    ],
+    "properties": {
+      "ts": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "level": {
+        "type": "string",
+        "enum": [
+          "trace",
+          "debug",
+          "info",
+          "warn",
+          "error",
+          "fatal"
+        ]
+      },
+      "category": {
+        "type": "string",
+        "enum": [
+          "app.lifecycle",
+          "app.window",
+          "preload.bridge",
+          "renderer.runtime",
+          "agent.http",
+          "agent.rpc",
+          "workspace",
+          "watcher",
+          "command",
+          "terminal",
+          "verify",
+          "replay",
+          "ledger",
+          "transaction",
+          "governance",
+          "security",
+          "settings",
+          "release",
+          "scheduler",
+          "health",
+          "diagnostics",
+          "crash"
+        ]
+      },
+      "message": {
+        "type": "string",
+        "minLength": 1
+      },
+      "service": {
+        "type": "string",
+        "enum": [
+          "adjutorix-app-main",
+          "adjutorix-app-preload",
+          "adjutorix-app-renderer",
+          "adjutorix-agent",
+          "adjutorix-cli",
+          "adjutorix-ci",
+          "adjutorix-release-pipeline"
+        ]
+      },
+      "runtime_mode": {
+        "type": "string",
+        "enum": [
+          "development",
+          "test",
+          "production"
+        ]
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "correlation_id": {
+        "type": "string"
+      },
+      "transaction_id": {
+        "type": "string"
+      },
+      "workspace_id": {
+        "type": "string"
+      },
+      "verify_id": {
+        "type": "string"
+      },
+      "replay_id": {
+        "type": "string"
+      },
+      "ledger_id": {
+        "type": "string"
+      },
+      "release_id": {
+        "type": "string"
+      },
+      "authority_surface": {
+        "type": "string"
+      },
+      "policy_bindings": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "data": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "sinks": [
+    {
+      "id": "stderr-human-runtime",
+      "kind": "stderr",
+      "enabled": true,
+      "min_level": "info",
+      "categories": [
+        "app.lifecycle",
+        "agent.http",
+        "agent.rpc",
+        "workspace",
+        "watcher",
+        "command",
+        "verify",
+        "replay",
+        "ledger",
+        "transaction",
+        "governance",
+        "security",
+        "release",
+        "scheduler",
+        "health",
+        "diagnostics",
+        "crash"
+      ],
+      "format": "jsonl",
+      "redaction_profile": "strict-default",
+      "sampling": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "runtime-rotating-file",
+      "kind": "rotating_file",
+      "enabled": true,
+      "path": ".tmp/adjutorix/logs/runtime.log.jsonl",
+      "min_level": "debug",
+      "categories": [
+        "app.lifecycle",
+        "app.window",
+        "preload.bridge",
+        "renderer.runtime",
+        "agent.http",
+        "agent.rpc",
+        "workspace",
+        "watcher",
+        "command",
+        "terminal",
+        "verify",
+        "replay",
+        "ledger",
+        "transaction",
+        "settings",
+        "scheduler",
+        "health",
+        "diagnostics",
+        "crash"
+      ],
+      "format": "jsonl",
+      "rotation": {
+        "max_size_bytes": 10485760,
+        "max_files": 10
+      },
+      "retention": {
+        "unit": "days",
+        "value": 14
+      },
+      "redaction_profile": "strict-default",
+      "sampling": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "governance-audit-file",
+      "kind": "audit_file",
+      "enabled": true,
+      "path": ".tmp/adjutorix/logs/governance.audit.jsonl",
+      "min_level": "info",
+      "categories": [
+        "governance",
+        "verify",
+        "replay",
+        "ledger",
+        "transaction",
+        "release",
+        "security"
+      ],
+      "format": "jsonl",
+      "rotation": {
+        "max_size_bytes": 20971520,
+        "max_files": 20
+      },
+      "retention": {
+        "unit": "days",
+        "value": 30
+      },
+      "redaction_profile": "audit-strict",
+      "sampling": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "security-audit-file",
+      "kind": "security_file",
+      "enabled": true,
+      "path": ".tmp/adjutorix/logs/security.audit.jsonl",
+      "min_level": "warn",
+      "categories": [
+        "security",
+        "governance",
+        "command",
+        "release",
+        "crash"
+      ],
+      "format": "jsonl",
+      "rotation": {
+        "max_size_bytes": 20971520,
+        "max_files": 20
+      },
+      "retention": {
+        "unit": "days",
+        "value": 30
+      },
+      "redaction_profile": "security-maximal",
+      "sampling": {
+        "enabled": false
+      }
+    }
+  ],
+  "category_policies": {
+    "app.lifecycle": {
+      "default_level": "info",
+      "required_fields": [
+        "service",
+        "runtime_mode"
+      ],
+      "optional_fields": [
+        "correlation_id",
+        "data"
+      ]
+    },
+    "app.window": {
+      "default_level": "debug",
+      "required_fields": [
+        "service",
+        "runtime_mode"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "data"
+      ]
+    },
+    "preload.bridge": {
+      "default_level": "debug",
+      "required_fields": [
+        "service",
+        "request_id",
+        "correlation_id"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "authority_surface",
+        "data"
+      ]
+    },
+    "renderer.runtime": {
+      "default_level": "debug",
+      "required_fields": [
+        "service"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "data"
+      ]
+    },
+    "agent.http": {
+      "default_level": "info",
+      "required_fields": [
+        "service",
+        "request_id"
+      ],
+      "optional_fields": [
+        "correlation_id",
+        "data",
+        "error"
+      ]
+    },
+    "agent.rpc": {
+      "default_level": "info",
+      "required_fields": [
+        "service",
+        "request_id",
+        "correlation_id"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "authority_surface",
+        "policy_bindings",
+        "data",
+        "error"
+      ]
+    },
+    "workspace": {
+      "default_level": "info",
+      "required_fields": [
+        "workspace_id"
+      ],
+      "optional_fields": [
+        "transaction_id",
+        "data",
+        "error"
+      ]
+    },
+    "watcher": {
+      "default_level": "debug",
+      "required_fields": [
+        "workspace_id"
+      ],
+      "optional_fields": [
+        "transaction_id",
+        "data",
+        "error"
+      ]
+    },
+    "command": {
+      "default_level": "info",
+      "required_fields": [
+        "workspace_id",
+        "transaction_id",
+        "authority_surface"
+      ],
+      "optional_fields": [
+        "correlation_id",
+        "policy_bindings",
+        "data",
+        "error"
+      ]
+    },
+    "terminal": {
+      "default_level": "debug",
+      "required_fields": [
+        "workspace_id"
+      ],
+      "optional_fields": [
+        "transaction_id",
+        "data"
+      ]
+    },
+    "verify": {
+      "default_level": "info",
+      "required_fields": [
+        "verify_id",
+        "workspace_id",
+        "transaction_id",
+        "policy_bindings"
+      ],
+      "optional_fields": [
+        "ledger_id",
+        "correlation_id",
+        "data",
+        "error"
+      ]
+    },
+    "replay": {
+      "default_level": "info",
+      "required_fields": [
+        "replay_id",
+        "workspace_id",
+        "transaction_id",
+        "policy_bindings"
+      ],
+      "optional_fields": [
+        "ledger_id",
+        "correlation_id",
+        "data",
+        "error"
+      ]
+    },
+    "ledger": {
+      "default_level": "info",
+      "required_fields": [
+        "ledger_id",
+        "transaction_id"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "verify_id",
+        "replay_id",
+        "data",
+        "error"
+      ]
+    },
+    "transaction": {
+      "default_level": "info",
+      "required_fields": [
+        "transaction_id",
+        "workspace_id"
+      ],
+      "optional_fields": [
+        "verify_id",
+        "replay_id",
+        "ledger_id",
+        "authority_surface",
+        "data",
+        "error"
+      ]
+    },
+    "governance": {
+      "default_level": "info",
+      "required_fields": [
+        "transaction_id",
+        "authority_surface",
+        "policy_bindings"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "verify_id",
+        "replay_id",
+        "release_id",
+        "data",
+        "error"
+      ]
+    },
+    "security": {
+      "default_level": "warn",
+      "required_fields": [
+        "service"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "transaction_id",
+        "authority_surface",
+        "data",
+        "error"
+      ]
+    },
+    "settings": {
+      "default_level": "info",
+      "required_fields": [
+        "service"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "transaction_id",
+        "data",
+        "error"
+      ]
+    },
+    "release": {
+      "default_level": "info",
+      "required_fields": [
+        "release_id",
+        "transaction_id",
+        "policy_bindings"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "verify_id",
+        "replay_id",
+        "data",
+        "error"
+      ]
+    },
+    "scheduler": {
+      "default_level": "info",
+      "required_fields": [
+        "transaction_id"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "correlation_id",
+        "data",
+        "error"
+      ]
+    },
+    "health": {
+      "default_level": "info",
+      "required_fields": [
+        "service"
+      ],
+      "optional_fields": [
+        "workspace_id",
+        "data",
+        "error"
+      ]
+    },
+    "diagnostics": {
+      "default_level": "info",
+      "required_fields": [
+        "workspace_id"
+      ],
+      "optional_fields": [
+        "transaction_id",
+        "verify_id",
+        "data",
+        "error"
+      ]
+    },
+    "crash": {
+      "default_level": "error",
+      "required_fields": [
+        "service"
+      ],
+      "optional_fields": [
+        "transaction_id",
+        "workspace_id",
+        "data",
+        "error"
+      ]
+    }
+  },
+  "redaction_profiles": {
+    "strict-default": {
+      "field_rules": [
+        {
+          "match": "data.*token*",
+          "strategy": "constant_mask"
+        },
+        {
+          "match": "data.*secret*",
+          "strategy": "constant_mask"
+        },
+        {
+          "match": "data.*password*",
+          "strategy": "constant_mask"
+        },
+        {
+          "match": "data.*passphrase*",
+          "strategy": "constant_mask"
+        },
+        {
+          "match": "data.*private*key*",
+          "strategy": "fingerprint_only"
+        },
+        {
+          "match": "data.argv",
+          "strategy": "drop_field"
+        },
+        {
+          "match": "error.stack",
+          "strategy": "drop_field"
+        }
+      ],
+      "content_patterns": [
+        {
+          "regex": "sk-[A-Za-z0-9]{20,}",
+          "strategy": "constant_mask"
+        },
+        {
+          "regex": "gh[pousr]_[A-Za-z0-9]{20,}",
+          "strategy": "constant_mask"
+        },
+        {
+          "regex": "AKIA[0-9A-Z]{16}",
+          "strategy": "constant_mask"
+        },
+        {
+          "regex": "-----BEGIN [A-Z ]+PRIVATE KEY-----",
+          "strategy": "fingerprint_only"
+        }
+      ]
+    },
+    "audit-strict": {
+      "field_rules": [
+        {
+          "match": "data.stdout",
+          "strategy": "drop_field"
+        },
+        {
+          "match": "data.stderr",
+          "strategy": "drop_field"
+        },
+        {
+          "match": "data.command",
+          "strategy": "drop_field"
+        },
+        {
+          "match": "data.command_preview",
+          "strategy": "constant_mask"
+        },
+        {
+          "match": "data.secret*",
+          "strategy": "constant_mask"
+        }
+      ],
+      "content_patterns": [
+        {
+          "regex": "xox[baprs]-[A-Za-z0-9-]{10,}",
+          "strategy": "constant_mask"
+        }
+      ]
+    },
+    "security-maximal": {
+      "field_rules": [
+        {
+          "match": "data.*",
+          "strategy": "drop_field"
+        },
+        {
+          "match": "error.stack",
+          "strategy": "drop_field"
+        }
+      ],
+      "content_patterns": []
+    }
+  },
+  "retention_policies": {
+    "runtime-default": {
+      "unit": "days",
+      "value": 14
+    },
+    "audit-default": {
+      "unit": "days",
+      "value": 30
+    },
+    "security-default": {
+      "unit": "days",
+      "value": 30
+    }
+  },
+  "joinability": {
+    "required_correlation_keys": [
+      "transaction_id",
+      "correlation_id",
+      "workspace_id"
+    ],
+    "recommended_keys": [
+      "verify_id",
+      "replay_id",
+      "ledger_id",
+      "release_id",
+      "request_id"
+    ]
+  },
+  "validation_rules": {
+    "governance_category_requires_policy_bindings": true,
+    "verify_category_requires_verify_id": true,
+    "replay_category_requires_replay_id": true,
+    "ledger_category_requires_ledger_id": true,
+    "release_category_requires_release_id": true,
+    "renderer_runtime_must_not_log_secrets": true,
+    "json_only": true
+  }
+}

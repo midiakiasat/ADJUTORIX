@@ -1,0 +1,559 @@
+version: 1
+registry_id: adjutorix.tracing
+title: ADJUTORIX Distributed Tracing Registry
+description: >-
+  Canonical machine-readable registry for distributed tracing across ADJUTORIX.
+  This registry defines trace and span semantics, propagation boundaries,
+  required attributes, sampling policy, redaction constraints, causality
+  modeling, and retention intent across renderer, preload, main process, agent,
+  scheduler, verify, replay, ledger, governance, command execution, recovery,
+  and release workflows. Its purpose is to ensure that end-to-end latency and
+  causality remain mechanically reconstructible and policy-aligned.
+status: active
+owners:
+  - team: runtime-observability
+  - team: core-governance
+  - team: app-runtime
+  - team: agent-runtime
+  - team: runtime-orchestration
+defaults:
+  unknown_trace_behavior: deny
+  unknown_span_behavior: deny
+  unknown_attribute_behavior: drop_and_warn
+  propagation_format: w3c_tracecontext
+  time_source: monotonic_plus_utc_anchor
+invariants:
+  - id: no_unbounded_hidden_work
+    statement: Every consequential asynchronous boundary must either continue an existing trace or explicitly start a new root with justification.
+  - id: no_trace_secret_leakage
+    statement: Trace attributes and events must not include plaintext secrets, tokens, raw command arguments, or unredacted sensitive material.
+  - id: no_causality_without_parentage
+    statement: Child spans must declare parentage or link semantics sufficient to preserve cross-surface causality.
+  - id: no_authority_blind_traces
+    statement: Consequential spans must carry authority, policy, and governance context when applicable.
+  - id: stable_span_taxonomy
+    statement: Span names and required attributes must remain stable enough for automated latency and incident analysis.
+shared_enums:
+  producer:
+    - renderer
+    - preload
+    - main
+    - agent
+    - cli
+    - scheduler
+    - verify
+    - replay
+    - ledger
+    - governance
+    - command
+    - release
+    - recovery
+    - observability
+  span_kind:
+    - internal
+    - client
+    - server
+    - producer
+    - consumer
+  retention_class:
+    - ephemeral
+    - operational
+    - audit
+    - release
+  privacy_class:
+    - public_nonsecret
+    - internal_masked
+    - audit_masked
+    - security_masked
+  sampling_class:
+    - always
+    - normal
+    - anomaly_bias
+    - critical_always
+  outcome:
+    - success
+    - warning
+    - denied
+    - failed
+    - blocked
+    - timed_out
+    - cancelled
+    - recovered
+    - rolled_back
+propagation:
+  root_headers:
+    - traceparent
+    - tracestate
+  supported_boundaries:
+    - renderer_to_preload
+    - preload_to_main
+    - main_to_agent_rpc
+    - agent_to_scheduler
+    - scheduler_to_worker
+    - agent_to_cli
+    - release_pipeline_internal
+  required_preservation:
+    - trace_id
+    - parent_span_id
+  links_allowed_for:
+    - supersession
+    - recovery_resume
+    - rollback_lineage
+    - detached_background_observation
+  restart_trace_when:
+    - explicit_privacy_boundary_crossed
+    - imported_external_trace_without_trust
+    - retained_background_work_without_live_parent
+sampling:
+  default:
+    class: normal
+    ratio: 0.1
+  overrides:
+    critical_always:
+      ratio: 1.0
+    anomaly_bias:
+      ratio: 1.0
+    always:
+      ratio: 1.0
+  always_sample_when:
+    - outcome_in [denied, failed, blocked, timed_out, rolled_back, recovered]
+    - span_name_in [governance.decision, transaction.transition, patch.apply, rollback.execute, release.promote, recovery.resume]
+  reduce_sample_when:
+    - span_name_in [health.poll, watcher.refresh, diagnostics.background_refresh]
+attributes:
+  common_required:
+    - service.name
+    - adjutorix.surface
+    - adjutorix.runtime_mode
+  common_optional:
+    - adjutorix.release_channel
+    - adjutorix.workspace_health
+    - adjutorix.workspace_trust
+    - adjutorix.authority_surface
+    - adjutorix.transaction_kind
+    - adjutorix.outcome
+    - adjutorix.policy_bindings_hash
+  forbidden:
+    - adjutorix.token
+    - adjutorix.secret
+    - adjutorix.password
+    - adjutorix.passphrase
+    - adjutorix.private_key
+    - adjutorix.argv_plaintext
+    - adjutorix.raw_env
+  redacted_patterns:
+    - '.*token.*'
+    - '.*secret.*'
+    - '.*password.*'
+    - '.*passphrase.*'
+    - '.*private.*key.*'
+span_name_rules:
+  pattern: '^[a-z]+(\.[a-z0-9_]+)+$'
+  uniqueness_scope: producer
+spans:
+  - name: app.bootstrap
+    version: 1
+    title: App Bootstrap
+    producer: main
+    kind: internal
+    retention_class: operational
+    privacy_class: public_nonsecret
+    sampling_class: normal
+    description: Main process startup and bootstrap sequence.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.runtime_mode
+      - adjutorix.outcome
+    optional_attributes:
+      - adjutorix.release_channel
+
+  - name: workspace.open
+    version: 1
+    title: Workspace Open
+    producer: main
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: normal
+    description: End-to-end workspace open and policy evaluation.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.runtime_mode
+      - adjutorix.workspace_trust
+      - adjutorix.workspace_health
+      - adjutorix.outcome
+    optional_attributes:
+      - adjutorix.policy_bindings_hash
+
+  - name: preload.bridge.request
+    version: 1
+    title: Preload Bridge Request
+    producer: preload
+    kind: client
+    retention_class: operational
+    privacy_class: internal_masked
+    sampling_class: normal
+    description: Preload-initiated request into main process governed bridge.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.runtime_mode
+      - rpc.method
+      - adjutorix.outcome
+    optional_attributes:
+      - adjutorix.authority_surface
+
+  - name: rpc.request
+    version: 1
+    title: RPC Request Handling
+    producer: agent
+    kind: server
+    retention_class: operational
+    privacy_class: internal_masked
+    sampling_class: normal
+    description: Agent-side handling of a governed RPC request.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.runtime_mode
+      - rpc.method
+      - adjutorix.outcome
+    optional_attributes:
+      - adjutorix.authority_surface
+      - adjutorix.policy_bindings_hash
+
+  - name: scheduler.admission
+    version: 1
+    title: Scheduler Admission
+    producer: scheduler
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Scheduler admission decision and queue placement.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.transaction_kind
+      - scheduler.queue_id
+      - scheduler.job_class
+      - adjutorix.outcome
+    optional_attributes:
+      - scheduler.priority
+
+  - name: scheduler.execution
+    version: 1
+    title: Scheduler Execution
+    producer: scheduler
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Span covering actual execution lease of a scheduler job.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - scheduler.queue_id
+      - scheduler.job_class
+      - adjutorix.outcome
+    optional_attributes:
+      - scheduler.retry_index
+      - adjutorix.transaction_kind
+
+  - name: transaction.transition
+    version: 1
+    title: Transaction State Transition
+    producer: governance
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Authoritative transaction state transition.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.transaction_kind
+      - transaction.from_state
+      - transaction.to_state
+      - adjutorix.outcome
+    optional_attributes:
+      - adjutorix.policy_bindings_hash
+
+  - name: governance.decision
+    version: 1
+    title: Governance Decision
+    producer: governance
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Policy-bound decision emission for consequential operations.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.authority_surface
+      - governance.decision_kind
+      - governance.decision
+      - adjutorix.outcome
+    optional_attributes:
+      - governance.blocking_failures
+      - adjutorix.policy_bindings_hash
+
+  - name: verify.run
+    version: 1
+    title: Verify Run
+    producer: verify
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Governed verification aggregation span.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - verify.kind
+      - verify.status
+      - verify.apply_readiness
+      - adjutorix.outcome
+    optional_attributes:
+      - verify.environment_match
+      - adjutorix.policy_bindings_hash
+
+  - name: replay.run
+    version: 1
+    title: Replay Run
+    producer: replay
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Governed replay and lineage evaluation span.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - replay.status
+      - replay.determinism_state
+      - replay.replayable_lineage
+      - adjutorix.outcome
+    optional_attributes:
+      - replay.environment_match
+      - adjutorix.policy_bindings_hash
+
+  - name: patch.apply
+    version: 1
+    title: Patch Apply
+    producer: governance
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Consequential patch apply boundary spanning precondition enforcement through persistence.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.transaction_kind
+      - adjutorix.workspace_trust
+      - adjutorix.workspace_health
+      - adjutorix.outcome
+    optional_attributes:
+      - verify.status
+      - replay.status
+      - adjutorix.policy_bindings_hash
+
+  - name: rollback.execute
+    version: 1
+    title: Rollback Execute
+    producer: recovery
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Rollback execution and restoration of authoritative prior state.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.transaction_kind
+      - rollback.target_kind
+      - adjutorix.outcome
+    optional_attributes:
+      - rollback.reason
+
+  - name: command.run
+    version: 1
+    title: Governed Command Run
+    producer: command
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Governed subprocess execution span.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - command.profile_id
+      - adjutorix.authority_surface
+      - adjutorix.outcome
+    optional_attributes:
+      - command.exit_code
+      - adjutorix.policy_bindings_hash
+
+  - name: ledger.persist
+    version: 1
+    title: Ledger Persist
+    producer: ledger
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: anomaly_bias
+    description: Persistence of authoritative ledger entries and edges.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - ledger.edge_count
+      - adjutorix.outcome
+    optional_attributes:
+      - ledger.seq
+
+  - name: release.promote
+    version: 1
+    title: Release Promote
+    producer: release
+    kind: internal
+    retention_class: release
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Governed release promotion workflow.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - release.channel
+      - release.version
+      - adjutorix.outcome
+    optional_attributes:
+      - release.signing_state
+      - release.verification_state
+      - adjutorix.policy_bindings_hash
+
+  - name: recovery.resume
+    version: 1
+    title: Recovery Resume
+    producer: recovery
+    kind: internal
+    retention_class: audit
+    privacy_class: audit_masked
+    sampling_class: critical_always
+    description: Recovery flow that reconstructs persisted state and resumes or fails safely.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - adjutorix.transaction_kind
+      - recovery.previous_state
+      - adjutorix.outcome
+    optional_attributes:
+      - recovery.cause
+
+  - name: diagnostics.refresh
+    version: 1
+    title: Diagnostics Refresh
+    producer: observability
+    kind: internal
+    retention_class: operational
+    privacy_class: internal_masked
+    sampling_class: normal
+    description: Diagnostics collection and refresh span.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - diagnostics.count
+      - diagnostics.blocking_count
+      - adjutorix.outcome
+    optional_attributes: []
+
+  - name: health.poll
+    version: 1
+    title: Health Poll
+    producer: observability
+    kind: internal
+    retention_class: ephemeral
+    privacy_class: public_nonsecret
+    sampling_class: normal
+    description: Background health probe or readiness evaluation.
+    required_attributes:
+      - service.name
+      - adjutorix.surface
+      - health.state
+      - adjutorix.outcome
+    optional_attributes:
+      - health.degraded_reason_count
+links:
+  supported_link_types:
+    - supersedes
+    - recovery_of
+    - rollback_of
+    - detached_followup
+  required_link_attributes:
+    - adjutorix.link_type
+    - adjutorix.link_reason
+span_events:
+  allowed_common_events:
+    - name: phase.enter
+      required_attributes: [phase.name]
+    - name: phase.exit
+      required_attributes: [phase.name]
+    - name: decision.made
+      required_attributes: [governance.decision]
+    - name: timeout.enforced
+      required_attributes: [timeout.id]
+    - name: retry.scheduled
+      required_attributes: [retry.index, retry.delay_ms]
+    - name: redaction.applied
+      required_attributes: [redaction.class, redaction.strategy]
+    - name: anomaly.detected
+      required_attributes: [anomaly.kind]
+redaction:
+  attribute_rules:
+    - pattern: '.*token.*'
+      strategy: drop_field
+    - pattern: '.*secret.*'
+      strategy: drop_field
+    - pattern: '.*password.*'
+      strategy: drop_field
+    - pattern: '.*passphrase.*'
+      strategy: drop_field
+    - pattern: '.*private.*key.*'
+      strategy: drop_field
+    - pattern: '.*command.*argv.*'
+      strategy: drop_field
+    - pattern: '.*stdout.*'
+      strategy: drop_field
+    - pattern: '.*stderr.*'
+      strategy: drop_field
+    - pattern: '.*path.*'
+      strategy: basename_only
+  event_rules:
+    - event_name: redaction.applied
+      allow_original_value: false
+retention:
+  ephemeral:
+    max_hours: 24
+  operational:
+    max_days: 14
+  audit:
+    max_days: 30
+  release:
+    max_days: 90
+validation_rules:
+  require_span_name_unique_per_producer: true
+  require_required_attributes_nonempty: true
+  require_no_forbidden_attributes: true
+  require_sampling_class_defined: true
+  critical_spans_must_not_use_sampling_class_normal: true
+review:
+  cadence: quarterly
+  triggers:
+    - new_async_boundary
+    - incident_missing_trace_link
+    - new_governance_transition
+    - release_workflow_ch

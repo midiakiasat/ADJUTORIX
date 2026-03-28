@@ -1,0 +1,589 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.runtime-timeouts",
+  "version": 1,
+  "title": "ADJUTORIX Runtime Timeout Registry",
+  "description": "Canonical machine-readable registry of timeout budgets, lease windows, freshness windows, retry backoff ceilings, heartbeat tolerances, and recovery deadlines across ADJUTORIX app, preload, main process, agent, CLI, scheduler, verify, replay, ledger, command execution, terminal, watcher, and release flows. This file defines what constitutes lateness, staleness, abandonment, and forced failure across all governed runtime surfaces.",
+  "status": "active",
+  "owners": [
+    "core-governance",
+    "runtime-orchestration",
+    "agent-runtime",
+    "app-runtime",
+    "release-engineering"
+  ],
+  "defaults": {
+    "unknown_timeout_behavior": "deny",
+    "missing_timeout_behavior": "deny",
+    "unit": "milliseconds"
+  },
+  "invariants": [
+    "Every consequential asynchronous boundary must have an explicit timeout or lease.",
+    "A timeout must map to a deterministic enforcement action, not merely a log message.",
+    "Freshness windows and execution timeouts must remain distinct even when they share units.",
+    "Recovery deadlines must be shorter than the ambiguity window they are intended to close.",
+    "Renderer-facing waits may be shorter than authoritative waits, but may not silently invent success or completion."
+  ],
+  "enums": {
+    "scope": [
+      "renderer",
+      "preload",
+      "main",
+      "agent",
+      "cli",
+      "rpc",
+      "scheduler",
+      "verify",
+      "replay",
+      "ledger",
+      "workspace",
+      "watcher",
+      "command",
+      "terminal",
+      "release",
+      "logging",
+      "diagnostics",
+      "recovery"
+    ],
+    "timeout_kind": [
+      "request_timeout",
+      "operation_timeout",
+      "heartbeat_interval",
+      "heartbeat_grace",
+      "poll_interval",
+      "retry_backoff_max",
+      "retry_backoff_initial",
+      "staleness_window",
+      "lease_ttl",
+      "coalesce_window",
+      "ui_patience_budget",
+      "recovery_deadline",
+      "grace_period"
+    ],
+    "enforcement": [
+      "hard_fail",
+      "warn_and_retry",
+      "warn_and_degrade",
+      "fail_and_recover",
+      "block_until_fresh",
+      "cancel_and_rollback"
+    ],
+    "release_channel": [
+      "dev",
+      "nightly",
+      "internal",
+      "beta",
+      "rc",
+      "stable",
+      "emergency"
+    ]
+  },
+  "timeout_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "scope",
+      "kind",
+      "title",
+      "description",
+      "default_ms",
+      "enforcement",
+      "owner"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9_.-]+$"
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "renderer",
+          "preload",
+          "main",
+          "agent",
+          "cli",
+          "rpc",
+          "scheduler",
+          "verify",
+          "replay",
+          "ledger",
+          "workspace",
+          "watcher",
+          "command",
+          "terminal",
+          "release",
+          "logging",
+          "diagnostics",
+          "recovery"
+        ]
+      },
+      "kind": {
+        "type": "string",
+        "enum": [
+          "request_timeout",
+          "operation_timeout",
+          "heartbeat_interval",
+          "heartbeat_grace",
+          "poll_interval",
+          "retry_backoff_max",
+          "retry_backoff_initial",
+          "staleness_window",
+          "lease_ttl",
+          "coalesce_window",
+          "ui_patience_budget",
+          "recovery_deadline",
+          "grace_period"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default_ms": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "minimum_ms": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maximum_ms": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "enforcement": {
+        "type": "string",
+        "enum": [
+          "hard_fail",
+          "warn_and_retry",
+          "warn_and_degrade",
+          "fail_and_recover",
+          "block_until_fresh",
+          "cancel_and_rollback"
+        ]
+      },
+      "release_channel_overrides": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "reason_code": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      }
+    }
+  },
+  "timeouts": [
+    {
+      "id": "rpc.request.default",
+      "scope": "rpc",
+      "kind": "request_timeout",
+      "title": "Default RPC Request Timeout",
+      "description": "Maximum duration a synchronous governed RPC request may occupy the authoritative request path before timeout handling is enforced.",
+      "default_ms": 30000,
+      "minimum_ms": 1000,
+      "maximum_ms": 300000,
+      "enforcement": "hard_fail",
+      "owner": "agent-runtime",
+      "reason_code": "rpc_request_timeout"
+    },
+    {
+      "id": "rpc.reconnect.backoff.initial",
+      "scope": "rpc",
+      "kind": "retry_backoff_initial",
+      "title": "Initial RPC Reconnect Backoff",
+      "description": "Initial reconnect backoff for agent/client reconnect loops before exponential growth applies.",
+      "default_ms": 250,
+      "minimum_ms": 50,
+      "maximum_ms": 10000,
+      "enforcement": "warn_and_retry",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "rpc.reconnect.backoff.max",
+      "scope": "rpc",
+      "kind": "retry_backoff_max",
+      "title": "Maximum RPC Reconnect Backoff",
+      "description": "Upper bound for reconnect backoff between agent connectivity attempts.",
+      "default_ms": 10000,
+      "minimum_ms": 100,
+      "maximum_ms": 60000,
+      "enforcement": "warn_and_retry",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "agent.health.interval",
+      "scope": "agent",
+      "kind": "poll_interval",
+      "title": "Agent Health Evaluation Interval",
+      "description": "Interval between internal health and readiness evaluations inside the governed agent.",
+      "default_ms": 5000,
+      "minimum_ms": 100,
+      "maximum_ms": 60000,
+      "enforcement": "warn_and_degrade",
+      "owner": "agent-runtime"
+    },
+    {
+      "id": "app.agent_health.interval",
+      "scope": "main",
+      "kind": "poll_interval",
+      "title": "App Agent Health Probe Interval",
+      "description": "Interval between app-side health probes against the local agent surface.",
+      "default_ms": 5000,
+      "minimum_ms": 250,
+      "maximum_ms": 60000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "scheduler.poll.interval",
+      "scope": "scheduler",
+      "kind": "poll_interval",
+      "title": "Scheduler Poll Interval",
+      "description": "Core scheduler loop interval for queue advancement, timeout checks, and recovery coordination.",
+      "default_ms": 250,
+      "minimum_ms": 50,
+      "maximum_ms": 5000,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-orchestration"
+    },
+    {
+      "id": "scheduler.job.heartbeat.interval",
+      "scope": "scheduler",
+      "kind": "heartbeat_interval",
+      "title": "Job Heartbeat Interval",
+      "description": "Expected heartbeat emission interval for running jobs under authoritative scheduler control.",
+      "default_ms": 1000,
+      "minimum_ms": 100,
+      "maximum_ms": 10000,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-orchestration"
+    },
+    {
+      "id": "scheduler.job.heartbeat.grace",
+      "scope": "scheduler",
+      "kind": "heartbeat_grace",
+      "title": "Job Heartbeat Grace Window",
+      "description": "Additional tolerance beyond expected heartbeat interval before a running job is considered stalled.",
+      "default_ms": 5000,
+      "minimum_ms": 250,
+      "maximum_ms": 60000,
+      "enforcement": "fail_and_recover",
+      "owner": "runtime-orchestration",
+      "reason_code": "job_heartbeat_stalled"
+    },
+    {
+      "id": "scheduler.job.timeout.default",
+      "scope": "scheduler",
+      "kind": "operation_timeout",
+      "title": "Default Job Timeout",
+      "description": "Default upper bound for long-running scheduler jobs unless a stricter phase-specific timeout applies.",
+      "default_ms": 1800000,
+      "minimum_ms": 1000,
+      "maximum_ms": 14400000,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "job_timeout"
+    },
+    {
+      "id": "verify.run.timeout",
+      "scope": "verify",
+      "kind": "operation_timeout",
+      "title": "Verify Run Timeout",
+      "description": "Upper bound for an authoritative verification aggregation before the verify transaction fails.",
+      "default_ms": 600000,
+      "minimum_ms": 1000,
+      "maximum_ms": 7200000,
+      "enforcement": "hard_fail",
+      "owner": "verify-runtime",
+      "reason_code": "verify_timeout"
+    },
+    {
+      "id": "verify.mutation_guard.staleness",
+      "scope": "verify",
+      "kind": "staleness_window",
+      "title": "Mutation Guard Freshness Window",
+      "description": "Maximum age of mutation-guard verify evidence before it becomes non-authoritative for consequential mutation.",
+      "default_ms": 300000,
+      "minimum_ms": 30000,
+      "maximum_ms": 86400000,
+      "enforcement": "block_until_fresh",
+      "owner": "verify-runtime",
+      "reason_code": "verify_stale"
+    },
+    {
+      "id": "verify.release_guard.staleness",
+      "scope": "verify",
+      "kind": "staleness_window",
+      "title": "Release Guard Freshness Window",
+      "description": "Maximum age of release-guard verify evidence before it may no longer authorize release promotion.",
+      "default_ms": 900000,
+      "minimum_ms": 30000,
+      "maximum_ms": 86400000,
+      "enforcement": "block_until_fresh",
+      "owner": "verify-runtime",
+      "reason_code": "release_verify_stale"
+    },
+    {
+      "id": "replay.run.timeout",
+      "scope": "replay",
+      "kind": "operation_timeout",
+      "title": "Replay Run Timeout",
+      "description": "Upper bound for authoritative replay and lineage evaluation before forced failure.",
+      "default_ms": 600000,
+      "minimum_ms": 1000,
+      "maximum_ms": 7200000,
+      "enforcement": "hard_fail",
+      "owner": "replay-runtime",
+      "reason_code": "replay_timeout"
+    },
+    {
+      "id": "replay.result.staleness",
+      "scope": "replay",
+      "kind": "staleness_window",
+      "title": "Replay Result Freshness Window",
+      "description": "Maximum age of replay evidence before apply/release consumers must require re-evaluation.",
+      "default_ms": 300000,
+      "minimum_ms": 30000,
+      "maximum_ms": 86400000,
+      "enforcement": "block_until_fresh",
+      "owner": "replay-runtime",
+      "reason_code": "replay_stale"
+    },
+    {
+      "id": "command.default.timeout",
+      "scope": "command",
+      "kind": "operation_timeout",
+      "title": "Default Governed Command Timeout",
+      "description": "Default timeout for governed command execution when command-profile-specific limits do not override it.",
+      "default_ms": 600000,
+      "minimum_ms": 1000,
+      "maximum_ms": 7200000,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "command_timeout"
+    },
+    {
+      "id": "command.grace.before_kill",
+      "scope": "command",
+      "kind": "grace_period",
+      "title": "Command Termination Grace Period",
+      "description": "Grace window after timeout before a command is force-terminated and marked failed.",
+      "default_ms": 5000,
+      "minimum_ms": 100,
+      "maximum_ms": 60000,
+      "enforcement": "hard_fail",
+      "owner": "runtime-orchestration",
+      "reason_code": "command_force_kill"
+    },
+    {
+      "id": "terminal.session.idle_lease",
+      "scope": "terminal",
+      "kind": "lease_ttl",
+      "title": "Terminal Session Idle Lease",
+      "description": "Maximum idle duration before a governed terminal session is considered expired for retention purposes.",
+      "default_ms": 1800000,
+      "minimum_ms": 1000,
+      "maximum_ms": 86400000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "workspace.restore.ui_patience",
+      "scope": "renderer",
+      "kind": "ui_patience_budget",
+      "title": "Workspace Restore UI Patience Budget",
+      "description": "Maximum time the renderer waits before surfacing that workspace restore continues in the governed runtime path.",
+      "default_ms": 3000,
+      "minimum_ms": 100,
+      "maximum_ms": 60000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "preload.bridge.request.timeout",
+      "scope": "preload",
+      "kind": "request_timeout",
+      "title": "Preload Bridge Request Timeout",
+      "description": "Maximum duration a preload bridge call may wait for a main-process response before surfacing a governed timeout error.",
+      "default_ms": 10000,
+      "minimum_ms": 100,
+      "maximum_ms": 300000,
+      "enforcement": "hard_fail",
+      "owner": "app-runtime",
+      "reason_code": "preload_bridge_timeout"
+    },
+    {
+      "id": "watcher.poll.interval",
+      "scope": "watcher",
+      "kind": "poll_interval",
+      "title": "Watcher Poll Interval",
+      "description": "Polling interval when native file watchers are unavailable or degraded.",
+      "default_ms": 1500,
+      "minimum_ms": 100,
+      "maximum_ms": 10000,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "watcher.event.coalesce_window",
+      "scope": "watcher",
+      "kind": "coalesce_window",
+      "title": "Watcher Event Coalescing Window",
+      "description": "Time window for merging watcher bursts into a single governed update batch.",
+      "default_ms": 250,
+      "minimum_ms": 10,
+      "maximum_ms": 5000,
+      "enforcement": "warn_and_degrade",
+      "owner": "workspace-runtime"
+    },
+    {
+      "id": "diagnostics.collection.timeout",
+      "scope": "diagnostics",
+      "kind": "operation_timeout",
+      "title": "Diagnostics Collection Timeout",
+      "description": "Upper bound for diagnostics collection before partial results or degraded summaries must be emitted.",
+      "default_ms": 120000,
+      "minimum_ms": 1000,
+      "maximum_ms": 3600000,
+      "enforcement": "warn_and_degrade",
+      "owner": "verify-runtime",
+      "reason_code": "diagnostics_timeout"
+    },
+    {
+      "id": "ledger.persist.timeout",
+      "scope": "ledger",
+      "kind": "operation_timeout",
+      "title": "Ledger Persistence Timeout",
+      "description": "Upper bound for persisting authoritative ledger edges and entries after execution or verification completes.",
+      "default_ms": 30000,
+      "minimum_ms": 100,
+      "maximum_ms": 300000,
+      "enforcement": "fail_and_recover",
+      "owner": "replay-runtime",
+      "reason_code": "ledger_persist_timeout"
+    },
+    {
+      "id": "transaction.confirmation.staleness",
+      "scope": "main",
+      "kind": "staleness_window",
+      "title": "Confirmation Freshness Window",
+      "description": "Maximum age of explicit confirmation before it must be considered stale for consequential actions.",
+      "default_ms": 300000,
+      "minimum_ms": 1000,
+      "maximum_ms": 86400000,
+      "enforcement": "block_until_fresh",
+      "owner": "core-governance",
+      "reason_code": "confirmation_stale"
+    },
+    {
+      "id": "transaction.recovery.deadline",
+      "scope": "recovery",
+      "kind": "recovery_deadline",
+      "title": "Recovery Decision Deadline",
+      "description": "Maximum duration allowed for crash-recovery decision making before forced failure or rollback must occur.",
+      "default_ms": 60000,
+      "minimum_ms": 1000,
+      "maximum_ms": 3600000,
+      "enforcement": "fail_and_recover",
+      "owner": "runtime-orchestration",
+      "reason_code": "recovery_deadline_exceeded"
+    },
+    {
+      "id": "transaction.recovery.resume_lease",
+      "scope": "recovery",
+      "kind": "lease_ttl",
+      "title": "Recovery Resume Lease",
+      "description": "Lease duration granted to a resumed transaction before it must heartbeat or be treated as abandoned again.",
+      "default_ms": 30000,
+      "minimum_ms": 1000,
+      "maximum_ms": 600000,
+      "enforcement": "fail_and_recover",
+      "owner": "runtime-orchestration",
+      "reason_code": "recovery_resume_lease_expired"
+    },
+    {
+      "id": "release.promotion.timeout",
+      "scope": "release",
+      "kind": "operation_timeout",
+      "title": "Release Promotion Timeout",
+      "description": "Upper bound for governed release promotion including artifact checks, attestation writes, and publication gating.",
+      "default_ms": 1800000,
+      "minimum_ms": 1000,
+      "maximum_ms": 14400000,
+      "enforcement": "cancel_and_rollback",
+      "owner": "release-engineering",
+      "reason_code": "release_promotion_timeout"
+    },
+    {
+      "id": "release.publication.grace",
+      "scope": "release",
+      "kind": "grace_period",
+      "title": "Release Publication Grace Period",
+      "description": "Grace window allowed for completing final publication writes after promotion reaches its terminal stage.",
+      "default_ms": 30000,
+      "minimum_ms": 100,
+      "maximum_ms": 600000,
+      "enforcement": "cancel_and_rollback",
+      "owner": "release-engineering",
+      "reason_code": "release_publication_grace_exceeded"
+    },
+    {
+      "id": "logging.flush.timeout",
+      "scope": "logging",
+      "kind": "operation_timeout",
+      "title": "Structured Log Flush Timeout",
+      "description": "Upper bound for flushing critical log events during shutdown, crash handling, or forced teardown.",
+      "default_ms": 5000,
+      "minimum_ms": 100,
+      "maximum_ms": 60000,
+      "enforcement": "warn_and_degrade",
+      "owner": "runtime-security"
+    },
+    {
+      "id": "renderer.notification.auto_hide",
+      "scope": "renderer",
+      "kind": "grace_period",
+      "title": "Notification Auto Hide Duration",
+      "description": "Duration non-blocking notifications remain visible before auto-hide in the renderer.",
+      "default_ms": 6000,
+      "minimum_ms": 500,
+      "maximum_ms": 60000,
+      "enforcement": "warn_only",
+      "owner": "app-runtime"
+    },
+    {
+      "id": "main.app_shutdown.grace",
+      "scope": "main",
+      "kind": "grace_period",
+      "title": "Application Shutdown Grace Period",
+      "description": "Time budget for coordinated shutdown, including log flush, session persistence, and child-process termination.",
+      "default_ms": 15000,
+      "minimum_ms": 100,
+      "maximum_ms": 300000,
+      "enforcement": "warn_and_degrade",
+      "owner": "app-runtime"
+    }
+  ],
+  "validation_rules": {
+    "hard_fail_and_cancel_and_rollback_require_reason_code": true,
+    "default_must_be_within_min_max_when_present": true,
+    "heartbeat_grace_should_exceed_heartbeat_interval": true,
+    "staleness_windows_should_exceed_request_timeouts_for_same_operation_family": true,
+    "ui_patience_budgets_must_not_exceed_authoritative_operation_timeout_when_same_concern": true
+  }
+}

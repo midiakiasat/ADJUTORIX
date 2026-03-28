@@ -1,0 +1,775 @@
+/*
+ * ADJUTORIX APP — SRC / STYLES / layout.css
+ *
+ * Canonical renderer-wide structural layout contract.
+ *
+ * Purpose:
+ * - define the authoritative geometry system for application shell composition, split panes,
+ *   headers, sidebars, inspector rails, stacked panels, overlays, dialog surfaces, tab regions,
+ *   scroll containers, and editor-bearing work areas
+ * - centralize structural CSS primitives so components do not each reinvent sizing, min/max
+ *   constraints, overflow boundaries, sticky regions, resize handles, or responsive pane collapse
+ * - prevent subtle layout divergence where one panel assumes intrinsic sizing, another assumes
+ *   flex shrink, and another assumes explicit min-height: 0, causing broken scroll/focus behavior
+ *
+ * Architectural role:
+ * - global structural CSS layered beneath component-specific styling
+ * - optimized for dense operational UIs with nested scroll regions and explicit split composition
+ * - geometry-first: spacing/color are secondary here; this file governs containment and composition
+ *
+ * Hard invariants:
+ * - every layout container that can host scrolling children establishes deterministic min-size rules
+ * - split/pane/header/footer patterns compose without requiring ad hoc overrides
+ * - overlays and modal surfaces do not break underlying shell sizing semantics
+ * - responsive collapse rules are explicit and breakpoint-bounded
+ * - no hidden dependence on content height for core application geometry
+ *
+ * NO PLACEHOLDERS.
+ */
+
+:root {
+  --ax-layout-gap-1: 0.25rem;
+  --ax-layout-gap-2: 0.5rem;
+  --ax-layout-gap-3: 0.75rem;
+  --ax-layout-gap-4: 1rem;
+  --ax-layout-gap-5: 1.25rem;
+  --ax-layout-gap-6: 1.5rem;
+  --ax-layout-gap-8: 2rem;
+
+  --ax-shell-padding: 1rem;
+  --ax-shell-gap: 1rem;
+  --ax-header-height: 3.5rem;
+  --ax-subheader-height: 2.75rem;
+  --ax-statusbar-height: 2rem;
+
+  --ax-sidebar-width: 18rem;
+  --ax-sidebar-min-width: 14rem;
+  --ax-sidebar-max-width: 24rem;
+
+  --ax-inspector-width: 22rem;
+  --ax-inspector-min-width: 17rem;
+  --ax-inspector-max-width: 32rem;
+
+  --ax-terminal-height: 16rem;
+  --ax-terminal-min-height: 10rem;
+  --ax-terminal-max-height: 34rem;
+
+  --ax-panel-min-width: 12rem;
+  --ax-panel-min-height: 8rem;
+  --ax-center-min-width: 24rem;
+
+  --ax-overlay-padding: 1.5rem;
+  --ax-dialog-max-width: 72rem;
+  --ax-dialog-max-height: 88vh;
+
+  --ax-resize-handle-thickness: 0.375rem;
+  --ax-resize-hitbox: 0.75rem;
+
+  --ax-z-shell: 1;
+  --ax-z-sticky: 10;
+  --ax-z-overlay: 100;
+  --ax-z-dialog: 110;
+  --ax-z-toast: 120;
+}
+
+html,
+body,
+#root {
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------- */
+/* FOUNDATIONAL MIN-SIZE / CONTAINMENT                                        */
+/* -------------------------------------------------------------------------- */
+
+.ax-min-0 {
+  min-inline-size: 0 !important;
+  min-block-size: 0 !important;
+}
+
+.ax-min-w-0 {
+  min-inline-size: 0 !important;
+}
+
+.ax-min-h-0 {
+  min-block-size: 0 !important;
+}
+
+.ax-overflow-hidden {
+  overflow: hidden !important;
+}
+
+.ax-overflow-auto {
+  overflow: auto !important;
+}
+
+.ax-overflow-x-auto {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+
+.ax-overflow-y-auto {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.ax-fill {
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.ax-abs-fill {
+  position: absolute;
+  inset: 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* APP SHELL                                                                   */
+/* -------------------------------------------------------------------------- */
+
+.ax-shell {
+  position: relative;
+  z-index: var(--ax-z-shell);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-shell--no-statusbar {
+  grid-template-rows: auto 1fr;
+}
+
+.ax-shell-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ax-layout-gap-4);
+  min-inline-size: 0;
+  min-block-size: var(--ax-header-height);
+  padding-inline: var(--ax-shell-padding);
+  padding-block: 0.5rem;
+  z-index: var(--ax-z-sticky);
+}
+
+.ax-shell-header__group {
+  display: flex;
+  align-items: center;
+  gap: var(--ax-layout-gap-3);
+  min-inline-size: 0;
+}
+
+.ax-shell-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--ax-shell-gap);
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: var(--ax-shell-padding);
+  overflow: hidden;
+}
+
+.ax-shell-main--center-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ax-shell-main--no-inspector {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.ax-shell-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ax-layout-gap-4);
+  min-inline-size: 0;
+  min-block-size: var(--ax-statusbar-height);
+  padding-inline: var(--ax-shell-padding);
+}
+
+/* -------------------------------------------------------------------------- */
+/* PRIMARY COLUMNS / RAILS                                                    */
+/* -------------------------------------------------------------------------- */
+
+.ax-sidebar {
+  display: flex;
+  flex-direction: column;
+  inline-size: min(max(var(--ax-sidebar-width), var(--ax-sidebar-min-width)), var(--ax-sidebar-max-width));
+  min-inline-size: var(--ax-sidebar-min-width);
+  max-inline-size: var(--ax-sidebar-max-width);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-sidebar--compact {
+  inline-size: 3.75rem;
+  min-inline-size: 3.75rem;
+  max-inline-size: 3.75rem;
+}
+
+.ax-inspector {
+  display: flex;
+  flex-direction: column;
+  inline-size: min(max(var(--ax-inspector-width), var(--ax-inspector-min-width)), var(--ax-inspector-max-width));
+  min-inline-size: var(--ax-inspector-min-width);
+  max-inline-size: var(--ax-inspector-max-width);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-center-column {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: var(--ax-center-min-width);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-center-column--fluid {
+  min-inline-size: 0;
+}
+
+.ax-rail-stack,
+.ax-pane-stack,
+.ax-column-stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ax-layout-gap-4);
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------- */
+/* PANEL COMPOSITION                                                           */
+/* -------------------------------------------------------------------------- */
+
+.ax-layout-panel {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: var(--ax-panel-min-width);
+  min-block-size: var(--ax-panel-min-height);
+  overflow: hidden;
+}
+
+.ax-layout-panel__header,
+.ax-layout-panel__footer {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+.ax-layout-panel__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-layout-panel__scroll {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.ax-layout-panel__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--ax-layout-gap-4);
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.ax-layout-panel__split--vertical {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* -------------------------------------------------------------------------- */
+/* SPLITS / RESIZERS                                                           */
+/* -------------------------------------------------------------------------- */
+
+.ax-split {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-split--horizontal {
+  flex-direction: row;
+}
+
+.ax-split--vertical {
+  flex-direction: column;
+}
+
+.ax-split-pane {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-split-pane[data-fixed="true"] {
+  flex: 0 0 auto;
+}
+
+.ax-resize-handle {
+  position: relative;
+  flex: 0 0 var(--ax-resize-handle-thickness);
+  min-inline-size: var(--ax-resize-handle-thickness);
+  min-block-size: var(--ax-resize-handle-thickness);
+  user-select: none;
+  touch-action: none;
+}
+
+.ax-split--horizontal > .ax-resize-handle {
+  cursor: col-resize;
+}
+
+.ax-split--vertical > .ax-resize-handle {
+  cursor: row-resize;
+}
+
+.ax-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--ax-resize-hitbox) - var(--ax-resize-handle-thickness)) / -2);
+}
+
+.ax-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.ax-resize-handle:hover::after,
+.ax-resize-handle[data-active="true"]::after {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* -------------------------------------------------------------------------- */
+/* STACKS / FLOWS / GRIDS                                                      */
+/* -------------------------------------------------------------------------- */
+
+.ax-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ax-layout-gap-3);
+  min-inline-size: 0;
+}
+
+.ax-row--start {
+  align-items: flex-start;
+}
+
+.ax-row--between {
+  justify-content: space-between;
+}
+
+.ax-row--wrap {
+  flex-wrap: wrap;
+}
+
+.ax-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ax-layout-gap-3);
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.ax-grid {
+  display: grid;
+  gap: var(--ax-layout-gap-4);
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.ax-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ax-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ax-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ax-grid-auto-cards {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.ax-grid-auto-panels {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+/* -------------------------------------------------------------------------- */
+/* TABS / TOOLBARS / STICKY REGIONS                                            */
+/* -------------------------------------------------------------------------- */
+
+.ax-tab-region {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-tab-strip {
+  display: flex;
+  align-items: stretch;
+  gap: var(--ax-layout-gap-2);
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ax-tab-content {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ax-layout-gap-3);
+  min-inline-size: 0;
+}
+
+.ax-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--ax-layout-gap-2);
+  min-inline-size: 0;
+}
+
+.ax-sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: var(--ax-z-sticky);
+}
+
+.ax-sticky-bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--ax-z-sticky);
+}
+
+/* -------------------------------------------------------------------------- */
+/* SCROLL CONTAINERS                                                           */
+/* -------------------------------------------------------------------------- */
+
+.ax-scroll-shell {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-scroll-body {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.ax-scroll-body--x {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ax-scroll-body--y {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.ax-scroll-body--both {
+  overflow: auto;
+}
+
+.ax-scroll-body--contain {
+  overscroll-behavior: contain;
+}
+
+/* -------------------------------------------------------------------------- */
+/* OVERLAYS / DIALOGS / DRAWERS                                                */
+/* -------------------------------------------------------------------------- */
+
+.ax-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ax-z-overlay);
+  display: grid;
+  place-items: center;
+  padding: var(--ax-overlay-padding);
+}
+
+.ax-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.ax-dialog {
+  position: relative;
+  z-index: var(--ax-z-dialog);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inline-size: min(100%, var(--ax-dialog-max-width));
+  max-block-size: var(--ax-dialog-max-height);
+  min-inline-size: min(100%, 20rem);
+  min-block-size: 10rem;
+  overflow: hidden;
+}
+
+.ax-dialog--narrow {
+  inline-size: min(100%, 34rem);
+}
+
+.ax-dialog--wide {
+  inline-size: min(100%, 92rem);
+}
+
+.ax-dialog__body {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: var(--ax-z-dialog);
+  display: flex;
+  flex-direction: column;
+  inline-size: min(100vw, 32rem);
+  min-inline-size: 18rem;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-drawer--left {
+  left: 0;
+}
+
+.ax-drawer--right {
+  right: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* EDITOR / TERMINAL / SPECIAL SURFACES                                        */
+/* -------------------------------------------------------------------------- */
+
+.ax-editor-host,
+.ax-monaco-host,
+.ax-terminal-host,
+.ax-diff-host,
+.ax-graph-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-editor-stack {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ax-terminal-region {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: var(--ax-terminal-min-height);
+  max-block-size: var(--ax-terminal-max-height);
+  block-size: var(--ax-terminal-height);
+  overflow: hidden;
+}
+
+.ax-terminal-region[data-collapsed="true"] {
+  block-size: 0;
+  min-block-size: 0;
+  border: 0 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* POSITION UTILITIES                                                          */
+/* -------------------------------------------------------------------------- */
+
+.ax-relative {
+  position: relative !important;
+}
+
+.ax-absolute {
+  position: absolute !important;
+}
+
+.ax-fixed {
+  position: fixed !important;
+}
+
+.ax-inset-0 {
+  inset: 0 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* FLEX UTILITIES                                                              */
+/* -------------------------------------------------------------------------- */
+
+.ax-flex-1 {
+  flex: 1 1 0% !important;
+}
+
+.ax-flex-auto {
+  flex: 1 1 auto !important;
+}
+
+.ax-flex-none {
+  flex: 0 0 auto !important;
+}
+
+.ax-grow {
+  flex-grow: 1 !important;
+}
+
+.ax-shrink-0 {
+  flex-shrink: 0 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* RESPONSIVE COLLAPSE RULES                                                   */
+/* -------------------------------------------------------------------------- */
+
+@media (max-width: 1440px) {
+  :root {
+    --ax-sidebar-width: 16rem;
+    --ax-inspector-width: 20rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .ax-shell-main {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ax-shell-main > .ax-inspector {
+    grid-column: 1 / -1;
+    max-inline-size: none;
+    inline-size: 100%;
+  }
+
+  .ax-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  :root {
+    --ax-shell-padding: 0.75rem;
+    --ax-shell-gap: 0.75rem;
+    --ax-overlay-padding: 1rem;
+  }
+
+  .ax-shell-main {
+    grid-template-columns: 1fr;
+  }
+
+  .ax-sidebar,
+  .ax-inspector,
+  .ax-center-column {
+    inline-size: 100%;
+    max-inline-size: none;
+    min-inline-size: 0;
+  }
+
+  .ax-layout-panel__split,
+  .ax-grid--3,
+  .ax-grid--2 {
+    grid-template-columns: 1fr;
+  }
+
+  .ax-grid--4 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ax-split--horizontal {
+    flex-direction: column;
+  }
+
+  .ax-split--horizontal > .ax-resize-handle {
+    cursor: row-resize;
+    min-inline-size: 100%;
+    inline-size: 100%;
+    min-block-size: var(--ax-resize-handle-thickness);
+    block-size: var(--ax-resize-handle-thickness);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --ax-header-height: 3.25rem;
+    --ax-subheader-height: 2.5rem;
+    --ax-terminal-height: 12rem;
+  }
+
+  .ax-shell-header,
+  .ax-shell-statusbar,
+  .ax-toolbar,
+  .ax-toolbar__group,
+  .ax-row {
+    flex-wrap: wrap;
+  }
+
+  .ax-grid--4,
+  .ax-grid-auto-cards,
+  .ax-grid-auto-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .ax-dialog,
+  .ax-dialog--wide,
+  .ax-dialog--narrow {
+    inline-size: 100%;
+    max-block-size: 100%;
+  }
+
+  .ax-overlay-root {
+    padding: 0.5rem;
+  }
+}

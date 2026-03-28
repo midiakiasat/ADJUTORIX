@@ -1,0 +1,288 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# ADJUTORIX generated-artifact discipline guard
+#
+# Purpose:
+# - fail fast when generated, packaged, cached, or machine-local artifacts leak into source-controlled surfaces
+# - enforce a clean boundary between authoritative source files and derived outputs
+# - catch both tracked and untracked artifact residue that would make verification, diffs, and replay claims ambiguous
+# - provide deterministic, auditable reasons for every blocked artifact class
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "$ROOT_DIR"
+
+readonly ROOT_DIR
+FORCE_COLOR="${FORCE_COLOR:-1}"
+STRICT_TRACKED_CHECK="${STRICT_TRACKED_CHECK:-1}"
+STRICT_UNTRACKED_CHECK="${STRICT_UNTRACKED_CHECK:-1}"
+ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/generated-artifacts.allowlist}"
+
+color() {
+  local code="$1"
+  shift
+  if [[ "$FORCE_COLOR" == "0" ]]; then
+    printf '%s' "$*"
+  else
+    printf '\033[%sm%s\033[0m' "$code" "$*"
+  fi
+}
+
+log() {
+  printf '%s %s\n' "$(color '36' '[adjutorix-artifacts]')" "$*"
+}
+
+ok() {
+  printf '%s %s\n' "$(color '32' '[ok]')" "$*"
+}
+
+warn() {
+  printf '%s %s\n' "$(color '33' '[warn]')" "$*"
+}
+
+err() {
+  printf '%s %s\n' "$(color '31' '[error]')" "$*" >&2
+}
+
+die() {
+  err "$*"
+  exit 1
+}
+
+section() {
+  printf '\n%s\n' "$(color '1;37' "== $* ==")"
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+require_repo_root() {
+  [[ -f "$ROOT_DIR/package.json" ]] || die "Missing package.json at repo root"
+  [[ -d "$ROOT_DIR/packages" ]] || die "Missing packages/ directory"
+  [[ -d "$ROOT_DIR/configs/ci" ]] || die "Missing configs/ci directory"
+}
+
+load_allow_patterns() {
+  local patterns=()
+  if [[ -f "$ALLOWLIST_FILE" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      patterns+=("$line")
+    done < "$ALLOWLIST_FILE"
+  fi
+  printf '%s\n' "${patterns[@]:-}"
+}
+
+matches_allowlist() {
+  local path="$1"
+  shift || true
+  local pattern
+  for pattern in "$@"; do
+    [[ -z "$pattern" ]] && continue
+    if [[ "$path" == $pattern ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+classify_generated_path() {
+  local path="$1"
+
+  case "$path" in
+    *.pyc|*.pyo|*.pyd)
+      printf 'python-bytecode'
+      return 0
+      ;;
+    *__pycache__*|*.pytest_cache*|*.mypy_cache*|*.ruff_cache*|*.coverage|.coverage*|htmlcov/*)
+      printf 'python-cache'
+      return 0
+      ;;
+    node_modules/*|*/node_modules/*)
+      printf 'node-modules'
+      return 0
+      ;;
+    dist/*|*/dist/*|build/*|*/build/*|out/*|*/out/*|release/*|*/release/*)
+      printf 'packaged-output'
+      return 0
+      ;;
+    *.egg-info/*|*.egg-info|*.whl|*.tar.gz)
+      printf 'python-package-output'
+      return 0
+      ;;
+    *.tsbuildinfo)
+      printf 'typescript-build-cache'
+      return 0
+      ;;
+    coverage/*|.nyc_output/*)
+      printf 'coverage-output'
+      return 0
+      ;;
+    *.log|logs/*|tmp/*|.tmp/*|*.tmp|*.swp|*.swo|*.DS_Store)
+      printf 'local-machine-residue'
+      return 0
+      ;;
+    *.dmg|*.pkg|*.app|*.zip)
+      printf 'packaging-artifact'
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+collect_tracked_generated_paths() {
+  git ls-files -z | while IFS= read -r -d '' path; do
+    if artifact_class="$(classify_generated_path "$path")"; then
+      printf '%s\t%s\n' "$artifact_class" "$path"
+    fi
+  done
+}
+
+collect_untracked_generated_paths() {
+  git ls-files --others --exclude-standard -z | while IFS= read -r -d '' path; do
+    if artifact_class="$(classify_generated_path "$path")"; then
+      printf '%s\t%s\n' "$artifact_class" "$path"
+    fi
+  done
+}
+
+collect_dirty_generated_paths() {
+  git status --porcelain=v1 -z | while IFS= read -r -d '' entry; do
+    local meta path
+    meta="${entry:0:3}"
+    path="${entry:3}"
+    if artifact_class="$(classify_generated_path "$path")"; then
+      printf '%s\t%s\t%s\n' "$artifact_class" "$meta" "$path"
+    fi
+  done
+}
+
+print_blocked_table() {
+  local title="$1"
+  shift
+  local rows=("$@")
+  [[ "${#rows[@]}" -gt 0 ]] || return 0
+
+  printf '%s\n' "$(color '1;31' "$title")"
+  printf '  %-28s %s\n' 'artifact-class' 'path'
+  printf '  %-28s %s\n' '--------------' '----'
+  local row klass path
+  for row in "${rows[@]}"; do
+    klass="${row%%$'\t'*}"
+    path="${row#*$'\t'}"
+    printf '  %-28s %s\n' "$klass" "$path"
+  done
+}
+
+print_dirty_blocked_table() {
+  local title="$1"
+  shift
+  local rows=("$@")
+  [[ "${#rows[@]}" -gt 0 ]] || return 0
+
+  printf '%s\n' "$(color '1;31' "$title")"
+  printf '  %-28s %-6s %s\n' 'artifact-class' 'status' 'path'
+  printf '  %-28s %-6s %s\n' '--------------' '------' '----'
+  local row klass meta path rest
+  for row in "${rows[@]}"; do
+    klass="${row%%$'\t'*}"
+    rest="${row#*$'\t'}"
+    meta="${rest%%$'\t'*}"
+    path="${rest#*$'\t'}"
+    printf '  %-28s %-6s %s\n' "$klass" "$meta" "$path"
+  done
+}
+
+main() {
+  section "Generated artifact discipline"
+  require_cmd git
+  require_repo_root
+
+  mapfile -t allow_patterns < <(load_allow_patterns)
+  if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+    log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
+  else
+    log "No generated-artifact allowlist entries loaded"
+  fi
+
+  local tracked_raw=()
+  local tracked_blocked=()
+  local untracked_raw=()
+  local untracked_blocked=()
+  local dirty_raw=()
+  local dirty_blocked=()
+  local line class path rest meta
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    tracked_raw+=("$line")
+  done < <(collect_tracked_generated_paths)
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    class="${line%%$'\t'*}"
+    path="${line#*$'\t'}"
+    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+      tracked_blocked+=("$class"$'\t'"$path")
+    fi
+  done < <(printf '%s\n' "${tracked_raw[@]:-}")
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    untracked_raw+=("$line")
+  done < <(collect_untracked_generated_paths)
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    class="${line%%$'\t'*}"
+    path="${line#*$'\t'}"
+    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+      untracked_blocked+=("$class"$'\t'"$path")
+    fi
+  done < <(printf '%s\n' "${untracked_raw[@]:-}")
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    dirty_raw+=("$line")
+  done < <(collect_dirty_generated_paths)
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    class="${line%%$'\t'*}"
+    rest="${line#*$'\t'}"
+    meta="${rest%%$'\t'*}"
+    path="${rest#*$'\t'}"
+    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+      dirty_blocked+=("$class"$'\t'"$meta"$'\t'"$path")
+    fi
+  done < <(printf '%s\n' "${dirty_raw[@]:-}")
+
+  if [[ "$STRICT_TRACKED_CHECK" == "1" && "${#tracked_blocked[@]}" -gt 0 ]]; then
+    print_blocked_table "Tracked generated artifacts detected" "${tracked_blocked[@]}"
+    die "Tracked generated/package/cache artifacts are present in source-controlled paths."
+  elif [[ "${#tracked_blocked[@]}" -gt 0 ]]; then
+    print_blocked_table "Tracked generated artifacts detected (warning only)" "${tracked_blocked[@]}"
+    warn "Tracked generated artifacts detected but STRICT_TRACKED_CHECK=$STRICT_TRACKED_CHECK"
+  fi
+
+  if [[ "$STRICT_UNTRACKED_CHECK" == "1" && "${#untracked_blocked[@]}" -gt 0 ]]; then
+    print_blocked_table "Untracked generated artifacts detected" "${untracked_blocked[@]}"
+    die "Untracked generated/package/cache artifacts are present and would pollute verification surfaces."
+  elif [[ "${#untracked_blocked[@]}" -gt 0 ]]; then
+    print_blocked_table "Untracked generated artifacts detected (warning only)" "${untracked_blocked[@]}"
+    warn "Untracked generated artifacts detected but STRICT_UNTRACKED_CHECK=$STRICT_UNTRACKED_CHECK"
+  fi
+
+  if [[ "${#dirty_blocked[@]}" -gt 0 ]]; then
+    print_dirty_blocked_table "Dirty generated artifacts detected" "${dirty_blocked[@]}"
+    die "Generated/package/cache artifacts are modified or staged, making repository truth ambiguous."
+  fi
+
+  ok "No blocked generated artifacts detected"
+}
+
+main "$@"

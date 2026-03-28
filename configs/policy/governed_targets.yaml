@@ -1,0 +1,1203 @@
+version: 1
+registry_id: adjutorix.governed-targets
+title: ADJUTORIX Governed Targets Registry
+description: >-
+  Canonical registry of target classes that may be observed, previewed, mutated,
+  verified, replayed, rolled back, or denied by ADJUTORIX. This file exists to
+  prevent authority drift: every consequential target must have an explicit
+  identity model, allowed surfaces, evidence requirements, and mutation policy
+  binding before any runtime, CLI, or app surface may act on it.
+status: active
+owners:
+  - team: core-governance
+  - team: app-runtime
+  - team: agent-runtime
+invariants:
+  - id: explicit_target_identity
+    statement: Every governed target must have a stable identity shape and a defined scope boundary.
+  - id: explicit_authority_binding
+    statement: Every governed target must declare which authority surfaces may read, preview, mutate, or attest it.
+  - id: explicit_replay_relationship
+    statement: Every target that can affect authoritative state must declare whether it participates in replay and ledger lineage.
+  - id: explicit_confirmation_requirement
+    statement: Every target with consequential or destructive mutation potential must declare confirmation behavior.
+  - id: explicit_deny_list
+    statement: Targets outside the registry or marked forbidden are denied by default.
+defaults:
+  decision: deny
+  unknown_target_behavior: deny
+  unknown_authority_surface_behavior: deny
+  unknown_mutation_kind_behavior: deny
+  unknown_replay_relationship_behavior: deny
+shared_enums:
+  authority_surfaces:
+    - preload_bridge
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+    - read_only_test_fixture
+  denied_surfaces:
+    - renderer_direct_fs
+    - renderer_direct_network
+    - renderer_direct_ipc_mutation
+    - ad_hoc_shell_exec
+    - raw_git_apply
+    - ungoverned_background_task
+  visibility_classes:
+    - explicit
+    - previewable
+    - auditable
+    - hidden_forbidden
+  mutation_classes:
+    - none
+    - local_ephemeral
+    - settings_persist
+    - workspace_write
+    - patch_apply
+    - rollback
+    - trust_elevation
+    - shell_execution
+    - artifact_export
+  replay_relationships:
+    - none
+    - observational
+    - ledger_bound
+    - verify_bound
+    - replay_required
+  confirmation_modes:
+    - none
+    - recommended
+    - required_consequential
+    - required_destructive
+  target_kinds:
+    - workspace_file
+    - workspace_directory
+    - patch_set
+    - patch_review_state
+    - ledger_entry
+    - ledger_selection
+    - verify_result
+    - diagnostics_snapshot
+    - settings_blob
+    - workspace_trust_state
+    - command_invocation
+    - terminal_session
+    - rpc_method
+    - exported_artifact
+    - app_session
+    - forbidden_surface
+targets:
+  - id: workspace.source-file
+    kind: workspace_file
+    status: active
+    description: Source-controlled file within the active trusted workspace.
+    identity:
+      required_fields:
+        - workspace_id
+        - relative_path
+      optional_fields:
+        - file_hash
+        - language
+      canonical_scope: workspace-relative path
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: true
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_fs
+          - renderer_direct_ipc_mutation
+          - ad_hoc_shell_exec
+          - raw_git_apply
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+          - main_process_service
+    mutation:
+      class: workspace_write
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      destructive_operations:
+        - replace
+        - delete
+        - rename
+      required_evidence:
+        - file_diff
+        - target_identity
+        - governance_decision
+        - verify_assessment
+      forbidden_without:
+        - confirmation
+        - fresh_verify
+        - visible_target
+    replay:
+      relationship: replay_required
+      ledger_binding: required
+      verify_binding: required
+      rollback_supported: true
+
+  - id: workspace.generated-file
+    kind: workspace_file
+    status: active
+    description: Generated or derived file inside workspace or build output roots.
+    identity:
+      required_fields:
+        - workspace_id
+        - relative_path
+      canonical_scope: workspace-relative path
+    visibility:
+      class: previewable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: true
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_fs
+          - raw_git_apply
+      attest:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+    mutation:
+      class: workspace_write
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - target_identity
+        - generation_reason
+        - governance_decision
+    replay:
+      relationship: observational
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: true
+
+  - id: workspace.directory
+    kind: workspace_directory
+    status: active
+    description: Directory creation, rename, or removal within a trusted workspace.
+    identity:
+      required_fields:
+        - workspace_id
+        - relative_path
+      canonical_scope: workspace-relative path
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_fs
+          - ad_hoc_shell_exec
+      attest:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+    mutation:
+      class: workspace_write
+      severity: destructive
+      confirmation: required_destructive
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - target_identity
+        - impact_summary
+        - governance_decision
+    replay:
+      relationship: ledger_bound
+      ledger_binding: required
+      verify_binding: optional
+      rollback_supported: true
+
+  - id: patch.proposal
+    kind: patch_set
+    status: active
+    description: Proposed multi-file patch set awaiting review, verify, and apply judgment.
+    identity:
+      required_fields:
+        - patch_id
+        - workspace_id
+      optional_fields:
+        - parent_verify_id
+        - selected_seq
+      canonical_scope: patch_id
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: true
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_ipc_mutation
+          - raw_git_apply
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: patch_apply
+      severity: destructive
+      confirmation: required_destructive
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - patch_diff
+        - changed_file_list
+        - verify_assessment
+        - replay_outcome
+        - governance_decision
+      forbidden_without:
+        - visible_patch_summary
+        - fresh_verify
+        - replayable_lineage
+    replay:
+      relationship: replay_required
+      ledger_binding: required
+      verify_binding: required
+      rollback_supported: true
+
+  - id: patch.review-state
+    kind: patch_review_state
+    status: active
+    description: Review metadata attached to a patch proposal, including decisions, comments, and apply readiness.
+    identity:
+      required_fields:
+        - patch_id
+        - review_id
+      canonical_scope: review_id
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: local_ephemeral
+      severity: consequential
+      confirmation: recommended
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - target_identity
+        - review_summary
+    replay:
+      relationship: verify_bound
+      ledger_binding: optional
+      verify_binding: required
+      rollback_supported: true
+
+  - id: ledger.entry
+    kind: ledger_entry
+    status: active
+    description: An authoritative transaction or state transition entry within the ADJUTORIX ledger.
+    identity:
+      required_fields:
+        - ledger_id
+        - seq
+      optional_fields:
+        - entry_id
+        - phase
+      canonical_scope: ledger sequence
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+          - main_process_service
+        deny:
+          - renderer_direct_ipc_mutation
+          - ad_hoc_shell_exec
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: rollback
+      severity: destructive
+      confirmation: required_destructive
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - ledger_assessment
+        - replay_outcome
+        - governance_decision
+      forbidden_without:
+        - rollback_target
+        - replayable_lineage
+    replay:
+      relationship: replay_required
+      ledger_binding: required
+      verify_binding: optional
+      rollback_supported: true
+
+  - id: ledger.selection
+    kind: ledger_selection
+    status: active
+    description: Current selected ledger/head context used to scope preview, replay, and rollback decisions.
+    identity:
+      required_fields:
+        - ledger_id
+        - selected_seq
+      optional_fields:
+        - head_seq
+      canonical_scope: selected sequence
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: false
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+        deny:
+          - renderer_direct_fs
+      attest:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+    mutation:
+      class: local_ephemeral
+      severity: informative
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: allow
+      required_evidence:
+        - ledger_context
+    replay:
+      relationship: ledger_bound
+      ledger_binding: required
+      verify_binding: optional
+      rollback_supported: false
+
+  - id: verify.result
+    kind: verify_result
+    status: active
+    description: Verification payload and readiness judgment bound to a patch, ledger context, and environment fingerprint.
+    identity:
+      required_fields:
+        - verify_id
+      optional_fields:
+        - patch_id
+        - recorded_environment_fingerprint
+        - current_environment_fingerprint
+      canonical_scope: verify_id
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+        deny:
+          - renderer_direct_network
+          - renderer_direct_ipc_mutation
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: none
+      severity: informative
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: allow
+      required_evidence:
+        - verify_summary
+        - check_list
+        - environment_fingerprint
+    replay:
+      relationship: verify_bound
+      ledger_binding: optional
+      verify_binding: required
+      rollback_supported: false
+
+  - id: diagnostics.snapshot
+    kind: diagnostics_snapshot
+    status: active
+    description: Diagnostics or parser output attached to verify or workspace analysis.
+    identity:
+      required_fields:
+        - diagnostics_id
+      optional_fields:
+        - workspace_id
+        - source_path
+      canonical_scope: diagnostics snapshot id
+    visibility:
+      class: previewable
+      target_visible: true
+      consequence_visible: false
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow: []
+        deny:
+          - renderer_direct_fs
+          - ad_hoc_shell_exec
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: none
+      severity: informative
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: allow
+      required_evidence:
+        - diagnostics_payload
+    replay:
+      relationship: observational
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: false
+
+  - id: settings.workspace
+    kind: settings_blob
+    status: active
+    description: Workspace-scoped persisted settings.
+    identity:
+      required_fields:
+        - workspace_id
+        - settings_scope
+      canonical_scope: workspace settings scope
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: true
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+        deny:
+          - renderer_direct_network
+          - renderer_direct_fs
+      attest:
+        allow:
+          - governed_cli_command
+          - main_process_service
+    mutation:
+      class: settings_persist
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - settings_diff
+        - target_identity
+        - governance_decision
+    replay:
+      relationship: observational
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: true
+
+  - id: settings.application
+    kind: settings_blob
+    status: active
+    description: Global application settings outside workspace source truth.
+    identity:
+      required_fields:
+        - settings_scope
+      canonical_scope: global settings scope
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: true
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+      attest:
+        allow:
+          - governed_cli_command
+          - main_process_service
+    mutation:
+      class: settings_persist
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: false
+      readonly_media_behavior: deny
+      required_evidence:
+        - settings_diff
+        - target_identity
+    replay:
+      relationship: none
+      ledger_binding: false
+      verify_binding: false
+      rollback_supported: true
+
+  - id: workspace.trust-state
+    kind: workspace_trust_state
+    status: active
+    description: Trust level and trust decision metadata for a workspace.
+    identity:
+      required_fields:
+        - workspace_id
+      optional_fields:
+        - trust_level
+      canonical_scope: workspace trust state
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+        deny:
+          - renderer_direct_ipc_mutation
+      attest:
+        allow:
+          - main_process_service
+          - governed_cli_command
+    mutation:
+      class: trust_elevation
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: false
+      readonly_media_behavior: deny
+      required_evidence:
+        - workspace_identity
+        - current_trust_state
+        - governance_decision
+    replay:
+      relationship: observational
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: true
+
+  - id: shell.command-invocation
+    kind: command_invocation
+    status: active
+    description: Governed shell or command-runner invocation launched through approved runtime surfaces.
+    identity:
+      required_fields:
+        - command_id
+        - command_vector
+      optional_fields:
+        - workspace_id
+        - cwd
+      canonical_scope: command invocation id
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_network
+          - renderer_direct_fs
+          - ad_hoc_shell_exec
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: shell_execution
+      severity: destructive
+      confirmation: required_destructive
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - command_vector
+        - cwd
+        - environment_summary
+        - governance_decision
+      forbidden_without:
+        - explicit_command_surface
+        - visible_consequence_summary
+    replay:
+      relationship: verify_bound
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: false
+
+  - id: terminal.session
+    kind: terminal_session
+    status: active
+    description: Terminal session surface exposed in app UI but mediated by governed process services.
+    identity:
+      required_fields:
+        - session_id
+      optional_fields:
+        - workspace_id
+      canonical_scope: terminal session id
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+      mutate:
+        allow:
+          - main_process_service
+        deny:
+          - renderer_direct_network
+          - ad_hoc_shell_exec
+      attest:
+        allow:
+          - main_process_service
+    mutation:
+      class: shell_execution
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: true
+      readonly_media_behavior: deny
+      required_evidence:
+        - session_identity
+        - command_summary
+    replay:
+      relationship: observational
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: false
+
+  - id: rpc.governed-method
+    kind: rpc_method
+    status: active
+    description: Approved governed RPC method callable through agent or local runtime.
+    identity:
+      required_fields:
+        - method
+      optional_fields:
+        - method_version
+      canonical_scope: rpc method name
+    visibility:
+      class: auditable
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+      mutate:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+        deny:
+          - renderer_direct_network
+      attest:
+        allow:
+          - governed_agent_rpc
+          - governed_cli_command
+    mutation:
+      class: none
+      severity: informative
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: allow
+      required_evidence:
+        - method_contract
+        - target_payload_schema
+    replay:
+      relationship: verify_bound
+      ledger_binding: optional
+      verify_binding: optional
+      rollback_supported: false
+
+  - id: artifact.export
+    kind: exported_artifact
+    status: active
+    description: User-directed export of logs, ledgers, reports, or packaged outputs.
+    identity:
+      required_fields:
+        - artifact_kind
+        - destination_path
+      optional_fields:
+        - workspace_id
+      canonical_scope: destination path
+    visibility:
+      class: explicit
+      target_visible: true
+      consequence_visible: true
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+          - governed_cli_command
+      mutate:
+        allow:
+          - main_process_service
+          - governed_cli_command
+          - governed_agent_rpc
+        deny:
+          - renderer_direct_fs
+      attest:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+    mutation:
+      class: artifact_export
+      severity: consequential
+      confirmation: required_consequential
+      trusted_workspace_required: false
+      readonly_media_behavior: deny
+      required_evidence:
+        - export_summary
+        - destination_identity
+        - governance_decision
+    replay:
+      relationship: none
+      ledger_binding: false
+      verify_binding: false
+      rollback_supported: false
+
+  - id: app.session-state
+    kind: app_session
+    status: active
+    description: Non-authoritative session UI state such as panel openness, layout, or selected tabs.
+    identity:
+      required_fields:
+        - session_id
+        - state_key
+      canonical_scope: session state key
+    visibility:
+      class: previewable
+      target_visible: true
+      consequence_visible: false
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow:
+          - preload_bridge
+          - main_process_service
+      preview:
+        allow:
+          - preload_bridge
+          - main_process_service
+      mutate:
+        allow:
+          - preload_bridge
+          - main_process_service
+      attest:
+        allow:
+          - main_process_service
+    mutation:
+      class: local_ephemeral
+      severity: harmless
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: allow
+      required_evidence:
+        - state_key
+    replay:
+      relationship: none
+      ledger_binding: false
+      verify_binding: false
+      rollback_supported: false
+
+  - id: forbidden.renderer-direct-authority
+    kind: forbidden_surface
+    status: forbidden
+    description: Any renderer-held filesystem, mutation, network, or apply/verify authority surface.
+    identity:
+      required_fields:
+        - attempted_surface
+      canonical_scope: forbidden surface identity
+    visibility:
+      class: hidden_forbidden
+      target_visible: false
+      consequence_visible: false
+      diff_preview_required_for_mutation: false
+    authority:
+      read:
+        allow: []
+      preview:
+        allow: []
+      mutate:
+        allow: []
+        deny:
+          - renderer_direct_fs
+          - renderer_direct_network
+          - renderer_direct_ipc_mutation
+      attest:
+        allow:
+          - governed_cli_command
+          - governed_agent_rpc
+          - main_process_service
+    mutation:
+      class: none
+      severity: destructive
+      confirmation: none
+      trusted_workspace_required: false
+      readonly_media_behavior: deny
+      required_evidence:
+        - attempted_surface
+        - blocking_policy_reference
+    replay:
+      relationship: none
+      ledger_binding: false
+      verify_binding: false
+      rollback_supported: false
+
+authority_matrix:
+  preload_bridge:
+    may_read:
+      - workspace.source-file
+      - workspace.generated-file
+      - workspace.directory
+      - patch.proposal
+      - patch.review-state
+      - ledger.entry
+      - ledger.selection
+      - verify.result
+      - diagnostics.snapshot
+      - settings.workspace
+      - settings.application
+      - workspace.trust-state
+      - terminal.session
+      - app.session-state
+    may_preview:
+      - workspace.source-file
+      - patch.proposal
+      - ledger.entry
+      - ledger.selection
+      - verify.result
+      - diagnostics.snapshot
+      - settings.workspace
+      - settings.application
+      - app.session-state
+    may_mutate:
+      - ledger.selection
+      - app.session-state
+    may_never_mutate:
+      - workspace.source-file
+      - workspace.generated-file
+      - workspace.directory
+      - patch.proposal
+      - ledger.entry
+      - verify.result
+      - workspace.trust-state
+      - shell.command-invocation
+      - artifact.export
+
+  main_process_service:
+    may_read: all
+    may_preview: all
+    may_mutate:
+      - workspace.source-file
+      - workspace.generated-file
+      - workspace.directory
+      - patch.proposal
+      - patch.review-state
+      - ledger.entry
+      - ledger.selection
+      - settings.workspace
+      - settings.application
+      - workspace.trust-state
+      - shell.command-invocation
+      - terminal.session
+      - artifact.export
+      - app.session-state
+    may_attest:
+      - all
+
+  governed_cli_command:
+    may_read: all
+    may_preview: all
+    may_mutate:
+      - workspace.source-file
+      - workspace.generated-file
+      - workspace.directory
+      - patch.proposal
+      - patch.review-state
+      - ledger.entry
+      - settings.workspace
+      - settings.application
+      - workspace.trust-state
+      - shell.command-invocation
+      - artifact.export
+    may_attest:
+      - all
+
+  governed_agent_rpc:
+    may_read: all
+    may_preview: all
+    may_mutate:
+      - workspace.source-file
+      - workspace.generated-file
+      - workspace.directory
+      - patch.proposal
+      - patch.review-state
+      - ledger.entry
+      - verify.result
+      - shell.command-invocation
+      - artifact.export
+    may_attest:
+      - all
+
+denials:
+  - id: deny-unregistered-target
+    when:
+      target_not_in_registry: true
+    decision: deny
+    reason: No target may inherit governance implicitly.
+  - id: deny-forbidden-surface
+    when:
+      target_status: forbidden
+    decision: deny
+    reason: Forbidden surfaces may only be reported and blocked, never used.
+  - id: deny-hidden-mutation-authority
+    when:
+      authority_surface_not_declared_for_target: true
+    decision: deny
+    reason: Mutation authority must be explicitly bound to target classes.
+  - id: deny-replay-required-target-without-lineage
+    when:
+      replay_relationship: replay_required
+      lineage_missing: true
+    decision: deny
+    reason: Replay-required targets must remain tied to authoritative lineage.
+  - id: deny-destructive-target-without-confirmation-mode
+    when:
+      destructive_mutation_supported: true
+      confirmation_mode_missing: true
+    decision: deny
+    reason: Destructive targets require explicit confirmation semantics.
+attestation:
+  required_fields:
+    - registry_id
+    - registry_version
+    - target_id
+    - target_kind
+    - authority_surface
+    - action
+    - decision
+    - target_identity
+    - evidence_summary
+    - evaluated_at
+  storage:
+    - ledger
+    - governance_log
+    - verify_artifact
+review:
+  cadence: quarterly
+  triggers:
+    - new_target_class
+    - new_authority_surface
+    - renderer_authority_incident
+    - apply_gate_incident
+    - verify_gate_incident
+    - replay_drift_incident

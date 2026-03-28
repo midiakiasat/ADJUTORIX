@@ -1,0 +1,740 @@
+version: 1
+policy_id: adjutorix.command-policy
+title: ADJUTORIX Command Execution Policy
+description: >-
+  Canonical governance policy for shell commands, subprocesses, command-runner
+  actions, terminal sessions, RPC-triggered execution, and scheduler-launched
+  jobs in ADJUTORIX. This policy defines which commands may be previewed,
+  approved, executed, observed, replayed, audited, retried, rolled back, or
+  denied. Its purpose is to prevent hidden authority, non-replayable execution,
+  unbounded environment drift, and mutation by side effect.
+status: active
+owners:
+  - team: core-governance
+  - team: runtime-orchestration
+  - team: cli-runtime
+  - team: app-runtime
+default_decision: deny
+principles:
+  - id: no_invisible_execution
+    statement: Every command must have an explicit command vector, target context, and consequence surface before execution.
+  - id: no_unverifiable_command_success
+    statement: Command success may not be treated as authoritative without declared evidence, exit semantics, and environment identity.
+  - id: no_hidden_authority_execution
+    statement: Commands may only execute from declared surfaces with explicit policy binding.
+  - id: no_unbounded_side_effects
+    statement: Commands with filesystem, process, network, or credential reach must declare scope and remain within allowed boundaries.
+  - id: no_nonreplayable_authority_by_default
+    statement: Commands that cannot be replayed, attested, or bounded are denied unless explicitly classified and justified.
+shared_enums:
+  decision:
+    - allow
+    - allow_with_warning
+    - deny
+  visibility_class:
+    - explicit
+    - auditable
+    - hidden_forbidden
+  confirmation_mode:
+    - none
+    - recommended
+    - required_consequential
+    - required_destructive
+  execution_mode:
+    - preview_only
+    - dry_run
+    - foreground
+    - scheduler_job
+    - terminal_session
+    - batch
+  effect_class:
+    - read_only
+    - local_ephemeral
+    - workspace_mutating
+    - environment_mutating
+    - network_mutating
+    - process_spawning
+    - package_installation
+    - system_modifying
+  replay_class:
+    - none
+    - observational
+    - bounded_replayable
+    - deterministic_required
+  authority_surface:
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+    - terminal_session_surface
+  denied_surface:
+    - renderer_direct_exec
+    - ad_hoc_shell_exec
+    - ungoverned_background_task
+    - raw_subprocess_without_runner
+  credential_exposure:
+    - none
+    - masked_allowed
+    - forbidden
+  network_profile:
+    - none
+    - localhost_only
+    - registry_only
+    - bounded_external
+    - unrestricted
+  environment_profile:
+    - isolated
+    - workspace_bound
+    - inherited_filtered
+    - inherited_full_forbidden
+classification:
+  severities:
+    harmless:
+      description: Non-persistent command observation or preview with no authoritative side effects.
+      confirmation_required: false
+      replay_required: false
+      trusted_workspace_required: false
+    informative:
+      description: Read-only command execution whose primary value is evidence collection.
+      confirmation_required: false
+      replay_required: recommended
+      trusted_workspace_required: false
+    consequential:
+      description: Command can change workspace state, spawned process state, or governed artifacts in recoverable ways.
+      confirmation_required: true
+      replay_required: true
+      trusted_workspace_required: true
+    destructive:
+      description: Command can irreversibly mutate workspace, environment, dependencies, or system state.
+      confirmation_required: true
+      replay_required: true
+      trusted_workspace_required: true
+  command_families:
+    inspect:
+      description: Read-only inspection commands such as list, cat, stat, grep, parse, or metadata extraction.
+      effect_class: read_only
+    verify:
+      description: Commands that execute build/test/diagnostic verification pipelines.
+      effect_class: local_ephemeral
+    replay:
+      description: Commands that reproduce or attest prior state transitions.
+      effect_class: local_ephemeral
+    workspace_edit:
+      description: Commands that may modify files under the trusted workspace.
+      effect_class: workspace_mutating
+    package_manager:
+      description: Commands that install, remove, lock, or rebuild dependencies.
+      effect_class: package_installation
+    terminal_interactive:
+      description: Interactive shell or PTY-backed command session.
+      effect_class: process_spawning
+    system:
+      description: Commands affecting the OS, host config, processes, or privileged runtime state.
+      effect_class: system_modifying
+    network:
+      description: Commands whose primary function is outbound or remote interaction.
+      effect_class: network_mutating
+authority:
+  allowed_surfaces:
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+    - terminal_session_surface
+  denied_surfaces:
+    - renderer_direct_exec
+    - ad_hoc_shell_exec
+    - ungoverned_background_task
+    - raw_subprocess_without_runner
+  requirements:
+    authority_visible: true
+    command_visible: true
+    argv_visible: true
+    cwd_visible: true
+    consequence_visible: true
+    environment_summary_visible: true
+    target_workspace_visible: true
+workspace_requirements:
+  trusted_workspace_required_for:
+    - workspace_edit
+    - package_manager
+    - terminal_interactive
+    - system
+  workspace_health:
+    minimum_for_inspect: degraded
+    minimum_for_verify: degraded
+    minimum_for_replay: healthy
+    minimum_for_workspace_edit: healthy
+    minimum_for_package_manager: healthy
+    minimum_for_terminal_interactive: healthy
+    minimum_for_system: healthy
+  readonly_media:
+    inspect: allow
+    verify: allow_with_warning
+    replay: deny
+    workspace_edit: deny
+    package_manager: deny
+    terminal_interactive: deny
+    system: deny
+  detached_workspace_behavior:
+    inspect: allow_with_warning
+    verify: allow_with_warning
+    replay: deny
+    workspace_edit: deny
+    package_manager: deny
+    terminal_interactive: deny
+verification_requirements:
+  required_before:
+    workspace_edit:
+      - verify_passed
+      - replay_lineage_ok
+    package_manager:
+      - verify_passed
+      - workspace_clean_or_explicitly_acknowledged
+    system:
+      - verify_passed
+      - explicit_policy_match
+  stale_verify_behavior:
+    inspect: allow_with_warning
+    verify: allow
+    replay: deny
+    workspace_edit: deny
+    package_manager: deny
+    system: deny
+  max_verify_age_seconds:
+    verify: 1800
+    replay: 600
+    workspace_edit: 300
+    package_manager: 300
+    system: 300
+environment_requirements:
+  fingerprint_required_for:
+    - verify
+    - replay
+    - workspace_edit
+    - package_manager
+    - system
+  environment_match:
+    inspect:
+      allow:
+        - exact
+        - compatible
+        - drifted
+        - unknown
+    verify:
+      allow:
+        - exact
+        - compatible
+    replay:
+      allow:
+        - exact
+        - compatible
+    workspace_edit:
+      allow:
+        - exact
+        - compatible
+    package_manager:
+      allow:
+        - exact
+    system:
+      allow:
+        - exact
+  inherited_environment_policy:
+    default: inherited_filtered
+    filtered_keys:
+      deny_prefixes:
+        - AWS_
+        - GCP_
+        - AZURE_
+        - OPENAI_
+        - ANTHROPIC_
+        - GEMINI_
+        - SSH_
+        - GITHUB_TOKEN
+        - CI_JOB_TOKEN
+      allow_explicit:
+        - PATH
+        - HOME
+        - SHELL
+        - TERM
+        - LANG
+        - LC_ALL
+        - TMPDIR
+        - PWD
+  working_directory_policy:
+    require_explicit_cwd: true
+    cwd_must_be_within:
+      - workspace_root
+      - approved_temp_root
+    deny_if_outside_approved_roots: true
+network_requirements:
+  inspect:
+    network_profile:
+      allow:
+        - none
+        - localhost_only
+  verify:
+    network_profile:
+      allow:
+        - none
+        - localhost_only
+        - registry_only
+  replay:
+    network_profile:
+      allow:
+        - none
+        - localhost_only
+  workspace_edit:
+    network_profile:
+      allow:
+        - none
+        - localhost_only
+  package_manager:
+    network_profile:
+      allow:
+        - none
+        - registry_only
+        - bounded_external
+  system:
+    network_profile:
+      allow:
+        - none
+        - localhost_only
+confirmation:
+  freshness_seconds: 300
+  explicit_subject_match_required: true
+  explicit_scope_match_required: true
+  required_for:
+    consequential:
+      - workspace_edit
+      - package_manager
+      - terminal_interactive
+    destructive:
+      - system
+      - package_manager
+      - workspace_edit
+  invalidators:
+    - argv_changed
+    - cwd_changed
+    - environment_fingerprint_changed
+    - workspace_id_changed
+    - command_family_changed
+    - effect_class_changed
+forbidden_patterns:
+  executable_names:
+    - sudo
+    - su
+    - doas
+    - passwd
+    - launchctl
+    - diskutil
+    - mkfs
+    - fdisk
+    - dd
+    - format
+    - reg
+    - sc.exe
+    - netsh
+  shell_fragments:
+    - ' rm -rf /'
+    - ' chmod -R 777 /'
+    - ' chown -R '
+    - ' curl | sh'
+    - ' wget | sh'
+    - ' eval '
+    - 'bash -c'
+    - 'sh -c'
+    - 'powershell -EncodedCommand'
+    - 'python -c'
+    - 'node -e'
+  reasons:
+    default: Hidden or over-broad command semantics are forbidden.
+command_profiles:
+  - id: inspect.fs-list
+    family: inspect
+    description: Workspace listing and metadata inspection.
+    match:
+      executable_in:
+        - ls
+        - find
+        - stat
+        - tree
+      network_profile: none
+    severity: informative
+    execution_mode:
+      allow:
+        - preview_only
+        - foreground
+    confirmation: none
+    replay:
+      class: observational
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - stdout_digest
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      deny_shell_wrapper: true
+
+  - id: inspect.file-content
+    family: inspect
+    description: Read-only file content extraction.
+    match:
+      executable_in:
+        - cat
+        - sed
+        - head
+        - tail
+        - grep
+        - rg
+      network_profile: none
+    severity: informative
+    execution_mode:
+      allow:
+        - preview_only
+        - foreground
+    confirmation: none
+    replay:
+      class: observational
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - stdout_digest
+    constraints:
+      deny_if_args_contain:
+        - -i
+      deny_shell_wrapper: true
+
+  - id: verify.project-tests
+    family: verify
+    description: Build/test/lint commands that validate workspace state.
+    match:
+      executable_in:
+        - npm
+        - pnpm
+        - yarn
+        - pytest
+        - python
+        - npx
+      argv_patterns_any:
+        - test
+        - verify
+        - lint
+        - typecheck
+        - build
+      network_profile_any:
+        - none
+        - localhost_only
+        - registry_only
+    severity: consequential
+    execution_mode:
+      allow:
+        - foreground
+        - scheduler_job
+    confirmation: required_consequential
+    replay:
+      class: deterministic_required
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - stdout_digest
+        - stderr_digest
+        - environment_fingerprint
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      require_clean_workspace_or_ack: true
+      deny_shell_wrapper: true
+
+  - id: replay.authoritative
+    family: replay
+    description: Commands whose purpose is to replay or attest historical state.
+    match:
+      executable_in:
+        - adjutorix
+        - python
+      argv_patterns_any:
+        - replay
+        - ledger
+        - verify
+      network_profile_any:
+        - none
+        - localhost_only
+    severity: consequential
+    execution_mode:
+      allow:
+        - foreground
+        - scheduler_job
+    confirmation: required_consequential
+    replay:
+      class: deterministic_required
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - stdout_digest
+        - stderr_digest
+        - selected_seq
+        - ledger_id
+        - environment_fingerprint
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      deny_shell_wrapper: true
+      require_verify_fresh: true
+
+  - id: workspace.edit.formatter
+    family: workspace_edit
+    description: Controlled formatter or codemod run within workspace root.
+    match:
+      executable_in:
+        - prettier
+        - ruff
+        - eslint
+        - python
+        - node
+      argv_patterns_any:
+        - --write
+        - format
+        - fix
+      network_profile: none
+    severity: consequential
+    execution_mode:
+      allow:
+        - foreground
+        - scheduler_job
+    confirmation: required_consequential
+    replay:
+      class: bounded_replayable
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - changed_files
+        - environment_fingerprint
+        - governance_decision
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      require_trusted_workspace: true
+      require_verify_fresh: true
+      deny_shell_wrapper: true
+      deny_if_target_outside_workspace: true
+
+  - id: package.installation
+    family: package_manager
+    description: Dependency installation, lock reconciliation, or package graph mutation.
+    match:
+      executable_in:
+        - npm
+        - pnpm
+        - yarn
+        - pip
+        - python
+      argv_patterns_any:
+        - install
+        - add
+        - remove
+        - uninstall
+        - sync
+        - update
+      network_profile_any:
+        - registry_only
+        - bounded_external
+    severity: destructive
+    execution_mode:
+      allow:
+        - foreground
+        - scheduler_job
+    confirmation: required_destructive
+    replay:
+      class: bounded_replayable
+      evidence_required:
+        - argv
+        - cwd
+        - exit_code
+        - changed_files
+        - lockfile_delta
+        - environment_fingerprint
+        - governance_decision
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      require_trusted_workspace: true
+      require_verify_fresh: true
+      require_workspace_clean_or_ack: true
+      deny_shell_wrapper: true
+      require_network_profile_in:
+        - registry_only
+        - bounded_external
+
+  - id: terminal.interactive
+    family: terminal_interactive
+    description: Interactive terminal session mediated by governed PTY/session surfaces.
+    match:
+      execution_mode: terminal_session
+    severity: consequential
+    confirmation: required_consequential
+    replay:
+      class: observational
+      evidence_required:
+        - session_id
+        - cwd
+        - environment_fingerprint
+        - command_transcript_digest
+    constraints:
+      require_explicit_cwd: true
+      cwd_within_workspace: true
+      require_trusted_workspace: true
+      deny_if_surface_not_terminal_session_surface: true
+
+  - id: system.forbidden
+    family: system
+    description: Commands with privileged, host-wide, or hidden semantics.
+    match:
+      executable_in:
+        - sudo
+        - su
+        - doas
+        - diskutil
+        - dd
+        - fdisk
+        - launchctl
+        - reg
+        - sc.exe
+        - netsh
+    severity: destructive
+    decision: deny
+    confirmation: none
+    replay:
+      class: none
+    constraints:
+      always_deny: true
+      rationale: Commands with host-wide or privilege-escalating effects are outside governed workspace policy.
+decision_matrix:
+  inspect:
+    on_missing_verify: allow
+    on_environment_drift: allow_with_warning
+    on_workspace_degraded: allow_with_warning
+    on_missing_confirmation: allow
+  verify:
+    on_missing_verify: allow
+    on_environment_drift: deny
+    on_workspace_degraded: allow_with_warning
+    on_missing_confirmation: deny
+  replay:
+    on_missing_verify: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_missing_confirmation: deny
+  workspace_edit:
+    on_missing_verify: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_missing_confirmation: deny
+    on_nonreplayable_command: deny
+  package_manager:
+    on_missing_verify: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_missing_confirmation: deny
+    on_workspace_unclean: deny
+  system:
+    on_missing_verify: deny
+    on_environment_drift: deny
+    on_workspace_degraded: deny
+    on_missing_confirmation: deny
+    on_unapproved_executable: deny
+evidence:
+  required_common_fields:
+    - command_id
+    - authority_surface
+    - command_vector
+    - executable
+    - args
+    - cwd
+    - workspace_id
+    - environment_fingerprint
+    - started_at
+    - finished_at
+    - exit_code
+    - stdout_digest
+    - stderr_digest
+    - decision
+    - policy_id
+    - policy_version
+  optional_fields:
+    - selected_seq
+    - ledger_id
+    - verify_id
+    - changed_files
+    - lockfile_delta
+    - terminal_session_id
+  redaction:
+    redact_env_keys_matching:
+      - .*TOKEN.*
+      - .*SECRET.*
+      - .*PASSWORD.*
+      - .*KEY.*
+    redact_args_matching:
+      - --token=.*
+      - --password=.*
+      - --secret=.*
+attestation:
+  write_targets:
+    - ledger
+    - governance_log
+    - command_audit_log
+    - verify_artifact
+  required_dimensions:
+    - family
+    - severity
+    - execution_mode
+    - effect_class
+    - authority_surface
+    - network_profile
+    - environment_match
+    - confirmation_present
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - command_profile
+    - scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 7
+    allow_for_forbidden_executables: false
+    allow_for_renderer_execution: false
+    allow_for_unbounded_network: false
+telemetry:
+  emit_on:
+    - allow
+    - allow_with_warning
+    - deny
+  required_dimensions:
+    - command_profile
+    - family
+    - severity
+    - decision
+    - workspace_trust
+    - verify_status
+    - environment_match
+    - effect_class
+    - authority_surface
+review:
+  cadence: quarterly
+  triggers:
+    - new_command_surface
+    - new_terminal_surface
+    - command_audit_gap
+    - scheduler_bypass_incident
+    - apply_gate_incident
+    - replay_drift_incident

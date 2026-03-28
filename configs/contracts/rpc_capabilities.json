@@ -1,0 +1,1627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contract_id": "adjutorix.rpc-capabilities",
+  "version": 1,
+  "title": "ADJUTORIX RPC Capabilities Contract",
+  "description": "Canonical machine-readable contract describing governed RPC methods, capability classes, authority constraints, input/output schemas, policy bindings, and attestation semantics for the ADJUTORIX runtime.",
+  "meta": {
+    "owners": [
+      "core-governance",
+      "agent-runtime",
+      "cli-runtime",
+      "app-runtime"
+    ],
+    "status": "active",
+    "default_decision": "deny",
+    "invariants": [
+      "No callable mutation surface without explicit policy binding.",
+      "No authoritative readiness or success claim without verify/replay evidence where required.",
+      "No hidden capability escalation by transport, client, or caller identity alone.",
+      "No method may return unredacted secrets or credential material.",
+      "Every consequential method must emit auditable evidence fields."
+    ]
+  },
+  "enums": {
+    "authority_surface": [
+      "governed_agent_rpc"
+    ],
+    "trust_level": [
+      "none",
+      "observed",
+      "tentative",
+      "trusted",
+      "elevated",
+      "quarantined",
+      "revoked"
+    ],
+    "workspace_health": [
+      "healthy",
+      "degraded",
+      "unhealthy",
+      "blocked"
+    ],
+    "verify_status": [
+      "pending",
+      "running",
+      "passed",
+      "warning",
+      "failed",
+      "blocked",
+      "stale",
+      "superseded"
+    ],
+    "apply_readiness": [
+      "ready",
+      "caution",
+      "blocked",
+      "unknown"
+    ],
+    "replay_status": [
+      "pending",
+      "running",
+      "passed",
+      "warning",
+      "failed",
+      "blocked",
+      "stale",
+      "superseded"
+    ],
+    "determinism_state": [
+      "deterministic",
+      "non_deterministic",
+      "unknown"
+    ],
+    "environment_match": [
+      "exact",
+      "compatible",
+      "drifted",
+      "unknown"
+    ],
+    "capability_class": [
+      "identity",
+      "health",
+      "workspace",
+      "verify",
+      "replay",
+      "ledger",
+      "patch",
+      "command",
+      "diagnostics",
+      "settings",
+      "governance",
+      "release"
+    ],
+    "mutation_class": [
+      "none",
+      "local_ephemeral",
+      "settings_persist",
+      "workspace_write",
+      "patch_apply",
+      "rollback",
+      "shell_execution",
+      "artifact_export",
+      "trust_elevation"
+    ],
+    "confirmation_mode": [
+      "none",
+      "recommended",
+      "required_consequential",
+      "required_destructive"
+    ],
+    "idempotency": [
+      "idempotent",
+      "conditionally_idempotent",
+      "non_idempotent"
+    ],
+    "transport": [
+      "jsonrpc-2.0"
+    ],
+    "error_code": [
+      "E_PARSE",
+      "E_INVALID_PARAMS",
+      "E_UNAUTHORIZED",
+      "E_FORBIDDEN",
+      "E_TRUST_REQUIRED",
+      "E_WORKSPACE_REQUIRED",
+      "E_WORKSPACE_UNHEALTHY",
+      "E_VERIFY_REQUIRED",
+      "E_VERIFY_STALE",
+      "E_REPLAY_REQUIRED",
+      "E_REPLAY_BLOCKED",
+      "E_CONFIRMATION_REQUIRED",
+      "E_POLICY_DENIED",
+      "E_TARGET_NOT_FOUND",
+      "E_CONFLICT",
+      "E_TIMEOUT",
+      "E_INTERNAL"
+    ]
+  },
+  "shared": {
+    "required_request_meta": [
+      "request_id",
+      "client",
+      "sent_at"
+    ],
+    "required_audit_fields": [
+      "method",
+      "capability_class",
+      "authority_surface",
+      "decision",
+      "evaluated_at"
+    ],
+    "required_consequential_audit_fields": [
+      "workspace_id",
+      "trust_level",
+      "workspace_health",
+      "policy_bindings",
+      "environment_fingerprint"
+    ],
+    "policy_bindings": {
+      "workspace": "adjutorix.workspace-policy",
+      "mutation": "adjutorix.mutation-policy",
+      "command": "adjutorix.command-policy",
+      "verify": "adjutorix.verify-policy",
+      "trust": "adjutorix.trust-policy",
+      "targets": "adjutorix.governed-targets",
+      "secrets": "adjutorix.secrets-policy",
+      "release": "adjutorix.release-policy"
+    }
+  },
+  "schemas": {
+    "uuid_like": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "workspace_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "root_path",
+        "canonical_root_path",
+        "trust_level",
+        "workspace_health"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "canonical_root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "trust_level": {
+          "$ref": "#/$defs/trust_level"
+        },
+        "workspace_health": {
+          "$ref": "#/$defs/workspace_health"
+        },
+        "workspace_kind": {
+          "type": "string"
+        },
+        "filesystem_fingerprint": {
+          "type": "string"
+        }
+      }
+    },
+    "environment_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorded_environment_fingerprint",
+        "current_environment_fingerprint",
+        "environment_match"
+      ],
+      "properties": {
+        "recorded_environment_fingerprint": {
+          "type": "string"
+        },
+        "current_environment_fingerprint": {
+          "type": "string"
+        },
+        "environment_match": {
+          "$ref": "#/$defs/environment_match"
+        },
+        "toolchain": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verify_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verify_id",
+        "verify_status",
+        "apply_readiness"
+      ],
+      "properties": {
+        "verify_id": {
+          "type": "string"
+        },
+        "verify_status": {
+          "$ref": "#/$defs/verify_status"
+        },
+        "apply_readiness": {
+          "$ref": "#/$defs/apply_readiness"
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "blocking_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "replay_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_status",
+        "determinism_state",
+        "replayable_lineage"
+      ],
+      "properties": {
+        "replay_status": {
+          "$ref": "#/$defs/replay_status"
+        },
+        "determinism_state": {
+          "$ref": "#/$defs/determinism_state"
+        },
+        "replayable_lineage": {
+          "type": "boolean"
+        },
+        "ledger_id": {
+          "type": "string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "policy_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "policy_bindings",
+        "evaluated_at"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "policy_bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "audit_envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "capability_class",
+        "authority_surface",
+        "decision",
+        "evaluated_at"
+      ],
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "capability_class": {
+          "$ref": "#/$defs/capability_class"
+        },
+        "authority_surface": {
+          "$ref": "#/$defs/authority_surface"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "workspace_id": {
+          "type": "string"
+        },
+        "trust_level": {
+          "$ref": "#/$defs/trust_level"
+        },
+        "workspace_health": {
+          "$ref": "#/$defs/workspace_health"
+        },
+        "environment_fingerprint": {
+          "type": "string"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "jsonrpc_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/error_code"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "methods": {
+    "system.ping": {
+      "title": "System Ping",
+      "capability_class": "identity",
+      "description": "Liveness and compatibility probe for the governed RPC endpoint.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "none",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "server_time",
+          "rpc_contract_id",
+          "rpc_contract_version",
+          "audit"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "server_time": {
+            "$ref": "#/$defs/timestamp"
+          },
+          "rpc_contract_id": {
+            "const": "adjutorix.rpc-capabilities"
+          },
+          "rpc_contract_version": {
+            "const": 1
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_INTERNAL"
+      ]
+    },
+    "system.capabilities": {
+      "title": "Enumerate Capabilities",
+      "capability_class": "identity",
+      "description": "Return the active method/capability registry visible to the client, including policy and authority bindings.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "include_methods": {
+            "type": "boolean",
+            "default": true
+          },
+          "include_policies": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract_id",
+          "version",
+          "methods",
+          "audit"
+        ],
+        "properties": {
+          "contract_id": {
+            "const": "adjutorix.rpc-capabilities"
+          },
+          "version": {
+            "const": 1
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policy_bindings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_UNAUTHORIZED",
+        "E_INTERNAL"
+      ]
+    },
+    "workspace.open": {
+      "title": "Open Workspace",
+      "capability_class": "workspace",
+      "description": "Resolve, classify, and open a candidate workspace root under workspace policy.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "local_ephemeral",
+      "confirmation_mode": "recommended",
+      "idempotency": "conditionally_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false,
+        "policy_bindings": [
+          "adjutorix.workspace-policy",
+          "adjutorix.trust-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "root_path"
+        ],
+        "properties": {
+          "root_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "restore_session": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "workspace": {
+            "$ref": "#/$defs/workspace_identity"
+          },
+          "restored_session": {
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_INVALID_PARAMS",
+        "E_POLICY_DENIED",
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "workspace.health": {
+      "title": "Workspace Health",
+      "capability_class": "health",
+      "description": "Return current workspace identity, trust, health, ignore, and watcher state.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace",
+          "watch_mode",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "workspace": {
+            "$ref": "#/$defs/workspace_identity"
+          },
+          "watch_mode": {
+            "type": "string"
+          },
+          "ignore_profile_id": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_WORKSPACE_REQUIRED",
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "verify.run": {
+      "title": "Run Verification",
+      "capability_class": "verify",
+      "description": "Run a governed verification aggregation over an explicit target scope and emit authoritative verify evidence.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "local_ephemeral",
+      "confirmation_mode": "recommended",
+      "idempotency": "conditionally_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "trusted",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false,
+        "minimum_workspace_health": "healthy",
+        "policy_bindings": [
+          "adjutorix.verify-policy",
+          "adjutorix.workspace-policy",
+          "adjutorix.trust-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id",
+          "verify_kind",
+          "scope_kind",
+          "target_identity"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "verify_kind": {
+            "type": "string",
+            "enum": [
+              "informational",
+              "mutation_guard",
+              "release_guard"
+            ]
+          },
+          "scope_kind": {
+            "type": "string",
+            "enum": [
+              "patch",
+              "workspace",
+              "ledger_selection",
+              "release_candidate",
+              "targeted_files",
+              "command_result"
+            ]
+          },
+          "target_identity": {
+            "type": "object"
+          },
+          "force_refresh": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "verify",
+          "environment",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "verify": {
+            "$ref": "#/$defs/verify_summary"
+          },
+          "environment": {
+            "$ref": "#/$defs/environment_summary"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_INVALID_PARAMS",
+        "E_TRUST_REQUIRED",
+        "E_WORKSPACE_REQUIRED",
+        "E_WORKSPACE_UNHEALTHY",
+        "E_POLICY_DENIED",
+        "E_INTERNAL"
+      ]
+    },
+    "verify.status": {
+      "title": "Verify Status",
+      "capability_class": "verify",
+      "description": "Return an existing verify result and freshness/relevance state for a verify identifier.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "verify_id"
+        ],
+        "properties": {
+          "verify_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "verify",
+          "environment",
+          "audit"
+        ],
+        "properties": {
+          "verify": {
+            "$ref": "#/$defs/verify_summary"
+          },
+          "environment": {
+            "$ref": "#/$defs/environment_summary"
+          },
+          "superseded_by": {
+            "type": "string"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "replay.run": {
+      "title": "Run Replay",
+      "capability_class": "replay",
+      "description": "Run a governed replay or lineage assessment over a ledger selection or workspace scope.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "local_ephemeral",
+      "confirmation_mode": "recommended",
+      "idempotency": "conditionally_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "trusted",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false,
+        "minimum_workspace_health": "healthy",
+        "policy_bindings": [
+          "adjutorix.verify-policy",
+          "adjutorix.workspace-policy",
+          "adjutorix.trust-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "ledger_id": {
+            "type": "string"
+          },
+          "selected_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "target_identity": {
+            "type": "object"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "replay",
+          "environment",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "replay": {
+            "$ref": "#/$defs/replay_summary"
+          },
+          "environment": {
+            "$ref": "#/$defs/environment_summary"
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TRUST_REQUIRED",
+        "E_WORKSPACE_REQUIRED",
+        "E_WORKSPACE_UNHEALTHY",
+        "E_POLICY_DENIED",
+        "E_INTERNAL"
+      ]
+    },
+    "ledger.status": {
+      "title": "Ledger Status",
+      "capability_class": "ledger",
+      "description": "Return current ledger identity, selected sequence, head sequence, and rollback availability.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ledger_id",
+          "selected_seq",
+          "head_seq",
+          "audit"
+        ],
+        "properties": {
+          "ledger_id": {
+            "type": "string"
+          },
+          "selected_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "head_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rollback_target_available": {
+            "type": "boolean"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_WORKSPACE_REQUIRED",
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "patch.preview": {
+      "title": "Preview Patch",
+      "capability_class": "patch",
+      "description": "Materialize a governed preview of a patch or patch set without crossing the apply boundary.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id",
+          "patch_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "patch_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "patch_id",
+          "changed_files",
+          "diff_summary",
+          "audit"
+        ],
+        "properties": {
+          "patch_id": {
+            "type": "string"
+          },
+          "changed_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "diff_summary": {
+            "type": "object"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_WORKSPACE_REQUIRED",
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "patch.apply": {
+      "title": "Apply Patch",
+      "capability_class": "patch",
+      "description": "Cross the governed apply boundary for a patch after trust, verify, replay, policy, and confirmation requirements pass.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "patch_apply",
+      "confirmation_mode": "required_destructive",
+      "idempotency": "non_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "trusted",
+        "workspace_required": true,
+        "verify_required": true,
+        "replay_required": true,
+        "minimum_workspace_health": "healthy",
+        "required_verify_status": [
+          "passed"
+        ],
+        "required_apply_readiness": [
+          "ready"
+        ],
+        "required_determinism_state": [
+          "deterministic"
+        ],
+        "required_environment_match": [
+          "exact",
+          "compatible"
+        ],
+        "policy_bindings": [
+          "adjutorix.mutation-policy",
+          "adjutorix.verify-policy",
+          "adjutorix.workspace-policy",
+          "adjutorix.trust-policy",
+          "adjutorix.governed-targets"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id",
+          "patch_id",
+          "verify_id",
+          "confirmation_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "patch_id": {
+            "type": "string"
+          },
+          "verify_id": {
+            "type": "string"
+          },
+          "confirmation_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "applied",
+          "workspace_id",
+          "patch_id",
+          "ledger_id",
+          "selected_seq",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "patch_id": {
+            "type": "string"
+          },
+          "ledger_id": {
+            "type": "string"
+          },
+          "selected_seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rollback_target_available": {
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TRUST_REQUIRED",
+        "E_WORKSPACE_REQUIRED",
+        "E_WORKSPACE_UNHEALTHY",
+        "E_VERIFY_REQUIRED",
+        "E_VERIFY_STALE",
+        "E_REPLAY_REQUIRED",
+        "E_REPLAY_BLOCKED",
+        "E_CONFIRMATION_REQUIRED",
+        "E_POLICY_DENIED",
+        "E_CONFLICT",
+        "E_INTERNAL"
+      ]
+    },
+    "command.run": {
+      "title": "Run Governed Command",
+      "capability_class": "command",
+      "description": "Execute a governed command profile under command, workspace, trust, and secrets policy.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "shell_execution",
+      "confirmation_mode": "required_consequential",
+      "idempotency": "non_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "trusted",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false,
+        "minimum_workspace_health": "healthy",
+        "policy_bindings": [
+          "adjutorix.command-policy",
+          "adjutorix.workspace-policy",
+          "adjutorix.secrets-policy",
+          "adjutorix.trust-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id",
+          "profile_id",
+          "argv",
+          "cwd"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "profile_id": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "confirmation_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command_id",
+          "exit_code",
+          "stdout_digest",
+          "stderr_digest",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "command_id": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "stdout_digest": {
+            "type": "string"
+          },
+          "stderr_digest": {
+            "type": "string"
+          },
+          "changed_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TRUST_REQUIRED",
+        "E_WORKSPACE_REQUIRED",
+        "E_WORKSPACE_UNHEALTHY",
+        "E_CONFIRMATION_REQUIRED",
+        "E_POLICY_DENIED",
+        "E_INTERNAL"
+      ]
+    },
+    "diagnostics.status": {
+      "title": "Diagnostics Status",
+      "capability_class": "diagnostics",
+      "description": "Return current diagnostics snapshot for the requested workspace or file scope.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": true,
+        "verify_required": false,
+        "replay_required": false
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspace_id"
+        ],
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "diagnostics_id",
+          "diagnostics_count",
+          "blocking_diagnostics_count",
+          "audit"
+        ],
+        "properties": {
+          "diagnostics_id": {
+            "type": "string"
+          },
+          "diagnostics_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocking_diagnostics_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_WORKSPACE_REQUIRED",
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    },
+    "settings.get": {
+      "title": "Get Settings",
+      "capability_class": "settings",
+      "description": "Read governed application or workspace settings without exposing secret values.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "observed",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false,
+        "policy_bindings": [
+          "adjutorix.workspace-policy",
+          "adjutorix.secrets-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "application",
+              "workspace"
+            ]
+          },
+          "workspace_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "settings",
+          "audit"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "object"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_INVALID_PARAMS",
+        "E_WORKSPACE_REQUIRED",
+        "E_INTERNAL"
+      ]
+    },
+    "settings.set": {
+      "title": "Set Settings",
+      "capability_class": "settings",
+      "description": "Persist governed application or workspace settings under settings, secrets, and trust policy.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "settings_persist",
+      "confirmation_mode": "required_consequential",
+      "idempotency": "conditionally_idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "trusted",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false,
+        "policy_bindings": [
+          "adjutorix.workspace-policy",
+          "adjutorix.secrets-policy",
+          "adjutorix.trust-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "values",
+          "confirmation_id"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "application",
+              "workspace"
+            ]
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object"
+          },
+          "confirmation_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "updated",
+          "policy",
+          "audit"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/$defs/policy_decision"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TRUST_REQUIRED",
+        "E_CONFIRMATION_REQUIRED",
+        "E_POLICY_DENIED",
+        "E_INTERNAL"
+      ]
+    },
+    "release.status": {
+      "title": "Release Status",
+      "capability_class": "release",
+      "description": "Return governed release candidate or release artifact status, including signing and verification summaries.",
+      "transport": "jsonrpc-2.0",
+      "mutation_class": "none",
+      "confirmation_mode": "none",
+      "idempotency": "idempotent",
+      "trust_requirements": {
+        "minimum_trust_level": "tentative",
+        "workspace_required": false,
+        "verify_required": false,
+        "replay_required": false,
+        "policy_bindings": [
+          "adjutorix.release-policy",
+          "adjutorix.verify-policy"
+        ]
+      },
+      "request": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "release_id"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "release_id",
+          "release_kind",
+          "release_channel",
+          "verification_state",
+          "signing_state",
+          "promotion_state",
+          "audit"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "string"
+          },
+          "release_kind": {
+            "type": "string"
+          },
+          "release_channel": {
+            "type": "string"
+          },
+          "verification_state": {
+            "$ref": "#/$defs/verify_status"
+          },
+          "signing_state": {
+            "type": "string"
+          },
+          "promotion_state": {
+            "type": "string"
+          },
+          "audit": {
+            "$ref": "#/$defs/audit_envelope"
+          }
+        }
+      },
+      "errors": [
+        "E_TARGET_NOT_FOUND",
+        "E_INTERNAL"
+      ]
+    }
+  },
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "$ref": "#/schemas/timestamp"
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": [
+        "none",
+        "observed",
+        "tentative",
+        "trusted",
+        "elevated",
+        "quarantined",
+        "revoked"
+      ]
+    },
+    "workspace_health": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "degraded",
+        "unhealthy",
+        "blocked"
+      ]
+    },
+    "verify_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "passed",
+        "warning",
+        "failed",
+        "blocked",
+        "stale",
+        "superseded"
+      ]
+    },
+    "apply_readiness": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "caution",
+        "blocked",
+        "unknown"
+      ]
+    },
+    "replay_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "passed",
+        "warning",
+        "failed",
+        "blocked",
+        "stale",
+        "superseded"
+      ]
+    },
+    "determinism_state": {
+      "type": "string",
+      "enum": [
+        "deterministic",
+        "non_deterministic",
+        "unknown"
+      ]
+    },
+    "environment_match": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "compatible",
+        "drifted",
+        "unknown"
+      ]
+    },
+    "capability_class": {
+      "type": "string",
+      "enum": [
+        "identity",
+        "health",
+        "workspace",
+        "verify",
+        "replay",
+        "ledger",
+        "patch",
+        "command",
+        "diagnostics",
+        "settings",
+        "governance",
+        "release"
+      ]
+    },
+    "authority_surface": {
+      "type": "string",
+      "enum": [
+        "governed_agent_rpc"
+      ]
+    },
+    "error_code": {
+      "type": "string",
+      "enum": [
+        "E_PARSE",
+        "E_INVALID_PARAMS",
+        "E_UNAUTHORIZED",
+        "E_FORBIDDEN",
+        "E_TRUST_REQUIRED",
+        "E_WORKSPACE_REQUIRED",
+        "E_WORKSPACE_UNHEALTHY",
+        "E_VERIFY_REQUIRED",
+        "E_VERIFY_STALE",
+        "E_REPLAY_REQUIRED",
+        "E_REPLAY_BLOCKED",
+        "E_CONFIRMATION_REQUIRED",
+        "E_POLICY_DENIED",
+        "E_TARGET_NOT_FOUND",
+        "E_CONFLICT",
+        "E_TIMEOUT",
+        "E_INTERNAL"
+      ]
+    },
+    "workspace_identity": {
+      "$ref": "#/schemas/workspace_identity"
+    },
+    "environment_summary": {
+      "$ref": "#/schemas/environment_summary"
+    },
+    "verify_summary": {
+      "$ref": "#/schemas/verify_summary"
+    },
+    "replay_summary": {
+      "$ref": "#/schemas/replay_summary"
+    },
+    "policy_decision": {
+      "$ref": "#/schemas/policy_decision"
+    },
+    "audit_envelope": {
+      "$ref": "#/schemas/audit_envelope"
+    },
+    "jsonrpc_error": {
+      "$ref": "#/schemas/jsonrpc_error"
+    }

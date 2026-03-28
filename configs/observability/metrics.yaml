@@ -1,0 +1,611 @@
+version: 1
+registry_id: adjutorix.metrics
+title: ADJUTORIX Metrics Registry
+description: >-
+  Canonical machine-readable registry of metrics emitted by ADJUTORIX across app,
+  preload, main process, agent, CLI, scheduler, verify, replay, ledger,
+  governance, command execution, workspace management, release, and recovery.
+  This registry defines metric identity, type, unit, label schema, aggregation
+  semantics, cardinality bounds, and alerting intent so observability remains
+  governed, stable, and operationally meaningful.
+status: active
+owners:
+  - team: core-governance
+  - team: runtime-observability
+  - team: agent-runtime
+  - team: app-runtime
+  - team: release-engineering
+defaults:
+  unknown_metric_behavior: deny
+  missing_label_behavior: deny
+  unknown_unit_behavior: deny
+  export_format: prometheus-compatible
+invariants:
+  - id: no_undeclared_metric
+    statement: No runtime surface may emit metrics that are not declared in this registry.
+  - id: bounded_cardinality
+    statement: Metric labels must remain within declared cardinality constraints and may not encode unbounded user content.
+  - id: no_secret_metric_content
+    statement: Metrics must never contain secrets, tokens, raw file contents, or plaintext command arguments.
+  - id: governed_interpretation
+    statement: Every metric must have explicit type, unit, and intended semantic interpretation.
+  - id: cross-surface_joinability
+    statement: Related metrics must share stable labels and naming so cross-surface analysis is mechanically possible.
+shared_enums:
+  surface:
+    - renderer
+    - preload
+    - main
+    - agent
+    - cli
+    - scheduler
+    - verify
+    - replay
+    - ledger
+    - governance
+    - command
+    - workspace
+    - release
+    - recovery
+    - security
+    - observability
+  metric_type:
+    - counter
+    - gauge
+    - histogram
+  unit:
+    - count
+    - milliseconds
+    - seconds
+    - bytes
+    - ratio
+    - boolean
+  stability:
+    - experimental
+    - internal
+    - beta
+    - stable
+    - deprecated
+  cardinality:
+    - fixed_low
+    - bounded_low
+    - bounded_medium
+    - forbidden_high
+  alert_severity:
+    - none
+    - warning
+    - critical
+naming:
+  prefix: adjutorix_
+  rules:
+    - snake_case_only
+    - unit_suffix_required_for_histograms_and_gauges_when_applicable
+    - counters_should_end_in_total
+    - booleans_should_be_gauges
+label_policies:
+  allowed_common_labels:
+    - service
+    - runtime_mode
+    - release_channel
+    - workspace_trust
+    - workspace_health
+    - queue_id
+    - job_class
+    - decision
+    - verify_kind
+    - verify_status
+    - replay_status
+    - environment_match
+    - transaction_kind
+    - authority_surface
+    - outcome
+    - surface
+  forbidden_labels:
+    - request_id
+    - correlation_id
+    - transaction_id
+    - workspace_id
+    - verify_id
+    - replay_id
+    - ledger_id
+    - release_id
+    - path
+    - command
+    - argv
+    - token
+    - secret
+export:
+  endpoint_enabled_by_default: false
+  scrape_path: /metrics
+  include_process_metrics: false
+  include_runtime_gc_metrics: false
+  aggregation_windows:
+    short_seconds: 60
+    medium_seconds: 300
+    long_seconds: 3600
+metrics:
+  - id: adjutorix_rpc_requests_total
+    title: Total Governed RPC Requests
+    description: Count of governed RPC requests admitted to the agent surface.
+    surface: agent
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      service: fixed_low
+      runtime_mode: fixed_low
+      authority_surface: fixed_low
+      decision: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_rpc_request_duration_ms
+    title: Governed RPC Request Duration
+    description: End-to-end latency for governed RPC request handling.
+    surface: agent
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000]
+    labels:
+      service: fixed_low
+      runtime_mode: fixed_low
+      decision: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+      condition_hint: p95 sustained above 1000ms for standard local requests
+
+  - id: adjutorix_scheduler_jobs_admitted_total
+    title: Scheduler Jobs Admitted
+    description: Count of jobs admitted by the governed scheduler.
+    surface: scheduler
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      queue_id: bounded_low
+      job_class: bounded_low
+      decision: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_scheduler_queue_depth
+    title: Scheduler Queue Depth
+    description: Current number of queued jobs by queue.
+    surface: scheduler
+    type: gauge
+    unit: count
+    stability: stable
+    labels:
+      queue_id: bounded_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+      condition_hint: sustained queue depth near configured maximum
+
+  - id: adjutorix_scheduler_running_jobs
+    title: Scheduler Running Jobs
+    description: Current number of actively running jobs by class.
+    surface: scheduler
+    type: gauge
+    unit: count
+    stability: stable
+    labels:
+      job_class: bounded_low
+      queue_id: bounded_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_scheduler_job_timeouts_total
+    title: Scheduler Job Timeouts
+    description: Count of jobs that reached timeout enforcement.
+    surface: scheduler
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      job_class: bounded_low
+      queue_id: bounded_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: critical
+      condition_hint: nonzero for mutation, rollback, release, or recovery classes
+
+  - id: adjutorix_transaction_transitions_total
+    title: Transaction State Transitions
+    description: Count of authoritative transaction state transitions.
+    surface: governance
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      transaction_kind: bounded_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_transaction_recovery_total
+    title: Transaction Recoveries
+    description: Count of crash recovery or interruption recovery attempts.
+    surface: recovery
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      transaction_kind: bounded_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+      condition_hint: elevated recovery rate implies instability or crash loops
+
+  - id: adjutorix_workspace_opens_total
+    title: Workspace Opens
+    description: Count of candidate workspace openings evaluated by workspace policy.
+    surface: workspace
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      workspace_trust: fixed_low
+      workspace_health: fixed_low
+      decision: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_workspace_large_classifications_total
+    title: Large Workspace Classifications
+    description: Count of workspaces classified as large or degraded by scale thresholds.
+    surface: workspace
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      workspace_health: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_watcher_events_total
+    title: Watcher Events
+    description: Count of file watcher events accepted after filtering and coalescing.
+    surface: workspace
+    type: counter
+    unit: count
+    stability: internal
+    labels:
+      outcome: fixed_low
+      workspace_health: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_watcher_polling_mode
+    title: Watcher Polling Mode Active
+    description: Indicates whether polling fallback is currently active.
+    surface: workspace
+    type: gauge
+    unit: boolean
+    stability: stable
+    labels:
+      surface: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: warning
+      condition_hint: sustained true implies degraded watch capability
+
+  - id: adjutorix_verify_runs_total
+    title: Verify Runs
+    description: Count of governed verify runs executed.
+    surface: verify
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      verify_kind: fixed_low
+      verify_status: fixed_low
+      environment_match: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_verify_run_duration_ms
+    title: Verify Run Duration
+    description: Runtime duration of governed verify runs.
+    surface: verify
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000]
+    labels:
+      verify_kind: fixed_low
+      verify_status: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_verify_blocking_failures_total
+    title: Verify Blocking Failures
+    description: Count of blocking verify outcomes by check class.
+    surface: verify
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      verify_kind: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: critical
+      condition_hint: spike in blocking failures for mutation_guard or release_guard
+
+  - id: adjutorix_verify_stale_results_total
+    title: Stale Verify Results
+    description: Count of verify summaries determined stale by policy freshness logic.
+    surface: verify
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      verify_kind: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_replay_runs_total
+    title: Replay Runs
+    description: Count of governed replay or lineage evaluations.
+    surface: replay
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      replay_status: fixed_low
+      environment_match: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_replay_run_duration_ms
+    title: Replay Run Duration
+    description: Runtime duration of replay evaluations.
+    surface: replay
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000]
+    labels:
+      replay_status: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_replay_non_deterministic_total
+    title: Non-deterministic Replay Outcomes
+    description: Count of replay results marked non-deterministic.
+    surface: replay
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: critical
+      condition_hint: any nonzero for authoritative apply/release gating flows
+
+  - id: adjutorix_ledger_entries_total
+    title: Ledger Entries Persisted
+    description: Count of authoritative ledger entries persisted.
+    surface: ledger
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+      transaction_kind: bounded_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_ledger_persist_duration_ms
+    title: Ledger Persistence Duration
+    description: Time spent persisting ledger entries and edges.
+    surface: ledger
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 30000]
+    labels:
+      outcome: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_governance_decisions_total
+    title: Governance Decisions
+    description: Count of governance allow, warn, and deny decisions.
+    surface: governance
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      decision: fixed_low
+      authority_surface: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_governance_denials_total
+    title: Governance Denials
+    description: Count of denied governance decisions by decision surface.
+    surface: governance
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      decision: fixed_low
+      authority_surface: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+      condition_hint: elevated denial rate may signal drift, regressions, or misuse
+
+  - id: adjutorix_security_secret_redactions_total
+    title: Secret Redactions Applied
+    description: Count of secret redaction events across logs, command capture, diagnostics, or artifacts.
+    surface: security
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      surface: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_security_policy_violations_total
+    title: Security Policy Violations
+    description: Count of security or secrets policy violations detected.
+    surface: security
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      decision: fixed_low
+      authority_surface: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: critical
+      condition_hint: any nonzero sustained production violations require investigation
+
+  - id: adjutorix_command_runs_total
+    title: Governed Command Runs
+    description: Count of governed command executions.
+    surface: command
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+      authority_surface: fixed_low
+      decision: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_command_run_duration_ms
+    title: Governed Command Duration
+    description: Runtime duration of governed command executions.
+    surface: command
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000]
+    labels:
+      outcome: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_command_timeouts_total
+    title: Governed Command Timeouts
+    description: Count of command executions reaching timeout enforcement.
+    surface: command
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: critical
+
+  - id: adjutorix_release_promotions_total
+    title: Release Promotions
+    description: Count of governed release promotion attempts.
+    surface: release
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+      release_channel: fixed_low
+      decision: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: none
+
+  - id: adjutorix_release_promotion_duration_ms
+    title: Release Promotion Duration
+    description: Runtime duration of release promotion workflows.
+    surface: release
+    type: histogram
+    unit: milliseconds
+    stability: stable
+    buckets: [1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000, 1800000]
+    labels:
+      release_channel: fixed_low
+      outcome: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: warning
+
+  - id: adjutorix_release_rollbacks_total
+    title: Release Rollbacks
+    description: Count of release rollback or revocation paths triggered.
+    surface: release
+    type: counter
+    unit: count
+    stability: stable
+    labels:
+      outcome: fixed_low
+      release_channel: fixed_low
+    cardinality: bounded_low
+    alerting:
+      severity: critical
+
+  - id: adjutorix_observability_export_last_success_unix_seconds
+    title: Last Metrics Export Success Timestamp
+    description: Unix timestamp of the last successful metrics export or scrape preparation cycle.
+    surface: observability
+    type: gauge
+    unit: seconds
+    stability: internal
+    labels:
+      service: fixed_low
+    cardinality: fixed_low
+    alerting:
+      severity: warning
+      condition_hint: stale exporter timestamp may indicate broken observability path
+aggregation:
+  histogram_quantiles:
+    - 0.5
+    - 0.9
+    - 0.95
+    - 0.99
+  counter_reset_semantics: process_restart_only
+  gauges_should_represent_current_state: true
+alerting_defaults:
+  require_runbook_reference_for_warning_or_critical: true
+  missing_runbook_behavior: warn_only
+validation_rules:
+  counters_must_end_in_total: true
+  histogram_units_should_be_explicit_in_name: true
+  forbidden_labels_must_not_appear_anywhere: true
+  no_metric_may_use_unbounded_identifier_labels: true
+  release_channel_label_only_allowed_when_surface_includes_release_or_shared_context: true

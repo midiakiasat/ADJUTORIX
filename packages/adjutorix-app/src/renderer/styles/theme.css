@@ -1,0 +1,635 @@
+/*
+ * ADJUTORIX APP — SRC / STYLES / theme.css
+ *
+ * Canonical semantic theme contract.
+ *
+ * Purpose:
+ * - define the authoritative semantic token layer for operational meaning across the renderer
+ * - separate raw surface colors from state-bearing semantics such as trust, health, severity,
+ *   readiness, review posture, apply risk, verification outcome, activity, and selection
+ * - provide a stable theme API for components, panels, hooks, overlays, and Monaco-adjacent
+ *   surfaces so visual meaning does not drift across features
+ * - support dark-first governed UX with explicit accessibility, contrast, and meaning preservation
+ *
+ * Architectural role:
+ * - semantic token layer above layout, beneath component composition
+ * - consumed by app.css, panel styles, badges, pills, alerts, graph nodes, diffs, and overlays
+ * - designed so future theme variants can override variables without rewriting component CSS
+ *
+ * Hard invariants:
+ * - semantic states map to one consistent token family across the product
+ * - focus, danger, warning, trust, and verification meaning remain visually distinct
+ * - theme variables express meaning first, hue second
+ * - reduced contrast or decorative gradients may never obscure state-critical borders or text
+ * - theme remains deterministic and fully driven by CSS variables
+ *
+ * NO PLACEHOLDERS.
+ */
+
+:root,
+[data-theme="adjutorix-dark"] {
+  color-scheme: dark;
+
+  /* ------------------------------------------------------------------------ */
+  /* NEUTRAL FOUNDATIONS                                                      */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-theme-bg-canvas: 7 10 16;
+  --ax-theme-bg-app: 10 14 22;
+  --ax-theme-bg-elev-1: 14 19 30;
+  --ax-theme-bg-elev-2: 18 25 39;
+  --ax-theme-bg-elev-3: 24 32 49;
+  --ax-theme-bg-elev-4: 31 40 61;
+  --ax-theme-bg-overlay: 4 7 12;
+  --ax-theme-bg-glass: 17 23 35;
+  --ax-theme-bg-inverse: 238 243 255;
+
+  --ax-theme-fg-strong: 243 247 255;
+  --ax-theme-fg: 224 231 245;
+  --ax-theme-fg-muted: 165 178 201;
+  --ax-theme-fg-dim: 115 129 156;
+  --ax-theme-fg-faint: 91 104 130;
+  --ax-theme-fg-inverse: 10 14 22;
+
+  --ax-theme-border-subtle: 28 38 58;
+  --ax-theme-border: 42 55 82;
+  --ax-theme-border-strong: 69 87 120;
+  --ax-theme-border-emphasis: 95 114 151;
+
+  --ax-theme-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --ax-theme-shadow-2: 0 14px 30px rgba(0, 0, 0, 0.28);
+  --ax-theme-shadow-3: 0 26px 56px rgba(0, 0, 0, 0.36);
+  --ax-theme-shadow-focus: 0 0 0 2px rgba(129, 140, 248, 0.9);
+
+  /* ------------------------------------------------------------------------ */
+  /* BRAND / PRIMARY CHANNEL                                                  */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-theme-brand-50: 234 238 255;
+  --ax-theme-brand-100: 214 220 255;
+  --ax-theme-brand-200: 188 195 255;
+  --ax-theme-brand-300: 154 162 255;
+  --ax-theme-brand-400: 124 128 255;
+  --ax-theme-brand-500: 99 102 241;
+  --ax-theme-brand-600: 79 70 229;
+  --ax-theme-brand-700: 67 56 202;
+  --ax-theme-brand-800: 55 48 163;
+
+  --ax-theme-brand-bg: rgba(var(--ax-theme-brand-500), 0.16);
+  --ax-theme-brand-bg-strong: rgba(var(--ax-theme-brand-500), 0.26);
+  --ax-theme-brand-border: rgba(var(--ax-theme-brand-400), 0.52);
+  --ax-theme-brand-fg: rgb(var(--ax-theme-brand-100));
+  --ax-theme-brand-glow: 0 0 0 1px rgba(99, 102, 241, 0.22), 0 0 24px rgba(99, 102, 241, 0.12);
+
+  /* ------------------------------------------------------------------------ */
+  /* SECONDARY SEMANTIC CHANNELS                                              */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-theme-info-300: 125 211 252;
+  --ax-theme-info-400: 56 189 248;
+  --ax-theme-info-500: 14 165 233;
+  --ax-theme-info-bg: rgba(var(--ax-theme-info-400), 0.15);
+  --ax-theme-info-border: rgba(var(--ax-theme-info-400), 0.5);
+  --ax-theme-info-fg: rgb(186 230 253);
+
+  --ax-theme-success-300: 134 239 172;
+  --ax-theme-success-400: 74 222 128;
+  --ax-theme-success-500: 34 197 94;
+  --ax-theme-success-bg: rgba(var(--ax-theme-success-500), 0.14);
+  --ax-theme-success-border: rgba(var(--ax-theme-success-400), 0.5);
+  --ax-theme-success-fg: rgb(187 247 208);
+
+  --ax-theme-warning-300: 252 211 77;
+  --ax-theme-warning-400: 250 204 21;
+  --ax-theme-warning-500: 245 158 11;
+  --ax-theme-warning-bg: rgba(var(--ax-theme-warning-500), 0.15);
+  --ax-theme-warning-border: rgba(var(--ax-theme-warning-400), 0.5);
+  --ax-theme-warning-fg: rgb(254 240 138);
+
+  --ax-theme-danger-300: 253 164 175;
+  --ax-theme-danger-400: 251 113 133;
+  --ax-theme-danger-500: 244 63 94;
+  --ax-theme-danger-bg: rgba(var(--ax-theme-danger-500), 0.16);
+  --ax-theme-danger-border: rgba(var(--ax-theme-danger-400), 0.52);
+  --ax-theme-danger-fg: rgb(255 205 215);
+
+  --ax-theme-neutral-state-bg: rgba(148, 163, 184, 0.12);
+  --ax-theme-neutral-state-border: rgba(148, 163, 184, 0.34);
+  --ax-theme-neutral-state-fg: rgb(203 213 225);
+
+  /* ------------------------------------------------------------------------ */
+  /* SEMANTIC MEANING: HEALTH / TRUST / READINESS                             */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-sem-health-healthy-bg: var(--ax-theme-success-bg);
+  --ax-sem-health-healthy-border: var(--ax-theme-success-border);
+  --ax-sem-health-healthy-fg: var(--ax-theme-success-fg);
+
+  --ax-sem-health-degraded-bg: var(--ax-theme-warning-bg);
+  --ax-sem-health-degraded-border: var(--ax-theme-warning-border);
+  --ax-sem-health-degraded-fg: var(--ax-theme-warning-fg);
+
+  --ax-sem-health-unhealthy-bg: var(--ax-theme-danger-bg);
+  --ax-sem-health-unhealthy-border: var(--ax-theme-danger-border);
+  --ax-sem-health-unhealthy-fg: var(--ax-theme-danger-fg);
+
+  --ax-sem-health-unknown-bg: var(--ax-theme-neutral-state-bg);
+  --ax-sem-health-unknown-border: var(--ax-theme-neutral-state-border);
+  --ax-sem-health-unknown-fg: var(--ax-theme-neutral-state-fg);
+
+  --ax-sem-trust-trusted-bg: rgba(var(--ax-theme-success-500), 0.13);
+  --ax-sem-trust-trusted-border: rgba(var(--ax-theme-success-400), 0.48);
+  --ax-sem-trust-trusted-fg: rgb(190 242 201);
+
+  --ax-sem-trust-restricted-bg: rgba(var(--ax-theme-warning-500), 0.14);
+  --ax-sem-trust-restricted-border: rgba(var(--ax-theme-warning-400), 0.48);
+  --ax-sem-trust-restricted-fg: rgb(254 240 138);
+
+  --ax-sem-trust-untrusted-bg: rgba(var(--ax-theme-danger-500), 0.15);
+  --ax-sem-trust-untrusted-border: rgba(var(--ax-theme-danger-400), 0.5);
+  --ax-sem-trust-untrusted-fg: rgb(255 205 215);
+
+  --ax-sem-trust-unknown-bg: var(--ax-theme-neutral-state-bg);
+  --ax-sem-trust-unknown-border: var(--ax-theme-neutral-state-border);
+  --ax-sem-trust-unknown-fg: var(--ax-theme-neutral-state-fg);
+
+  --ax-sem-ready-bg: rgba(var(--ax-theme-brand-500), 0.16);
+  --ax-sem-ready-border: rgba(var(--ax-theme-brand-400), 0.5);
+  --ax-sem-ready-fg: rgb(var(--ax-theme-brand-100));
+
+  --ax-sem-blocked-bg: rgba(var(--ax-theme-danger-500), 0.15);
+  --ax-sem-blocked-border: rgba(var(--ax-theme-danger-400), 0.52);
+  --ax-sem-blocked-fg: rgb(255 205 215);
+
+  /* ------------------------------------------------------------------------ */
+  /* SEMANTIC MEANING: VERIFICATION / REVIEW / APPLY                          */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-sem-verify-passed-bg: rgba(var(--ax-theme-success-500), 0.14);
+  --ax-sem-verify-passed-border: rgba(var(--ax-theme-success-400), 0.5);
+  --ax-sem-verify-passed-fg: rgb(187 247 208);
+
+  --ax-sem-verify-partial-bg: rgba(var(--ax-theme-warning-500), 0.14);
+  --ax-sem-verify-partial-border: rgba(var(--ax-theme-warning-400), 0.48);
+  --ax-sem-verify-partial-fg: rgb(254 240 138);
+
+  --ax-sem-verify-failed-bg: rgba(var(--ax-theme-danger-500), 0.16);
+  --ax-sem-verify-failed-border: rgba(var(--ax-theme-danger-400), 0.52);
+  --ax-sem-verify-failed-fg: rgb(255 205 215);
+
+  --ax-sem-review-accepted-bg: rgba(var(--ax-theme-success-500), 0.12);
+  --ax-sem-review-accepted-border: rgba(var(--ax-theme-success-400), 0.46);
+  --ax-sem-review-accepted-fg: rgb(187 247 208);
+
+  --ax-sem-review-commented-bg: rgba(var(--ax-theme-info-400), 0.12);
+  --ax-sem-review-commented-border: rgba(var(--ax-theme-info-400), 0.46);
+  --ax-sem-review-commented-fg: rgb(186 230 253);
+
+  --ax-sem-review-rejected-bg: rgba(var(--ax-theme-danger-500), 0.15);
+  --ax-sem-review-rejected-border: rgba(var(--ax-theme-danger-400), 0.48);
+  --ax-sem-review-rejected-fg: rgb(255 205 215);
+
+  --ax-sem-apply-safe-bg: rgba(var(--ax-theme-success-500), 0.12);
+  --ax-sem-apply-safe-border: rgba(var(--ax-theme-success-400), 0.46);
+  --ax-sem-apply-safe-fg: rgb(187 247 208);
+
+  --ax-sem-apply-guarded-bg: rgba(var(--ax-theme-warning-500), 0.14);
+  --ax-sem-apply-guarded-border: rgba(var(--ax-theme-warning-400), 0.48);
+  --ax-sem-apply-guarded-fg: rgb(254 240 138);
+
+  --ax-sem-apply-destructive-bg: rgba(var(--ax-theme-danger-500), 0.16);
+  --ax-sem-apply-destructive-border: rgba(var(--ax-theme-danger-400), 0.52);
+  --ax-sem-apply-destructive-fg: rgb(255 205 215);
+
+  /* ------------------------------------------------------------------------ */
+  /* SEMANTIC MEANING: DIAGNOSTICS / SEVERITY                                 */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-sem-severity-info-bg: var(--ax-theme-info-bg);
+  --ax-sem-severity-info-border: var(--ax-theme-info-border);
+  --ax-sem-severity-info-fg: var(--ax-theme-info-fg);
+
+  --ax-sem-severity-warning-bg: var(--ax-theme-warning-bg);
+  --ax-sem-severity-warning-border: var(--ax-theme-warning-border);
+  --ax-sem-severity-warning-fg: var(--ax-theme-warning-fg);
+
+  --ax-sem-severity-error-bg: rgba(var(--ax-theme-danger-500), 0.15);
+  --ax-sem-severity-error-border: rgba(var(--ax-theme-danger-400), 0.5);
+  --ax-sem-severity-error-fg: rgb(255 205 215);
+
+  --ax-sem-severity-fatal-bg: rgba(190, 24, 93, 0.22);
+  --ax-sem-severity-fatal-border: rgba(251, 113, 133, 0.58);
+  --ax-sem-severity-fatal-fg: rgb(255 228 234);
+
+  /* ------------------------------------------------------------------------ */
+  /* SEMANTIC MEANING: ACTIVITY / STREAM / INDEX / WATCHER                    */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-sem-active-bg: rgba(var(--ax-theme-brand-500), 0.17);
+  --ax-sem-active-border: rgba(var(--ax-theme-brand-400), 0.52);
+  --ax-sem-active-fg: rgb(var(--ax-theme-brand-100));
+
+  --ax-sem-idle-bg: var(--ax-theme-neutral-state-bg);
+  --ax-sem-idle-border: var(--ax-theme-neutral-state-border);
+  --ax-sem-idle-fg: var(--ax-theme-neutral-state-fg);
+
+  --ax-sem-streaming-bg: rgba(var(--ax-theme-info-400), 0.14);
+  --ax-sem-streaming-border: rgba(var(--ax-theme-info-400), 0.5);
+  --ax-sem-streaming-fg: rgb(186 230 253);
+
+  --ax-sem-index-ready-bg: rgba(var(--ax-theme-success-500), 0.12);
+  --ax-sem-index-ready-border: rgba(var(--ax-theme-success-400), 0.46);
+  --ax-sem-index-ready-fg: rgb(187 247 208);
+
+  --ax-sem-index-stale-bg: rgba(var(--ax-theme-warning-500), 0.13);
+  --ax-sem-index-stale-border: rgba(var(--ax-theme-warning-400), 0.46);
+  --ax-sem-index-stale-fg: rgb(254 240 138);
+
+  --ax-sem-index-failed-bg: rgba(var(--ax-theme-danger-500), 0.15);
+  --ax-sem-index-failed-border: rgba(var(--ax-theme-danger-400), 0.5);
+  --ax-sem-index-failed-fg: rgb(255 205 215);
+
+  /* ------------------------------------------------------------------------ */
+  /* SELECTION / FOCUS / HIGHLIGHT / DIFF                                     */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-theme-selection-bg: rgba(var(--ax-theme-brand-500), 0.18);
+  --ax-theme-selection-bg-strong: rgba(var(--ax-theme-brand-500), 0.3);
+  --ax-theme-selection-border: rgba(var(--ax-theme-brand-400), 0.56);
+  --ax-theme-selection-fg: rgb(var(--ax-theme-fg-strong));
+
+  --ax-theme-focus-ring: rgba(129, 140, 248, 0.9);
+  --ax-theme-focus-ring-soft: rgba(129, 140, 248, 0.22);
+  --ax-theme-hover-overlay: rgba(255, 255, 255, 0.04);
+  --ax-theme-pressed-overlay: rgba(255, 255, 255, 0.07);
+
+  --ax-theme-diff-add-bg: rgba(var(--ax-theme-success-500), 0.12);
+  --ax-theme-diff-add-border: rgba(var(--ax-theme-success-400), 0.34);
+  --ax-theme-diff-add-fg: rgb(187 247 208);
+
+  --ax-theme-diff-del-bg: rgba(var(--ax-theme-danger-500), 0.13);
+  --ax-theme-diff-del-border: rgba(var(--ax-theme-danger-400), 0.34);
+  --ax-theme-diff-del-fg: rgb(255 205 215);
+
+  --ax-theme-diff-context-bg: rgba(var(--ax-theme-bg-elev-2), 0.5);
+  --ax-theme-diff-context-fg: rgb(var(--ax-theme-fg-muted));
+
+  /* ------------------------------------------------------------------------ */
+  /* GRAPH / LEDGER / TOPOLOGY                                                 */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-theme-graph-node-bg: rgba(var(--ax-theme-bg-elev-3), 0.88);
+  --ax-theme-graph-node-border: rgba(var(--ax-theme-border), 0.95);
+  --ax-theme-graph-node-fg: rgb(var(--ax-theme-fg));
+  --ax-theme-graph-edge: rgba(var(--ax-theme-border-emphasis), 0.88);
+  --ax-theme-graph-edge-active: rgba(var(--ax-theme-brand-400), 0.88);
+
+  /* ------------------------------------------------------------------------ */
+  /* SURFACE ALIASES FOR COMPONENTS                                            */
+  /* ------------------------------------------------------------------------ */
+
+  --ax-surface-canvas: rgb(var(--ax-theme-bg-canvas));
+  --ax-surface-app: rgb(var(--ax-theme-bg-app));
+  --ax-surface-panel: rgba(var(--ax-theme-bg-elev-2), 0.86);
+  --ax-surface-panel-strong: rgba(var(--ax-theme-bg-elev-3), 0.9);
+  --ax-surface-panel-soft: rgba(var(--ax-theme-bg-elev-1), 0.76);
+  --ax-surface-overlay: rgba(var(--ax-theme-bg-overlay), 0.72);
+
+  --ax-text-primary: rgb(var(--ax-theme-fg));
+  --ax-text-strong: rgb(var(--ax-theme-fg-strong));
+  --ax-text-muted: rgb(var(--ax-theme-fg-muted));
+  --ax-text-dim: rgb(var(--ax-theme-fg-dim));
+
+  --ax-border-primary: rgba(var(--ax-theme-border), 0.95);
+  --ax-border-soft: rgba(var(--ax-theme-border-subtle), 0.95);
+  --ax-border-strong: rgba(var(--ax-theme-border-strong), 1);
+}
+
+/* -------------------------------------------------------------------------- */
+/* OPTIONAL HIGH-CONTRAST OPERATIONAL VARIANT                                 */
+/* -------------------------------------------------------------------------- */
+
+[data-theme="adjutorix-dark-contrast"] {
+  --ax-theme-bg-app: 8 11 17;
+  --ax-theme-bg-elev-1: 12 16 24;
+  --ax-theme-bg-elev-2: 17 22 33;
+  --ax-theme-bg-elev-3: 24 31 45;
+  --ax-theme-fg: 236 241 255;
+  --ax-theme-fg-muted: 189 198 220;
+  --ax-theme-border: 58 73 104;
+  --ax-theme-border-strong: 90 111 150;
+  --ax-theme-focus-ring: rgba(165, 180, 252, 0.98);
+  --ax-theme-focus-ring-soft: rgba(165, 180, 252, 0.28);
+}
+
+/* -------------------------------------------------------------------------- */
+/* GLOBAL THEME APPLICATION                                                    */
+/* -------------------------------------------------------------------------- */
+
+html,
+body {
+  background-color: rgb(var(--ax-theme-bg-app));
+  color: rgb(var(--ax-theme-fg));
+}
+
+body {
+  accent-color: rgb(var(--ax-theme-brand-500));
+}
+
+::selection {
+  background: rgba(var(--ax-theme-brand-500), 0.32);
+  color: rgb(var(--ax-theme-fg-strong));
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--ax-theme-focus-ring),
+    0 0 0 6px var(--ax-theme-focus-ring-soft);
+}
+
+/* -------------------------------------------------------------------------- */
+/* SEMANTIC THEME CLASSES                                                      */
+/* -------------------------------------------------------------------------- */
+
+.ax-theme-surface-app {
+  background: var(--ax-surface-app);
+  color: var(--ax-text-primary);
+}
+
+.ax-theme-surface-panel {
+  background: var(--ax-surface-panel);
+  color: var(--ax-text-primary);
+  border-color: var(--ax-border-primary);
+}
+
+.ax-theme-surface-panel-soft {
+  background: var(--ax-surface-panel-soft);
+  color: var(--ax-text-primary);
+  border-color: var(--ax-border-soft);
+}
+
+.ax-theme-surface-panel-strong {
+  background: var(--ax-surface-panel-strong);
+  color: var(--ax-text-primary);
+  border-color: var(--ax-border-strong);
+}
+
+.ax-theme-brand {
+  background: var(--ax-theme-brand-bg);
+  border-color: var(--ax-theme-brand-border);
+  color: var(--ax-theme-brand-fg);
+}
+
+.ax-theme-health-healthy {
+  background: var(--ax-sem-health-healthy-bg);
+  border-color: var(--ax-sem-health-healthy-border);
+  color: var(--ax-sem-health-healthy-fg);
+}
+
+.ax-theme-health-degraded {
+  background: var(--ax-sem-health-degraded-bg);
+  border-color: var(--ax-sem-health-degraded-border);
+  color: var(--ax-sem-health-degraded-fg);
+}
+
+.ax-theme-health-unhealthy {
+  background: var(--ax-sem-health-unhealthy-bg);
+  border-color: var(--ax-sem-health-unhealthy-border);
+  color: var(--ax-sem-health-unhealthy-fg);
+}
+
+.ax-theme-health-unknown {
+  background: var(--ax-sem-health-unknown-bg);
+  border-color: var(--ax-sem-health-unknown-border);
+  color: var(--ax-sem-health-unknown-fg);
+}
+
+.ax-theme-trust-trusted {
+  background: var(--ax-sem-trust-trusted-bg);
+  border-color: var(--ax-sem-trust-trusted-border);
+  color: var(--ax-sem-trust-trusted-fg);
+}
+
+.ax-theme-trust-restricted {
+  background: var(--ax-sem-trust-restricted-bg);
+  border-color: var(--ax-sem-trust-restricted-border);
+  color: var(--ax-sem-trust-restricted-fg);
+}
+
+.ax-theme-trust-untrusted {
+  background: var(--ax-sem-trust-untrusted-bg);
+  border-color: var(--ax-sem-trust-untrusted-border);
+  color: var(--ax-sem-trust-untrusted-fg);
+}
+
+.ax-theme-trust-unknown {
+  background: var(--ax-sem-trust-unknown-bg);
+  border-color: var(--ax-sem-trust-unknown-border);
+  color: var(--ax-sem-trust-unknown-fg);
+}
+
+.ax-theme-ready {
+  background: var(--ax-sem-ready-bg);
+  border-color: var(--ax-sem-ready-border);
+  color: var(--ax-sem-ready-fg);
+}
+
+.ax-theme-blocked {
+  background: var(--ax-sem-blocked-bg);
+  border-color: var(--ax-sem-blocked-border);
+  color: var(--ax-sem-blocked-fg);
+}
+
+.ax-theme-verify-passed {
+  background: var(--ax-sem-verify-passed-bg);
+  border-color: var(--ax-sem-verify-passed-border);
+  color: var(--ax-sem-verify-passed-fg);
+}
+
+.ax-theme-verify-partial {
+  background: var(--ax-sem-verify-partial-bg);
+  border-color: var(--ax-sem-verify-partial-border);
+  color: var(--ax-sem-verify-partial-fg);
+}
+
+.ax-theme-verify-failed {
+  background: var(--ax-sem-verify-failed-bg);
+  border-color: var(--ax-sem-verify-failed-border);
+  color: var(--ax-sem-verify-failed-fg);
+}
+
+.ax-theme-review-accepted {
+  background: var(--ax-sem-review-accepted-bg);
+  border-color: var(--ax-sem-review-accepted-border);
+  color: var(--ax-sem-review-accepted-fg);
+}
+
+.ax-theme-review-commented {
+  background: var(--ax-sem-review-commented-bg);
+  border-color: var(--ax-sem-review-commented-border);
+  color: var(--ax-sem-review-commented-fg);
+}
+
+.ax-theme-review-rejected {
+  background: var(--ax-sem-review-rejected-bg);
+  border-color: var(--ax-sem-review-rejected-border);
+  color: var(--ax-sem-review-rejected-fg);
+}
+
+.ax-theme-apply-safe {
+  background: var(--ax-sem-apply-safe-bg);
+  border-color: var(--ax-sem-apply-safe-border);
+  color: var(--ax-sem-apply-safe-fg);
+}
+
+.ax-theme-apply-guarded {
+  background: var(--ax-sem-apply-guarded-bg);
+  border-color: var(--ax-sem-apply-guarded-border);
+  color: var(--ax-sem-apply-guarded-fg);
+}
+
+.ax-theme-apply-destructive {
+  background: var(--ax-sem-apply-destructive-bg);
+  border-color: var(--ax-sem-apply-destructive-border);
+  color: var(--ax-sem-apply-destructive-fg);
+}
+
+.ax-theme-severity-info {
+  background: var(--ax-sem-severity-info-bg);
+  border-color: var(--ax-sem-severity-info-border);
+  color: var(--ax-sem-severity-info-fg);
+}
+
+.ax-theme-severity-warning {
+  background: var(--ax-sem-severity-warning-bg);
+  border-color: var(--ax-sem-severity-warning-border);
+  color: var(--ax-sem-severity-warning-fg);
+}
+
+.ax-theme-severity-error {
+  background: var(--ax-sem-severity-error-bg);
+  border-color: var(--ax-sem-severity-error-border);
+  color: var(--ax-sem-severity-error-fg);
+}
+
+.ax-theme-severity-fatal {
+  background: var(--ax-sem-severity-fatal-bg);
+  border-color: var(--ax-sem-severity-fatal-border);
+  color: var(--ax-sem-severity-fatal-fg);
+}
+
+.ax-theme-active {
+  background: var(--ax-sem-active-bg);
+  border-color: var(--ax-sem-active-border);
+  color: var(--ax-sem-active-fg);
+}
+
+.ax-theme-idle {
+  background: var(--ax-sem-idle-bg);
+  border-color: var(--ax-sem-idle-border);
+  color: var(--ax-sem-idle-fg);
+}
+
+.ax-theme-streaming {
+  background: var(--ax-sem-streaming-bg);
+  border-color: var(--ax-sem-streaming-border);
+  color: var(--ax-sem-streaming-fg);
+}
+
+.ax-theme-index-ready {
+  background: var(--ax-sem-index-ready-bg);
+  border-color: var(--ax-sem-index-ready-border);
+  color: var(--ax-sem-index-ready-fg);
+}
+
+.ax-theme-index-stale {
+  background: var(--ax-sem-index-stale-bg);
+  border-color: var(--ax-sem-index-stale-border);
+  color: var(--ax-sem-index-stale-fg);
+}
+
+.ax-theme-index-failed {
+  background: var(--ax-sem-index-failed-bg);
+  border-color: var(--ax-sem-index-failed-border);
+  color: var(--ax-sem-index-failed-fg);
+}
+
+.ax-theme-selected {
+  background: var(--ax-theme-selection-bg);
+  border-color: var(--ax-theme-selection-border);
+  color: var(--ax-theme-selection-fg);
+}
+
+.ax-theme-selected-strong {
+  background: var(--ax-theme-selection-bg-strong);
+  border-color: var(--ax-theme-selection-border);
+  color: var(--ax-theme-selection-fg);
+}
+
+.ax-theme-diff-add {
+  background: var(--ax-theme-diff-add-bg);
+  border-color: var(--ax-theme-diff-add-border);
+  color: var(--ax-theme-diff-add-fg);
+}
+
+.ax-theme-diff-del {
+  background: var(--ax-theme-diff-del-bg);
+  border-color: var(--ax-theme-diff-del-border);
+  color: var(--ax-theme-diff-del-fg);
+}
+
+.ax-theme-diff-context {
+  background: var(--ax-theme-diff-context-bg);
+  color: var(--ax-theme-diff-context-fg);
+}
+
+/* -------------------------------------------------------------------------- */
+/* MONACO / CODE SURFACE THEME BRIDGE                                          */
+/* -------------------------------------------------------------------------- */
+
+.monaco-editor,
+.monaco-editor .monaco-editor-background,
+.monaco-editor .inputarea.ime-input {
+  --vscode-editor-background: rgb(var(--ax-theme-bg-overlay));
+  --vscode-editor-foreground: rgb(var(--ax-theme-fg));
+  --vscode-editorLineNumber-foreground: rgb(var(--ax-theme-fg-dim));
+  --vscode-editorCursor-foreground: rgb(var(--ax-theme-brand-300));
+  --vscode-editor-selectionBackground: rgba(var(--ax-theme-brand-500), 0.3);
+  --vscode-editor-inactiveSelectionBackground: rgba(var(--ax-theme-brand-500), 0.18);
+  --vscode-editor-lineHighlightBackground: rgba(var(--ax-theme-brand-500), 0.06);
+  --vscode-diffEditor-insertedTextBackground: rgba(var(--ax-theme-success-500), 0.14);
+  --vscode-diffEditor-removedTextBackground: rgba(var(--ax-theme-danger-500), 0.16);
+}
+
+/* -------------------------------------------------------------------------- */
+/* ACCESSIBILITY                                                               */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme="adjutorix-dark"],
+  [data-theme="adjutorix-dark-contrast"] {
+    --ax-theme-border: 76 96 131;
+    --ax-theme-border-strong: 111 135 178;
+    --ax-theme-focus-ring: rgba(191, 219, 254, 0.98);
+    --ax-theme-focus-ring-soft: rgba(191, 219, 254, 0.22);
+    --ax-theme-selection-bg: rgba(var(--ax-theme-brand-500), 0.24);
+    --ax-theme-selection-bg-strong: rgba(var(--ax-theme-brand-500), 0.36);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  [data-theme="adjutorix-dark"],
+  [data-theme="adjutorix-dark-contrast"] {
+    --ax-surface-panel: rgb(var(--ax-theme-bg-elev-2));
+    --ax-surface-panel-strong: rgb(var(--ax-theme-bg-elev-3));
+    --ax-surface-panel-soft: rgb(var(--ax-theme-bg-elev-1));
+    --ax-surface-overlay: rgba(var(--ax-theme-bg-overlay), 0.94);
+  }
+}

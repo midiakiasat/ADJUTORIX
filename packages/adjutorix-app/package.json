@@ -1,0 +1,84 @@
+{
+  "name": "@adjutorix/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Adjutorix Desktop Application — Deterministic Patch-Oriented Workspace",
+  "license": "MIT",
+  "author": "Adjutorix",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "NODE_ENV=development node --enable-source-maps ./dist/main.js",
+    "build": "npm run clean && npm run build:ts && npm run build:assets",
+    "build:ts": "tsc -p tsconfig.json",
+    "build:assets": "node ./scripts/build-assets.mjs",
+    "clean": "rimraf dist",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,json,css,md}\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "verify": "npm run build && npm run typecheck && npm run lint && npm run test",
+    "start": "node ./dist/main.js",
+    "package": "electron-builder",
+    "postinstall": "node ./scripts/postinstall.mjs"
+  },
+  "dependencies": {
+    "electron": "^30.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zustand": "^4.5.0",
+    "zod": "^3.23.0",
+    "uuid": "^9.0.1",
+    "lodash": "^4.17.21",
+    "date-fns": "^3.6.0",
+    "ws": "^8.17.0",
+    "node-fetch": "^3.3.2",
+    "superjson": "^2.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "ts-node": "^10.9.2",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.5",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^9.9.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "prettier": "^3.3.3",
+    "rimraf": "^5.0.7",
+    "electron-builder": "^24.13.3",
+    "concurrently": "^8.2.2"
+  },
+  "main": "dist/main.js",
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "build": {
+    "appId": "com.adjutorix.app",
+    "productName": "Adjutorix",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  }
+}

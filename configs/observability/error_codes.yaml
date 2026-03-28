@@ -1,0 +1,741 @@
+version: 1
+registry_id: adjutorix.error-codes
+title: ADJUTORIX Error Code Registry
+description: >-
+  Canonical machine-readable registry of error codes emitted across ADJUTORIX.
+  This registry defines stable identifiers, categories, severities, domains,
+  HTTP/RPC mappings, retry semantics, rollback implications, user-facing
+  guidance classes, audit expectations, and recovery intent so failures remain
+  mechanically interpretable across app, agent, CLI, scheduler, verify,
+  replay, governance, release, and recovery surfaces.
+status: active
+owners:
+  - team: core-governance
+  - team: runtime-observability
+  - team: agent-runtime
+  - team: app-runtime
+  - team: release-engineering
+defaults:
+  unknown_error_code_behavior: deny
+  duplicate_error_code_behavior: deny
+  missing_domain_behavior: deny
+  default_retry_class: never
+authoritative_time:
+  timezone: UTC
+invariants:
+  - id: no_undeclared_failure_vocabulary
+    statement: No governed runtime surface may emit an error code not declared in this registry.
+  - id: no_ambiguous_terminal_meaning
+    statement: Every error code must map to a stable failure class and terminal interpretation.
+  - id: no_retry_without_semantics
+    statement: Retryability must be explicit and may not be inferred from transport or caller behavior.
+  - id: no_secret_leak_in_error_payload
+    statement: Error emissions must not include plaintext secrets, sensitive file contents, or raw credential material.
+  - id: no_cross_surface_code_drift
+    statement: Equivalent failure conditions across surfaces must reuse codes or explicitly declare why they differ.
+shared_enums:
+  domain:
+    - rpc
+    - workspace
+    - watcher
+    - scheduler
+    - transaction
+    - verify
+    - replay
+    - ledger
+    - governance
+    - command
+    - terminal
+    - settings
+    - trust
+    - security
+    - release
+    - recovery
+    - diagnostics
+    - observability
+  severity:
+    - info
+    - warn
+    - error
+    - fatal
+  failure_class:
+    - parse
+    - validation
+    - authentication
+    - authorization
+    - trust
+    - policy
+    - precondition
+    - not_found
+    - conflict
+    - timeout
+    - capacity
+    - persistence
+    - integrity
+    - determinism
+    - environment
+    - security
+    - external_dependency
+    - internal
+  retry_class:
+    - never
+    - immediate_safe
+    - bounded_backoff
+    - manual_revalidation_required
+  rollback_implication:
+    - none
+    - consider
+    - recommended
+    - required
+  recovery_action:
+    - none
+    - retry
+    - refresh_state
+    - reverify
+    - rereplay
+    - reacquire_confirmation
+    - resume_recovery
+    - fail_and_audit
+    - rollback
+    - revoke
+  audience_message_class:
+    - internal_only
+    - operator_actionable
+    - user_actionable
+    - silent_programmatic
+  surface:
+    - renderer
+    - preload
+    - main
+    - agent
+    - cli
+    - scheduler
+    - verify
+    - replay
+    - ledger
+    - governance
+    - release
+    - recovery
+naming:
+  pattern: '^E_[A-Z0-9_]+$'
+  uniqueness: global
+payload_contract:
+  required_common_fields:
+    - code
+    - domain
+    - severity
+    - failure_class
+    - summary
+  optional_common_fields:
+    - detail
+    - retry_class
+    - recovery_action
+    - rollback_implication
+    - http_status
+    - rpc_status
+    - audience_message_class
+    - correlation_fields
+  forbidden_fields:
+    - token
+    - secret
+    - password
+    - passphrase
+    - private_key
+    - raw_env
+    - argv_plaintext
+mappings:
+  rpc_jsonrpc_error_namespace: application_defined
+  http_status_defaults:
+    parse: 400
+    validation: 400
+    authentication: 401
+    authorization: 403
+    trust: 403
+    policy: 403
+    precondition: 409
+    not_found: 404
+    conflict: 409
+    timeout: 504
+    capacity: 429
+    persistence: 500
+    integrity: 500
+    determinism: 409
+    environment: 409
+    security: 403
+    external_dependency: 502
+    internal: 500
+codes:
+  - code: E_PARSE
+    title: Request Parse Failed
+    domain: rpc
+    severity: error
+    failure_class: parse
+    summary: Incoming request could not be parsed into a valid governed payload.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: user_actionable
+    http_status: 400
+    rpc_status: -32700
+    surfaces: [agent, cli]
+
+  - code: E_INVALID_PARAMS
+    title: Invalid Parameters
+    domain: rpc
+    severity: error
+    failure_class: validation
+    summary: Request parameters failed schema or semantic validation.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: user_actionable
+    http_status: 400
+    rpc_status: -32602
+    surfaces: [agent, cli, main]
+
+  - code: E_UNAUTHORIZED
+    title: Unauthorized Request
+    domain: rpc
+    severity: error
+    failure_class: authentication
+    summary: Caller could not be authenticated for the governed surface.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 401
+    rpc_status: 1001
+    surfaces: [agent, cli]
+
+  - code: E_FORBIDDEN
+    title: Forbidden Operation
+    domain: governance
+    severity: error
+    failure_class: authorization
+    summary: Operation is forbidden for the current caller, surface, or scope.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: operator_actionable
+    http_status: 403
+    rpc_status: 1002
+    surfaces: [agent, main, cli]
+
+  - code: E_TRUST_REQUIRED
+    title: Trust Required
+    domain: trust
+    severity: warn
+    failure_class: trust
+    summary: Operation requires a higher trust level than is currently valid.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: user_actionable
+    http_status: 403
+    rpc_status: 1101
+    surfaces: [agent, main, cli]
+
+  - code: E_TRUST_INVALIDATED
+    title: Trust Invalidated
+    domain: trust
+    severity: error
+    failure_class: trust
+    summary: Previously valid trust state was invalidated by identity drift, expiry, or policy trigger.
+    retry_class: manual_revalidation_required
+    rollback_implication: consider
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1102
+    surfaces: [agent, main, cli, governance]
+
+  - code: E_WORKSPACE_REQUIRED
+    title: Workspace Required
+    domain: workspace
+    severity: error
+    failure_class: precondition
+    summary: Operation requires a bound workspace and none is currently available.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1201
+    surfaces: [agent, main, cli]
+
+  - code: E_WORKSPACE_UNHEALTHY
+    title: Workspace Unhealthy
+    domain: workspace
+    severity: warn
+    failure_class: precondition
+    summary: Workspace health does not satisfy the minimum required level for the requested operation.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1202
+    surfaces: [agent, main, cli]
+
+  - code: E_WORKSPACE_BLOCKED
+    title: Workspace Blocked
+    domain: workspace
+    severity: error
+    failure_class: policy
+    summary: Workspace is blocked due to trust, boundary, or security policy conditions.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: fail_and_audit
+    audience_message_class: operator_actionable
+    http_status: 403
+    rpc_status: 1203
+    surfaces: [agent, main, governance]
+
+  - code: E_TARGET_NOT_FOUND
+    title: Target Not Found
+    domain: workspace
+    severity: error
+    failure_class: not_found
+    summary: Requested target, artifact, transaction, or scoped subject could not be resolved.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: user_actionable
+    http_status: 404
+    rpc_status: 1204
+    surfaces: [agent, main, cli]
+
+  - code: E_WATCHER_DEGRADED
+    title: Watcher Degraded
+    domain: watcher
+    severity: warn
+    failure_class: external_dependency
+    summary: Native watcher path degraded and polling fallback or reduced scope was activated.
+    retry_class: bounded_backoff
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 200
+    rpc_status: 1210
+    surfaces: [main, workspace]
+
+  - code: E_VERIFY_REQUIRED
+    title: Verification Required
+    domain: verify
+    severity: warn
+    failure_class: precondition
+    summary: Operation requires authoritative verification before it may continue.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: reverify
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1301
+    surfaces: [agent, main, cli]
+
+  - code: E_VERIFY_STALE
+    title: Verification Stale
+    domain: verify
+    severity: warn
+    failure_class: precondition
+    summary: Existing verify result is stale and no longer authoritative for the requested operation.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: reverify
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1302
+    surfaces: [agent, main, cli, verify]
+
+  - code: E_VERIFY_BLOCKED
+    title: Verification Blocked
+    domain: verify
+    severity: error
+    failure_class: policy
+    summary: Verification concluded with a blocked outcome due to missing or invalid required evidence.
+    retry_class: manual_revalidation_required
+    rollback_implication: consider
+    recovery_action: reverify
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1303
+    surfaces: [agent, cli, verify]
+
+  - code: E_REPLAY_REQUIRED
+    title: Replay Required
+    domain: replay
+    severity: warn
+    failure_class: precondition
+    summary: Operation requires replay or lineage evidence before it may continue.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: rereplay
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1401
+    surfaces: [agent, main, cli]
+
+  - code: E_REPLAY_BLOCKED
+    title: Replay Blocked
+    domain: replay
+    severity: error
+    failure_class: determinism
+    summary: Replay result is blocked, missing, or non-authoritative for the requested operation.
+    retry_class: manual_revalidation_required
+    rollback_implication: recommended
+    recovery_action: rereplay
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1402
+    surfaces: [agent, cli, replay]
+
+  - code: E_REPLAY_NON_DETERMINISTIC
+    title: Replay Non-deterministic
+    domain: replay
+    severity: error
+    failure_class: determinism
+    summary: Replay produced a non-deterministic result where deterministic behavior is required.
+    retry_class: never
+    rollback_implication: required
+    recovery_action: rollback
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1403
+    surfaces: [agent, cli, replay, governance]
+
+  - code: E_CONFIRMATION_REQUIRED
+    title: Confirmation Required
+    domain: governance
+    severity: warn
+    failure_class: precondition
+    summary: Explicit confirmation is required before the operation may continue.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: reacquire_confirmation
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1501
+    surfaces: [agent, main, cli]
+
+  - code: E_CONFIRMATION_STALE
+    title: Confirmation Stale
+    domain: governance
+    severity: warn
+    failure_class: precondition
+    summary: Existing confirmation expired or was invalidated by scope drift.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: reacquire_confirmation
+    audience_message_class: user_actionable
+    http_status: 409
+    rpc_status: 1502
+    surfaces: [agent, main, cli]
+
+  - code: E_POLICY_DENIED
+    title: Policy Denied
+    domain: governance
+    severity: error
+    failure_class: policy
+    summary: Policy evaluation denied the requested action.
+    retry_class: never
+    rollback_implication: consider
+    recovery_action: fail_and_audit
+    audience_message_class: operator_actionable
+    http_status: 403
+    rpc_status: 1503
+    surfaces: [agent, main, cli, governance]
+
+  - code: E_GOVERNANCE_CONFLICT
+    title: Governance Conflict
+    domain: governance
+    severity: error
+    failure_class: conflict
+    summary: Request conflicts with existing state, supersession rules, leases, or policy-bound exclusivity.
+    retry_class: bounded_backoff
+    rollback_implication: consider
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1504
+    surfaces: [agent, scheduler, governance]
+
+  - code: E_SCHEDULER_CAPACITY_EXCEEDED
+    title: Scheduler Capacity Exceeded
+    domain: scheduler
+    severity: warn
+    failure_class: capacity
+    summary: Scheduler cannot admit more work within configured capacity constraints.
+    retry_class: bounded_backoff
+    rollback_implication: none
+    recovery_action: retry
+    audience_message_class: operator_actionable
+    http_status: 429
+    rpc_status: 1601
+    surfaces: [agent, scheduler]
+
+  - code: E_SCHEDULER_ADMISSION_DENIED
+    title: Scheduler Admission Denied
+    domain: scheduler
+    severity: error
+    failure_class: policy
+    summary: Scheduler denied job admission due to missing prerequisites, queue rules, or exclusivity conflicts.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1602
+    surfaces: [scheduler, agent]
+
+  - code: E_JOB_TIMEOUT
+    title: Job Timed Out
+    domain: scheduler
+    severity: error
+    failure_class: timeout
+    summary: Job exceeded its configured execution budget.
+    retry_class: never
+    rollback_implication: recommended
+    recovery_action: resume_recovery
+    audience_message_class: operator_actionable
+    http_status: 504
+    rpc_status: 1603
+    surfaces: [scheduler, agent, recovery]
+
+  - code: E_JOB_HEARTBEAT_STALLED
+    title: Job Heartbeat Stalled
+    domain: scheduler
+    severity: error
+    failure_class: timeout
+    summary: Running job stopped heartbeating within allowed grace window.
+    retry_class: never
+    rollback_implication: recommended
+    recovery_action: resume_recovery
+    audience_message_class: operator_actionable
+    http_status: 504
+    rpc_status: 1604
+    surfaces: [scheduler, recovery]
+
+  - code: E_COMMAND_TIMEOUT
+    title: Governed Command Timeout
+    domain: command
+    severity: error
+    failure_class: timeout
+    summary: Governed command exceeded its allowed execution time.
+    retry_class: bounded_backoff
+    rollback_implication: consider
+    recovery_action: retry
+    audience_message_class: operator_actionable
+    http_status: 504
+    rpc_status: 1701
+    surfaces: [agent, cli, command]
+
+  - code: E_COMMAND_FORBIDDEN
+    title: Governed Command Forbidden
+    domain: command
+    severity: error
+    failure_class: policy
+    summary: Command execution was denied by command or secrets policy.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: operator_actionable
+    http_status: 403
+    rpc_status: 1702
+    surfaces: [agent, cli, command]
+
+  - code: E_COMMAND_OUTPUT_TRUNCATED
+    title: Command Output Truncated
+    domain: command
+    severity: warn
+    failure_class: capacity
+    summary: Command output exceeded capture bounds and was truncated or redirected to artifact storage.
+    retry_class: never
+    rollback_implication: none
+    recovery_action: none
+    audience_message_class: operator_actionable
+    http_status: 200
+    rpc_status: 1703
+    surfaces: [agent, cli, command]
+
+  - code: E_LEDGER_PERSIST_FAILED
+    title: Ledger Persist Failed
+    domain: ledger
+    severity: error
+    failure_class: persistence
+    summary: Ledger entry or edge persistence failed.
+    retry_class: manual_revalidation_required
+    rollback_implication: required
+    recovery_action: resume_recovery
+    audience_message_class: operator_actionable
+    http_status: 500
+    rpc_status: 1801
+    surfaces: [ledger, recovery, agent]
+
+  - code: E_LEDGER_CONFLICT
+    title: Ledger Conflict
+    domain: ledger
+    severity: error
+    failure_class: conflict
+    summary: Ledger state conflicted with expected sequence, edge, or persistence assumptions.
+    retry_class: manual_revalidation_required
+    rollback_implication: recommended
+    recovery_action: refresh_state
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1802
+    surfaces: [ledger, replay, recovery]
+
+  - code: E_ENVIRONMENT_DRIFT
+    title: Environment Drift
+    domain: verify
+    severity: warn
+    failure_class: environment
+    summary: Current environment fingerprint is not compatible with recorded evidence for this operation.
+    retry_class: manual_revalidation_required
+    rollback_implication: consider
+    recovery_action: reverify
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 1901
+    surfaces: [verify, replay, governance, agent]
+
+  - code: E_SECRET_POLICY_VIOLATION
+    title: Secret Policy Violation
+    domain: security
+    severity: error
+    failure_class: security
+    summary: Secret handling policy violation was detected.
+    retry_class: never
+    rollback_implication: recommended
+    recovery_action: revoke
+    audience_message_class: operator_actionable
+    http_status: 403
+    rpc_status: 2001
+    surfaces: [security, governance, agent, main]
+
+  - code: E_RENDERER_AUTHORITY_VIOLATION
+    title: Renderer Authority Violation
+    domain: security
+    severity: fatal
+    failure_class: security
+    summary: Renderer attempted or obtained prohibited authority over governed operations or resources.
+    retry_class: never
+    rollback_implication: required
+    recovery_action: revoke
+    audience_message_class: internal_only
+    http_status: 403
+    rpc_status: 2002
+    surfaces: [main, security, governance]
+
+  - code: E_RELEASE_VERIFICATION_STALE
+    title: Release Verification Stale
+    domain: release
+    severity: error
+    failure_class: precondition
+    summary: Release promotion cannot proceed because required verification is stale.
+    retry_class: manual_revalidation_required
+    rollback_implication: none
+    recovery_action: reverify
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 2101
+    surfaces: [release, agent, cli]
+
+  - code: E_RELEASE_SIGNING_MISSING
+    title: Release Signing Missing
+    domain: release
+    severity: error
+    failure_class: integrity
+    summary: Release requires signing or notarization state that is missing or incomplete.
+    retry_class: manual_revalidation_required
+    rollback_implication: recommended
+    recovery_action: fail_and_audit
+    audience_message_class: operator_actionable
+    http_status: 409
+    rpc_status: 2102
+    surfaces: [release, agent, cli]
+
+  - code: E_RELEASE_PROMOTION_TIMEOUT
+    title: Release Promotion Timeout
+    domain: release
+    severity: error
+    failure_class: timeout
+    summary: Release promotion exceeded its governed timeout budget.
+    retry_class: never
+    rollback_implication: required
+    recovery_action: rollback
+    audience_message_class: operator_actionable
+    http_status: 504
+    rpc_status: 2103
+    surfaces: [release, recovery, agent]
+
+  - code: E_RECOVERY_STATE_MISSING
+    title: Recovery State Missing
+    domain: recovery
+    severity: error
+    failure_class: persistence
+    summary: Persisted state required for authoritative recovery is missing.
+    retry_class: never
+    rollback_implication: recommended
+    recovery_action: fail_and_audit
+    audience_message_class: operator_actionable
+    http_status: 500
+    rpc_status: 2201
+    surfaces: [recovery, scheduler, agent]
+
+  - code: E_RECOVERY_RECONSTRUCTION_FAILED
+    title: Recovery Reconstruction Failed
+    domain: recovery
+    severity: fatal
+    failure_class: integrity
+    summary: Recovery could not reconstruct a coherent authoritative state from persisted evidence.
+    retry_class: never
+    rollback_implication: required
+    recovery_action: rollback
+    audience_message_class: operator_actionable
+    http_status: 500
+    rpc_status: 2202
+    surfaces: [recovery, ledger, governance]
+
+  - code: E_DIAGNOSTICS_TIMEOUT
+    title: Diagnostics Timeout
+    domain: diagnostics
+    severity: warn
+    failure_class: timeout
+    summary: Diagnostics collection exceeded its time budget and returned degraded or partial results.
+    retry_class: bounded_backoff
+    rollback_implication: none
+    recovery_action: retry
+    audience_message_class: user_actionable
+    http_status: 504
+    rpc_status: 2301
+    surfaces: [diagnostics, agent, main]
+
+  - code: E_INTERNAL
+    title: Internal Runtime Error
+    domain: observability
+    severity: fatal
+    failure_class: internal
+    summary: Unclassified internal failure occurred inside a governed runtime surface.
+    retry_class: manual_revalidation_required
+    rollback_implication: consider
+    recovery_action: fail_and_audit
+    audience_message_class: operator_actionable
+    http_status: 500
+    rpc_status: 9000
+    surfaces: [renderer, preload, main, agent, cli, scheduler, verify, replay, ledger, governance, release, recovery]
+validation_rules:
+  require_code_unique: true
+  require_http_status_for_transportable_errors: true
+  require_rpc_status_for_rpc_surfaces: true
+  require_retry_class_explicit: true
+  require_rollback_implication_explicit: true
+  fatal_errors_should_not_be_immediate_safe_retryable: true
+review:
+  cadence: quarterly
+  triggers:
+    - new_runtime_surface
+    - incident_with_unclassified_failure
+    - retry_loop_incident
+    - rollback_without_code_mapping
+    - release_failure_taxonomy_change

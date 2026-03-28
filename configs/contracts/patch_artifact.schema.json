@@ -1,0 +1,937 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.dev/schemas/patch_artifact.schema.json",
+  "title": "ADJUTORIX Patch Artifact",
+  "description": "Canonical schema for governed patch artifacts in ADJUTORIX. A patch artifact is the authoritative, reviewable, replay-aware container for a proposed or applied patch set, including identity, scope, diff material, policy bindings, verify/replay evidence, confirmation lineage, and rollback metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "artifact_kind",
+    "artifact_id",
+    "created_at",
+    "created_by",
+    "workspace",
+    "target_scope",
+    "patch",
+    "governance",
+    "attestation"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "adjutorix.patch-artifact"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this schema contract. Breaking structural changes require a major bump."
+    },
+    "artifact_kind": {
+      "type": "string",
+      "enum": [
+        "patch_proposal",
+        "patch_review",
+        "patch_apply_record",
+        "patch_rollback_record"
+      ]
+    },
+    "artifact_id": {
+      "$ref": "#/$defs/non_empty_string"
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "created_by": {
+      "$ref": "#/$defs/actor_ref"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "governed_agent_rpc",
+        "governed_cli_command",
+        "main_process_service",
+        "governed_scheduler_job"
+      ]
+    },
+    "workspace": {
+      "$ref": "#/$defs/workspace_binding"
+    },
+    "target_scope": {
+      "$ref": "#/$defs/target_scope"
+    },
+    "patch": {
+      "$ref": "#/$defs/patch_payload"
+    },
+    "review": {
+      "$ref": "#/$defs/review_payload"
+    },
+    "execution": {
+      "$ref": "#/$defs/execution_payload"
+    },
+    "rollback": {
+      "$ref": "#/$defs/rollback_payload"
+    },
+    "governance": {
+      "$ref": "#/$defs/governance_binding"
+    },
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reserved strictly-namespaced extension area. Keys must contain a namespace prefix such as 'x_vendor_field'.",
+      "propertyNames": {
+        "pattern": "^(x|ext)_[A-Za-z0-9_.-]+$"
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "artifact_kind": {
+            "const": "patch_proposal"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "patch"
+        ],
+        "not": {
+          "required": [
+            "execution"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "artifact_kind": {
+            "const": "patch_review"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "patch",
+          "review"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "artifact_kind": {
+            "const": "patch_apply_record"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "patch",
+          "review",
+          "execution"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "artifact_kind": {
+            "const": "patch_rollback_record"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "patch",
+          "execution",
+          "rollback"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "user",
+            "service",
+            "ci",
+            "scheduler",
+            "system"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "display_name": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "workspace_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "root_path",
+        "canonical_root_path",
+        "trust_level",
+        "workspace_health",
+        "filesystem_fingerprint"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "canonical_root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "workspace_kind": {
+          "type": "string",
+          "enum": [
+            "filesystem_root",
+            "git_repository",
+            "monorepo_root",
+            "detached_snapshot",
+            "archive_mount",
+            "readonly_bundle"
+          ]
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": [
+            "none",
+            "observed",
+            "tentative",
+            "trusted",
+            "elevated",
+            "quarantined",
+            "revoked"
+          ]
+        },
+        "workspace_health": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "unhealthy",
+            "blocked"
+          ]
+        },
+        "filesystem_fingerprint": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "vcs_root": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "vcs_revision": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "target_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_kind",
+        "paths",
+        "summary"
+      ],
+      "properties": {
+        "scope_kind": {
+          "type": "string",
+          "enum": [
+            "targeted_files",
+            "patch",
+            "workspace",
+            "ledger_selection"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relative_workspace_path"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ledger_id": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "selected_seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "head_seq": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "relative_workspace_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+      "description": "Workspace-relative path. Absolute paths and upward traversal are forbidden."
+    },
+    "patch_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_id",
+        "patch_hash",
+        "format",
+        "file_changes",
+        "summary"
+      ],
+      "properties": {
+        "patch_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "parent_patch_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "patch_hash": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "unified_diff",
+            "structured_patch"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "file_changes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/file_change"
+          }
+        },
+        "diff": {
+          "type": "string",
+          "description": "Optional inline unified diff representation."
+        },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "files_changed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "insertions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "deletions": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "file_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "change_type",
+        "before",
+        "after",
+        "hunks"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_workspace_path"
+        },
+        "change_type": {
+          "type": "string",
+          "enum": [
+            "add",
+            "modify",
+            "delete",
+            "rename"
+          ]
+        },
+        "before": {
+          "$ref": "#/$defs/file_version_ref"
+        },
+        "after": {
+          "$ref": "#/$defs/file_version_ref"
+        },
+        "rename_from": {
+          "$ref": "#/$defs/relative_workspace_path"
+        },
+        "language": {
+          "type": "string"
+        },
+        "hunks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hunk"
+          }
+        }
+      }
+    },
+    "file_version_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exists"
+      ],
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "byte_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mode": {
+          "type": "string"
+        }
+      }
+    },
+    "hunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "old_start",
+        "old_lines",
+        "new_start",
+        "new_lines",
+        "lines"
+      ],
+      "properties": {
+        "old_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "old_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "header": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hunk_line"
+          }
+        }
+      }
+    },
+    "hunk_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "text"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "context",
+            "add",
+            "delete"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "review_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_id",
+        "review_status",
+        "decision_summary"
+      ],
+      "properties": {
+        "review_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "changes_requested",
+            "blocked"
+          ]
+        },
+        "decision_summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/review_comment"
+          }
+        },
+        "confirmation": {
+          "$ref": "#/$defs/confirmation_ref"
+        },
+        "verify": {
+          "$ref": "#/$defs/verify_binding"
+        },
+        "replay": {
+          "$ref": "#/$defs/replay_binding"
+        }
+      }
+    },
+    "review_comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comment_id",
+        "author",
+        "created_at",
+        "message"
+      ],
+      "properties": {
+        "comment_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "author": {
+          "$ref": "#/$defs/actor_ref"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "path": {
+          "$ref": "#/$defs/relative_workspace_path"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "message": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "execution_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_id",
+        "started_at",
+        "finished_at",
+        "result",
+        "ledger"
+      ],
+      "properties": {
+        "execution_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "applied",
+            "denied",
+            "failed",
+            "rolled_back"
+          ]
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relative_workspace_path"
+          }
+        },
+        "ledger": {
+          "$ref": "#/$defs/ledger_binding"
+        },
+        "rollback_target": {
+          "$ref": "#/$defs/rollback_target_ref"
+        }
+      }
+    },
+    "rollback_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rollback_id",
+        "target",
+        "result"
+      ],
+      "properties": {
+        "rollback_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "target": {
+          "$ref": "#/$defs/rollback_target_ref"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "completed",
+            "failed",
+            "blocked"
+          ]
+        },
+        "executed_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "confirmation_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmation_id",
+        "confirmed_at"
+      ],
+      "properties": {
+        "confirmation_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "confirmed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "confirmed_by": {
+          "$ref": "#/$defs/actor_ref"
+        }
+      }
+    },
+    "verify_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verify_id",
+        "verify_status",
+        "apply_readiness",
+        "fresh",
+        "environment_match"
+      ],
+      "properties": {
+        "verify_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "verify_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "stale",
+            "superseded"
+          ]
+        },
+        "apply_readiness": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "caution",
+            "blocked",
+            "unknown"
+          ]
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "environment_match": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "compatible",
+            "drifted",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "replay_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_status",
+        "determinism_state",
+        "replayable_lineage"
+      ],
+      "properties": {
+        "replay_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "stale",
+            "superseded"
+          ]
+        },
+        "determinism_state": {
+          "type": "string",
+          "enum": [
+            "deterministic",
+            "non_deterministic",
+            "unknown"
+          ]
+        },
+        "replayable_lineage": {
+          "type": "boolean"
+        },
+        "ledger_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ledger_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger_id",
+        "selected_seq",
+        "head_seq"
+      ],
+      "properties": {
+        "ledger_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "head_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "rollback_target_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target_id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ledger_seq",
+            "patch_apply_record",
+            "workspace_snapshot"
+          ]
+        },
+        "target_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "ledger_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "governance_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_surface",
+        "mutation_class",
+        "confirmation_mode",
+        "policy_bindings",
+        "decision"
+      ],
+      "properties": {
+        "authority_surface": {
+          "type": "string",
+          "enum": [
+            "main_process_service",
+            "governed_cli_command",
+            "governed_agent_rpc",
+            "governed_scheduler_job"
+          ]
+        },
+        "mutation_class": {
+          "type": "string",
+          "enum": [
+            "none",
+            "local_ephemeral",
+            "settings_persist",
+            "workspace_write",
+            "patch_apply",
+            "rollback",
+            "shell_execution",
+            "artifact_export",
+            "trust_elevation"
+          ]
+        },
+        "confirmation_mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "recommended",
+            "required_consequential",
+            "required_destructive"
+          ]
+        },
+        "policy_bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_policy",
+            "mutation_policy",
+            "verify_policy",
+            "trust_policy",
+            "governed_targets"
+          ],
+          "properties": {
+            "workspace_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "mutation_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "verify_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "trust_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "governed_targets": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "command_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "secrets_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            }
+          }
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_at",
+        "artifact_hash",
+        "evidence_digest"
+      ],
+      "properties": {
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "artifact_hash": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "evidence_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "type": "string"
+            },
+            "key_id": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

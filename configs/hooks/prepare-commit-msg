@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# ADJUTORIX prepare-commit-msg hook
+#
+# Purpose:
+# - scaffold high-signal commit messages before the stricter commit-msg validator runs
+# - preserve merge/squash/fixup semantics while enriching ordinary commits with actionable structure
+# - infer likely scope from staged paths so developers start from an auditable template rather than an empty buffer
+# - surface governance-sensitive hints when changes touch apply/verify/replay/authority/renderer/CI boundaries
+
+MSG_FILE="${1:-}"
+COMMIT_SOURCE="${2:-}"
+SHA_ARG="${3:-}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+FORCE_COLOR="${FORCE_COLOR:-1}"
+ENABLE_HINTS="${ENABLE_HINTS:-1}"
+APPEND_CHANGE_SUMMARY="${APPEND_CHANGE_SUMMARY:-1}"
+MAX_CHANGED_PATHS="${MAX_CHANGED_PATHS:-20}"
+
+color() {
+  local code="$1"
+  shift
+  if [[ "$FORCE_COLOR" == "0" ]]; then
+    printf '%s' "$*"
+  else
+    printf '\033[%sm%s\033[0m' "$code" "$*"
+  fi
+}
+
+log() {
+  printf '%s %s\n' "$(color '36' '[adjutorix-prepare-commit-msg]')" "$*" >&2
+}
+
+warn() {
+  printf '%s %s\n' "$(color '33' '[warn]')" "$*" >&2
+}
+
+die() {
+  printf '%s %s\n' "$(color '31' '[error]')" "$*" >&2
+  exit 1
+}
+
+[[ -n "$MSG_FILE" ]] || die "prepare-commit-msg hook requires the commit message file path as argument"
+[[ -f "$MSG_FILE" ]] || die "commit message file not found: $MSG_FILE"
+[[ -d "$ROOT_DIR/.git" || -f "$ROOT_DIR/package.json" ]] || die "repository root could not be resolved"
+
+cd "$ROOT_DIR"
+
+read_file() {
+  cat "$1"
+}
+
+current_subject() {
+  sed -n '1p' "$MSG_FILE" | tr -d '\r'
+}
+
+message_has_non_comment_content() {
+  grep -Ev '^[[:space:]]*#' "$MSG_FILE" | grep -q '[^[:space:]]'
+}
+
+is_merge_like_source() {
+  [[ "$COMMIT_SOURCE" == "merge" ]]
+}
+
+is_squash_like_source() {
+  [[ "$COMMIT_SOURCE" == "squash" ]]
+}
+
+is_commit_like_reuse() {
+  [[ "$COMMIT_SOURCE" == "commit" || "$COMMIT_SOURCE" == "message" || -n "$SHA_ARG" ]]
+}
+
+is_fixup_or_squash_subject() {
+  local subject
+  subject="$(current_subject)"
+  [[ "$subject" =~ ^(fixup!|squash!)\  ]]
+}
+
+collect_staged_paths() {
+  git diff --cached --name-only --diff-filter=ACMR
+}
+
+infer_primary_scope() {
+  local paths=()
+  local path
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    paths+=("$path")
+  done < <(collect_staged_paths)
+
+  if [[ "${#paths[@]}" -eq 0 ]]; then
+    printf 'repo'
+    return
+  fi
+
+  local joined
+  joined="$(printf '%s\n' "${paths[@]}")"
+
+  if grep -q '^packages/adjutorix-app/' <<<"$joined"; then
+    if grep -q '^packages/adjutorix-app/src/renderer/' <<<"$joined"; then
+      printf 'app-renderer'
+      return
+    fi
+    if grep -q '^packages/adjutorix-app/tests/' <<<"$joined"; then
+      printf 'app-tests'
+      return
+    fi
+    printf 'app'
+    return
+  fi
+
+  if grep -q '^packages/adjutorix-cli/' <<<"$joined"; then
+    if grep -q '^packages/adjutorix-cli/tests/' <<<"$joined"; then
+      printf 'cli-tests'
+      return
+    fi
+    printf 'cli'
+    return
+  fi
+
+  if grep -q '^configs/ci/' <<<"$joined"; then
+    printf 'ci'
+    return
+  fi
+
+  if grep -q '^configs/hooks/' <<<"$joined"; then
+    printf 'hooks'
+    return
+  fi
+
+  if grep -q '^docs/' <<<"$joined"; then
+    printf 'docs'
+    return
+  fi
+
+  if grep -q '^tests/' <<<"$joined"; then
+    printf 'contracts'
+    return
+  fi
+
+  printf 'repo'
+}
+
+infer_commit_type() {
+  local scope="$1"
+  local paths
+  paths="$(collect_staged_paths || true)"
+
+  if [[ -z "$paths" ]]; then
+    printf 'chore'
+    return
+  fi
+
+  if grep -q '^docs/' <<<"$paths"; then
+    printf 'docs'
+    return
+  fi
+
+  if grep -q '/tests/' <<<"$paths" || grep -q '^tests/' <<<"$paths"; then
+    printf 'test'
+    return
+  fi
+
+  if grep -Eq '^configs/ci/|^configs/hooks/' <<<"$paths"; then
+    printf 'ci'
+    return
+  fi
+
+  case "$scope" in
+    cli|app|app-renderer|hooks|repo|contracts)
+      printf 'refactor'
+      ;;
+    *)
+      printf 'chore'
+      ;;
+  esac
+}
+
+collect_governance_tags() {
+  local paths
+  paths="$(collect_staged_paths || true)"
+  local tags=()
+
+  grep -Eq 'apply|patch' <<<"$paths" && tags+=("apply-gate") || true
+  grep -Eq 'verify' <<<"$paths" && tags+=("verify-gate") || true
+  grep -Eq 'replay|ledger' <<<"$paths" && tags+=("replay-lineage") || true
+  grep -Eq 'renderer' <<<"$paths" && tags+=("renderer-authority") || true
+  grep -Eq 'configs/ci|configs/hooks' <<<"$paths" && tags+=("repo-guards") || true
+  grep -Eq 'rpc|contract|preload|bridge|exposed_api' <<<"$paths" && tags+=("contract-surface") || true
+
+  if [[ "${#tags[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  printf '%s\n' "${tags[@]}"
+}
+
+append_template() {
+  local commit_type="$1"
+  local scope="$2"
+  local subject_stub="$3"
+  local hints="$4"
+  local paths_summary="$5"
+
+  cat > "$MSG_FILE" <<EOF
+${commit_type}(${scope}): ${subject_stub}
+
+Why:
+- 
+
+What:
+- 
+
+Proof:
+- 
+
+Governance impact:
+${hints}
+
+Changed paths:
+${paths_summary}
+EOF
+}
+
+build_hints_block() {
+  if [[ "$ENABLE_HINTS" != "1" ]]; then
+    printf '%s\n' '- none declared'
+    return
+  fi
+
+  local tags=()
+  local tag
+  while IFS= read -r tag; do
+    [[ -z "$tag" ]] && continue
+    tags+=("$tag")
+  done < <(collect_governance_tags || true)
+
+  if [[ "${#tags[@]}" -eq 0 ]]; then
+    printf '%s\n' '- none obvious from staged paths'
+    return
+  fi
+
+  for tag in "${tags[@]}"; do
+    printf -- '- %s\n' "$tag"
+  done
+}
+
+build_paths_summary() {
+  local count=0
+  local path
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    printf -- '- %s\n' "$path"
+    count=$((count + 1))
+    if (( count >= MAX_CHANGED_PATHS )); then
+      printf -- '- ...\n'
+      break
+    fi
+  done < <(collect_staged_paths || true)
+
+  if (( count == 0 )); then
+    printf -- '- none staged\n'
+  fi
+}
+
+main() {
+  local subject
+  subject="$(current_subject)"
+
+  if is_merge_like_source; then
+    log "Merge commit source detected; preserving generated merge message"
+    exit 0
+  fi
+
+  if is_squash_like_source; then
+    log "Squash commit source detected; preserving squash message scaffold"
+    exit 0
+  fi
+
+  if is_fixup_or_squash_subject; then
+    log "fixup!/squash! subject detected; preserving autosquash message"
+    exit 0
+  fi
+
+  if is_commit_like_reuse && message_has_non_comment_content; then
+    log "Existing commit/message reuse detected; preserving user-provided content"
+    exit 0
+  fi
+
+  if message_has_non_comment_content; then
+    log "Commit message already contains non-comment content; leaving it untouched"
+    exit 0
+  fi
+
+  local scope commit_type hints paths_summary subject_stub
+  scope="$(infer_primary_scope)"
+  commit_type="$(infer_commit_type "$scope")"
+  hints="$(build_hints_block)"
+  if [[ "$APPEND_CHANGE_SUMMARY" == "1" ]]; then
+    paths_summary="$(build_paths_summary)"
+  else
+    paths_summary='- omitted by policy'
+  fi
+
+  case "$commit_type/$scope" in
+    docs/*)
+      subject_stub='clarify authoritative behavior'
+      ;;
+    test/*|*/app-tests|*/cli-tests)
+      subject_stub='add governed coverage for critical path'
+      ;;
+    ci/*|*/ci|*/hooks)
+      subject_stub='tighten local and CI guardrails'
+      ;;
+    refactor/app-renderer)
+      subject_stub='harden renderer authority boundary'
+      ;;
+    refactor/cli)
+      subject_stub='strengthen governed CLI surface'
+      ;;
+    refactor/contracts)
+      subject_stub='stabilize contract-bearing surfaces'
+      ;;
+    *)
+      subject_stub='tighten governed system behavior'
+      ;;
+  esac
+
+  append_template "$commit_type" "$scope" "$subject_stub" "$hints" "$paths_summary"
+  log "Prepared structured commit message template for type=$commit_type scope=$scope"
+}
+
+main "$@"

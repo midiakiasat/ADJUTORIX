@@ -1,0 +1,600 @@
+version: 1
+policy_id: adjutorix.trust-policy
+title: ADJUTORIX Trust Policy
+description: >-
+  Canonical governance policy for trust in ADJUTORIX. This policy defines how
+  trust is established, scoped, elevated, consumed, degraded, revoked,
+  attested, and restored across workspaces, runtime surfaces, commands,
+  verification outcomes, releases, secrets handling, and operator actions. The
+  policy exists to ensure that trust is a single explicit state machine rather
+  than a scattered set of informal assumptions.
+status: active
+owners:
+  - team: core-governance
+  - team: runtime-security
+  - team: workspace-runtime
+  - team: release-engineering
+default_decision: deny
+principles:
+  - id: trust-must-be-explicit
+    statement: No surface, workspace, artifact, or action may inherit trust implicitly from proximity or prior convenience.
+  - id: trust-must-be-scoped
+    statement: Trust decisions must bind to a specific subject, scope, authority surface, and validity window.
+  - id: trust-must-be-revocable
+    statement: Every trust elevation must define invalidation triggers and revocation behavior.
+  - id: trust-must-not-bypass-governance
+    statement: Trust may unlock governed capabilities, but may never disable verification, mutation, secrets, or release policy requirements.
+  - id: trust-must-be-attestable
+    statement: Every consequential trust decision must leave an auditable record of who or what granted it, when, why, and under which policy version.
+shared_enums:
+  decision:
+    - allow
+    - allow_with_warning
+    - deny
+  trust_subject_kind:
+    - workspace
+    - authority_surface
+    - runtime_session
+    - command_profile
+    - verify_result
+    - release_candidate
+    - artifact
+    - secret_source
+    - user_actor
+  trust_level:
+    - none
+    - observed
+    - tentative
+    - trusted
+    - elevated
+    - quarantined
+    - revoked
+  trust_scope:
+    - session
+    - workspace
+    - machine
+    - ci_run
+    - release_cycle
+    - explicit_target
+  trust_source:
+    - user_confirmation
+    - prior_attestation
+    - policy_evidence
+    - verified_replay
+    - release_attestation
+    - keychain_identity
+    - ci_identity
+  validity_state:
+    - valid
+    - expiring
+    - stale
+    - invalidated
+    - revoked
+  authority_surface:
+    - preload_bridge
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+    - ci_release_pipeline
+    - os_keychain_bridge
+  denied_surface:
+    - renderer_direct_authority
+    - ad_hoc_shell_exec
+    - raw_env_passthrough
+    - ungoverned_background_task
+    - unsigned_manual_publish
+classification:
+  trust_levels:
+    none:
+      description: No positive trust has been granted.
+      capabilities: []
+    observed:
+      description: Subject may be inspected, but no consequential action may rely on it.
+      capabilities:
+        - preview
+        - metadata_read
+    tentative:
+      description: Subject may participate in bounded low-risk operations but not consequential mutation or publication.
+      capabilities:
+        - preview
+        - verify_non_authoritative
+        - limited_watch
+    trusted:
+      description: Subject satisfies baseline trust conditions for governed mutation and verification.
+      capabilities:
+        - preview
+        - verify_authoritative
+        - replay_authoritative
+        - mutate_when_other_policies_pass
+        - export_when_other_policies_pass
+    elevated:
+      description: Subject is trusted and additionally approved for higher-risk governed operations within bounded scope.
+      capabilities:
+        - preview
+        - verify_authoritative
+        - replay_authoritative
+        - mutate_when_other_policies_pass
+        - export_when_other_policies_pass
+        - release_promotion_when_other_policies_pass
+        - secret_resolution_when_other_policies_pass
+    quarantined:
+      description: Subject is under suspicion or degradation and may not participate in consequential actions.
+      capabilities:
+        - preview
+        - metadata_read
+    revoked:
+      description: Prior trust is explicitly removed and all trust-derived capabilities are denied.
+      capabilities: []
+  subject_defaults:
+    workspace:
+      initial_trust: none
+      max_default_trust_without_confirmation: tentative
+    authority_surface:
+      initial_trust: none
+      max_default_trust_without_attestation: tentative
+    runtime_session:
+      initial_trust: observed
+      max_default_trust_without_workspace_binding: tentative
+    command_profile:
+      initial_trust: none
+      max_default_trust_without_verify_binding: tentative
+    verify_result:
+      initial_trust: observed
+      max_default_trust_without_freshness_check: tentative
+    release_candidate:
+      initial_trust: none
+      max_default_trust_without_attestation: tentative
+    artifact:
+      initial_trust: none
+      max_default_trust_without_provenance: tentative
+    secret_source:
+      initial_trust: none
+      max_default_trust_without_classification: none
+    user_actor:
+      initial_trust: observed
+      max_default_trust_without_explicit_confirmation: tentative
+identity:
+  required_fields:
+    - trust_subject_kind
+    - trust_subject_id
+    - trust_scope
+    - authority_surface
+    - trust_level
+    - granted_by
+    - granted_at
+    - policy_id
+    - policy_version
+  optional_fields:
+    - workspace_id
+    - verify_id
+    - release_id
+    - command_profile_id
+    - secret_source_id
+    - expiry_at
+    - reason
+trust_evaluation:
+  baseline_requirements:
+    workspace:
+      require:
+        - canonical_identity_resolved
+        - workspace_policy_bound
+        - mutation_policy_bound
+        - command_policy_bound
+        - secrets_policy_bound
+      deny_if:
+        - boundary_check_failed
+        - workspace_blocked
+        - secret_violation_detected
+    authority_surface:
+      require:
+        - surface_registered
+        - governed_targets_bound
+        - no_bypass_violation_detected
+      deny_if:
+        - renderer_authority_detected
+        - apply_gate_bypass_detected
+        - verify_gate_bypass_detected
+        - scheduler_bypass_detected
+    runtime_session:
+      require:
+        - workspace_binding_visible
+        - session_identity_visible
+      deny_if:
+        - workspace_trust_in:
+            - quarantined
+            - revoked
+    command_profile:
+      require:
+        - command_policy_binding
+        - explicit_effect_class
+      deny_if:
+        - forbidden_executable_detected
+        - raw_shell_wrapper_detected
+    verify_result:
+      require:
+        - verify_policy_binding
+        - evidence_summary_present
+        - freshness_state_visible
+      deny_if:
+        - verify_status_in:
+            - failed
+            - blocked
+            - stale
+            - superseded
+    release_candidate:
+      require:
+        - release_policy_binding
+        - provenance_complete
+        - artifact_manifest_present
+      deny_if:
+        - signing_state_missing
+        - verification_state_in:
+            - failed
+            - stale
+            - missing
+    artifact:
+      require:
+        - provenance_visible
+        - checksum_present
+      deny_if:
+        - checksum_missing
+        - secret_violation_detected
+    secret_source:
+      require:
+        - secrets_policy_binding
+        - secret_classification_present
+        - source_visibility_present
+      deny_if:
+        - plaintext_storage_detected
+        - renderer_secret_access_detected
+    user_actor:
+      require:
+        - actor_identity_visible
+      deny_if:
+        - actor_session_compromised
+levels:
+  none:
+    allow_when:
+      baseline_visible: true
+    deny_when:
+      - subject_identity_missing
+  observed:
+    allow_when:
+      baseline_visible: true
+      deny_conditions_absent: true
+    deny_when:
+      - explicit_quarantine
+  tentative:
+    allow_when:
+      baseline_requirements_passed: true
+      trust_source_in:
+        - user_confirmation
+        - policy_evidence
+        - prior_attestation
+    deny_when:
+      - freshness_missing_when_required
+      - identity_drift_detected
+  trusted:
+    allow_when:
+      baseline_requirements_passed: true
+      trust_source_in:
+        - user_confirmation
+        - prior_attestation
+        - policy_evidence
+        - verified_replay
+        - ci_identity
+      required_bindings_present:
+        - workspace_policy
+        - mutation_policy
+        - verify_policy
+    deny_when:
+      - stale_evidence
+      - secret_violation_detected
+      - bypass_violation_detected
+      - identity_drift_detected
+  elevated:
+    allow_when:
+      current_level_in:
+        - trusted
+      explicit_confirmation_present: true
+      scope_narrowed: true
+      expiry_present: true
+      attestation_ready: true
+    deny_when:
+      - elevated_scope_missing
+      - expiry_missing
+      - release_or_secret_policy_unbound
+  quarantined:
+    set_when:
+      - boundary_check_failed
+      - secret_violation_detected
+      - renderer_authority_detected
+      - replay_drift_detected
+      - provenance_gap_detected
+      - suspicious_identity_change
+  revoked:
+    set_when:
+      - explicit_revocation
+      - expiry_elapsed
+      - attestation_invalidated
+      - signing_or_secret_incident
+freshness_and_validity:
+  require_expiry_for:
+    - elevated
+    - tentative
+  default_ttl_seconds:
+    session:
+      observed: 86400
+      tentative: 3600
+      trusted: 3600
+      elevated: 900
+    workspace:
+      tentative: 86400
+      trusted: 86400
+      elevated: 3600
+    ci_run:
+      tentative: 3600
+      trusted: 3600
+      elevated: 1800
+    release_cycle:
+      tentative: 86400
+      trusted: 86400
+      elevated: 86400
+  invalidation_triggers:
+    - workspace_identity_changed
+    - canonical_root_changed
+    - environment_fingerprint_changed
+    - selected_seq_changed
+    - verify_result_superseded
+    - release_candidate_superseded
+    - secret_source_reclassified
+    - authority_surface_policy_changed
+capabilities:
+  preview:
+    minimum_trust: observed
+  metadata_read:
+    minimum_trust: observed
+  verify_non_authoritative:
+    minimum_trust: tentative
+  verify_authoritative:
+    minimum_trust: trusted
+  replay_authoritative:
+    minimum_trust: trusted
+  mutate_when_other_policies_pass:
+    minimum_trust: trusted
+  export_when_other_policies_pass:
+    minimum_trust: trusted
+  release_promotion_when_other_policies_pass:
+    minimum_trust: elevated
+  secret_resolution_when_other_policies_pass:
+    minimum_trust: elevated
+consumption_rules:
+  workspace_mutation:
+    require_subject_kind: workspace
+    require_minimum_level: trusted
+    require_validity_state: valid
+    require_bound_policies:
+      - mutation_policy
+      - workspace_policy
+      - verify_policy
+  command_execution:
+    require_subject_kind_in:
+      - workspace
+      - command_profile
+    require_minimum_level: trusted
+    require_validity_state: valid
+    require_bound_policies:
+      - command_policy
+      - workspace_policy
+  release_promotion:
+    require_subject_kind_in:
+      - release_candidate
+      - artifact
+    require_minimum_level: elevated
+    require_validity_state: valid
+    require_bound_policies:
+      - release_policy
+      - verify_policy
+      - secrets_policy
+  secret_resolution:
+    require_subject_kind: secret_source
+    require_minimum_level: elevated
+    require_validity_state: valid
+    require_bound_policies:
+      - secrets_policy
+  verify_apply_readiness_consumption:
+    require_subject_kind: verify_result
+    require_minimum_level: trusted
+    require_validity_state: valid
+    require_bound_policies:
+      - verify_policy
+      - mutation_policy
+cross_policy_constraints:
+  trust_may_not_override:
+    - mutation_policy_denial
+    - verify_policy_denial
+    - command_policy_denial
+    - secrets_policy_denial
+    - workspace_policy_denial
+    - release_policy_denial
+  trust_may_enable_only:
+    - governed_capability_unlock
+    - scoped_session_restore
+    - bounded_release_promotion
+    - scoped_secret_resolution
+  deny_if:
+    - trust_used_as_only_evidence
+    - trust_used_to_skip_confirmation
+    - trust_used_to_skip_freshness
+    - trust_used_to_skip_replay
+rules:
+  - id: trust-workspace-after-explicit-confirmation
+    subject_kind: workspace
+    allow_when:
+      trust_level_target: trusted
+      trust_source_in:
+        - user_confirmation
+      workspace_health_in:
+        - healthy
+      canonical_identity_resolved: true
+      policy_bindings_complete: true
+    deny_when:
+      - secret_violation_detected
+      - boundary_check_failed
+      - workspace_quarantined
+    decision: allow
+
+  - id: elevate-release-candidate
+    subject_kind: release_candidate
+    allow_when:
+      trust_level_target: elevated
+      trust_source_in:
+        - prior_attestation
+        - ci_identity
+      verification_state_in:
+        - passed
+      provenance_complete: true
+      signing_state_in:
+        - ci_signed
+        - ci_signed_and_notarized
+      explicit_confirmation_present: true
+      expiry_present: true
+    deny_when:
+      - attestation_missing
+      - provenance_gap_detected
+      - release_revoked
+    decision: allow
+
+  - id: trust-verify-result-for-apply-consumption
+    subject_kind: verify_result
+    allow_when:
+      trust_level_target: trusted
+      verify_status_in:
+        - passed
+        - warning
+      freshness_state_in:
+        - valid
+      replay_binding_present: true
+      environment_match_in:
+        - exact
+        - compatible
+    deny_when:
+      - verify_status_in:
+          - failed
+          - blocked
+          - stale
+          - superseded
+      - apply_readiness_claimed_without_verify_policy
+    decision: allow
+
+  - id: quarantine-on-bypass-or-secret-incident
+    subject_kind_in:
+      - workspace
+      - authority_surface
+      - runtime_session
+      - secret_source
+    set_level: quarantined
+    when_any:
+      - renderer_authority_detected
+      - apply_gate_bypass_detected
+      - verify_gate_bypass_detected
+      - scheduler_bypass_detected
+      - plaintext_secret_log_detected
+      - provenance_gap_detected
+    decision: allow
+
+  - id: revoke-on-expiry-or-invalidated-attestation
+    subject_kind_in:
+      - workspace
+      - release_candidate
+      - artifact
+      - secret_source
+    set_level: revoked
+    when_any:
+      - expiry_elapsed
+      - attestation_invalidated
+      - explicit_revocation
+      - signing_incident_confirmed
+    decision: allow
+attestation:
+  required_fields:
+    - policy_id
+    - policy_version
+    - trust_subject_kind
+    - trust_subject_id
+    - trust_scope
+    - authority_surface
+    - trust_level
+    - trust_source
+    - validity_state
+    - granted_by
+    - granted_at
+    - expiry_at
+    - reason
+    - evaluated_at
+  write_targets:
+    - governance_log
+    - workspace_audit_log
+    - verify_artifact
+    - release_metadata_bundle
+    - security_audit_log
+  redactions:
+    - secrets
+    - tokens
+    - credentials
+    - private_keys
+revocation:
+  triggers:
+    - explicit_user_revocation
+    - admin_revocation
+    - secret_leak_incident
+    - provenance_gap_incident
+    - policy_version_incompatibility
+    - repeated_identity_drift
+  required_actions:
+    - mark_subject_revoked
+    - block_trust_derived_capabilities
+    - invalidate_cached_session_state
+    - record_revocation_reason
+    - notify_relevant_consumers
+telemetry:
+  emit_on:
+    - granted
+    - elevated
+    - expired
+    - invalidated
+    - quarantined
+    - revoked
+    - denied
+  required_dimensions:
+    - trust_subject_kind
+    - trust_scope
+    - trust_level
+    - trust_source
+    - validity_state
+    - authority_surface
+    - decision
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - subject_scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 7
+    allow_renderer_authority_trust: false
+    allow_trust_to_skip_verify: false
+    allow_trust_to_skip_secret_controls: false
+    allow_unsigned_release_elevation: false
+review:
+  cadence: quarterly
+  triggers:
+    - new_trust_subject_kind
+    - trust_revocation_incident
+    - bypass_incident
+    - provenance_gap_incident
+    - secret_leak_incident

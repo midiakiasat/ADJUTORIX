@@ -1,0 +1,566 @@
+version: 1
+registry_id: adjutorix.dashboards
+title: ADJUTORIX Observability Dashboard Registry
+description: >-
+  Canonical machine-readable registry of dashboards for ADJUTORIX observability.
+  This registry defines dashboard purpose, audience, data sources, variables,
+  layout groups, panels, alert overlays, drilldowns, and freshness
+  expectations across runtime, governance, verify, replay, scheduler, command,
+  release, security, and recovery surfaces. Its purpose is to ensure that
+  observability views are policy-aligned, causally coherent, and operationally
+  decisive rather than ad hoc collections of charts.
+status: active
+owners:
+  - team: runtime-observability
+  - team: core-governance
+  - team: app-runtime
+  - team: agent-runtime
+  - team: release-engineering
+defaults:
+  unknown_dashboard_behavior: deny
+  unknown_panel_behavior: deny
+  unknown_data_source_behavior: deny
+  time_range: now-6h_to_now
+  refresh_interval_seconds: 30
+invariants:
+  - id: no_dashboard_without_operational_question
+    statement: Every dashboard must answer a bounded operational or governance question.
+  - id: no_metric_without_context
+    statement: Metrics panels must be paired with enough context to interpret whether motion is healthy, degraded, or policy-significant.
+  - id: no_policy_blind_latency_views
+    statement: Consequential latency views must expose governance, queue, verify, replay, or release states where those states affect interpretation.
+  - id: no_unbounded_filter_cardinality
+    statement: Dashboard variables must not expose unbounded identifiers such as raw transaction IDs or workspace paths by default.
+  - id: drilldown_preserves_causality
+    statement: Drilldowns must preserve enough context to move from symptom to cause across metrics, events, logs, and traces.
+shared_enums:
+  audience:
+    - operator
+    - engineer
+    - security
+    - release_manager
+    - maintainer
+    - incident_commander
+  data_source:
+    - metrics
+    - events
+    - logs
+    - traces
+    - alerts
+  panel_kind:
+    - stat
+    - timeseries
+    - table
+    - heatmap
+    - state_timeline
+    - text
+    - bar_chart
+    - gauge
+    - trace_list
+    - event_stream
+    - alert_list
+  severity:
+    - none
+    - warning
+    - critical
+  freshness_class:
+    - near_realtime
+    - operational
+    - audit
+    - release
+  variable_type:
+    - enum
+    - multi_enum
+    - time_range
+schema:
+  required_dashboard_fields:
+    - id
+    - title
+    - audience
+    - purpose
+    - data_sources
+    - variables
+    - sections
+    - drilldowns
+  required_panel_fields:
+    - id
+    - title
+    - kind
+    - data_source
+    - query
+    - description
+variables_common:
+  allowed:
+    - service
+    - runtime_mode
+    - release_channel
+    - queue_id
+    - job_class
+    - verify_kind
+    - verify_status
+    - replay_status
+    - decision
+    - authority_surface
+    - outcome
+    - environment_match
+  forbidden:
+    - request_id
+    - correlation_id
+    - transaction_id
+    - workspace_id
+    - verify_id
+    - replay_id
+    - ledger_id
+    - release_id
+    - path
+    - command
+dashboards:
+  - id: runtime_overview
+    title: Runtime Overview
+    audience: operator
+    purpose: >-
+      Answer whether ADJUTORIX is currently healthy at the runtime level, which
+      surfaces are degraded, and whether latency or capacity issues are growing.
+    freshness_class: near_realtime
+    data_sources:
+      - metrics
+      - events
+      - alerts
+    variables:
+      - name: service
+        type: multi_enum
+        default: [adjutorix-agent, adjutorix-app-main]
+      - name: runtime_mode
+        type: enum
+        default: production
+      - name: time_range
+        type: time_range
+        default: now-6h_to_now
+    sections:
+      - id: summary
+        title: Runtime Summary
+        panels:
+          - id: agent_rpc_rate
+            title: RPC Request Rate
+            kind: stat
+            data_source: metrics
+            query: sum(rate(adjutorix_rpc_requests_total[5m])) by (service)
+            description: Current admitted governed RPC request rate.
+          - id: scheduler_queue_depth
+            title: Total Queue Depth
+            kind: stat
+            data_source: metrics
+            query: sum(adjutorix_scheduler_queue_depth)
+            description: Total number of queued jobs across governed queues.
+          - id: watcher_polling_active
+            title: Watcher Polling Active
+            kind: stat
+            data_source: metrics
+            query: max(adjutorix_watcher_polling_mode)
+            description: Indicates whether watcher polling fallback is active.
+          - id: open_alerts
+            title: Active Alerts
+            kind: stat
+            data_source: alerts
+            query: count(active_alerts)
+            description: Count of active warning and critical alerts.
+      - id: latency
+        title: Runtime Latency
+        panels:
+          - id: rpc_latency_p95
+            title: RPC p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_rpc_request_duration_ms_bucket[5m])) by (le, service))
+            description: P95 RPC latency by service.
+          - id: command_latency_p95
+            title: Governed Command p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_command_run_duration_ms_bucket[5m])) by (le))
+            description: P95 duration for governed command execution.
+          - id: ledger_persist_latency_p95
+            title: Ledger Persist p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_ledger_persist_duration_ms_bucket[5m])) by (le))
+            description: P95 latency of ledger persistence.
+      - id: health_events
+        title: Health and Degradation Events
+        panels:
+          - id: recent_health_events
+            title: Recent Health Events
+            kind: event_stream
+            data_source: events
+            query: category=health OR event_name=watcher.mode_changed
+            description: Recent health or degradation-related events.
+          - id: recent_runtime_alerts
+            title: Runtime Alerts
+            kind: alert_list
+            data_source: alerts
+            query: dashboard=runtime_overview
+            description: Alerts relevant to runtime health.
+    drilldowns:
+      - from_panel: rpc_latency_p95
+        target_dashboard: scheduler_flow
+        preserve_filters: [service, runtime_mode, time_range]
+      - from_panel: recent_health_events
+        target_dashboard: security_and_governance
+        preserve_filters: [time_range]
+
+  - id: scheduler_flow
+    title: Scheduler and Transaction Flow
+    audience: operator
+    purpose: >-
+      Answer whether the governed scheduler is admitting, sequencing, and
+      completing work correctly, and where jobs are stalling, timing out, or
+      entering recovery.
+    freshness_class: near_realtime
+    data_sources:
+      - metrics
+      - events
+      - traces
+      - alerts
+    variables:
+      - name: queue_id
+        type: multi_enum
+        default: [foreground_interactive, verify, replay, mutation, release, recovery]
+      - name: job_class
+        type: multi_enum
+        default: [verify_run, replay_run, patch_apply, rollback, release_promotion]
+      - name: time_range
+        type: time_range
+        default: now-6h_to_now
+    sections:
+      - id: scheduler_capacity
+        title: Scheduler Capacity and Throughput
+        panels:
+          - id: queue_depth_by_queue
+            title: Queue Depth by Queue
+            kind: timeseries
+            data_source: metrics
+            query: sum(adjutorix_scheduler_queue_depth) by (queue_id)
+            description: Current queue depth per governed queue.
+          - id: running_jobs_by_class
+            title: Running Jobs by Class
+            kind: timeseries
+            data_source: metrics
+            query: sum(adjutorix_scheduler_running_jobs) by (job_class)
+            description: Concurrent running jobs by class.
+          - id: jobs_admitted_total
+            title: Jobs Admitted
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_scheduler_jobs_admitted_total[5m])) by (queue_id, job_class)
+            description: Admission rate by queue and job class.
+      - id: failures
+        title: Failures, Timeouts, and Recovery
+        panels:
+          - id: scheduler_job_timeouts
+            title: Job Timeouts
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_scheduler_job_timeouts_total[5m])) by (job_class)
+            description: Timeout rate across governed job classes.
+          - id: transaction_recoveries
+            title: Transaction Recoveries
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_transaction_recovery_total[5m])) by (transaction_kind, outcome)
+            description: Recovery attempts by transaction kind and outcome.
+          - id: recent_scheduler_events
+            title: Recent Scheduler Events
+            kind: event_stream
+            data_source: events
+            query: category=scheduler OR category=transaction OR category=recovery
+            description: Recent scheduler, transaction, and recovery events.
+      - id: causal_trace
+        title: Causal Trace Surface
+        panels:
+          - id: scheduler_trace_list
+            title: High-latency or Failed Scheduler Traces
+            kind: trace_list
+            data_source: traces
+            query: span_name in [scheduler.admission, scheduler.execution, transaction.transition, recovery.resume] and outcome in [failed, blocked, timed_out, recovered, rolled_back]
+            description: Trace candidates for causal debugging of scheduler issues.
+    drilldowns:
+      - from_panel: recent_scheduler_events
+        target_dashboard: verify_replay_governance
+        preserve_filters: [job_class, time_range]
+      - from_panel: scheduler_trace_list
+        target_dashboard: security_and_governance
+        preserve_filters: [time_range]
+
+  - id: verify_replay_governance
+    title: Verify, Replay, and Governance Gates
+    audience: engineer
+    purpose: >-
+      Answer whether verify and replay remain authoritative, fresh, and aligned
+      with governance decisions, and where blocked or stale states are growing.
+    freshness_class: near_realtime
+    data_sources:
+      - metrics
+      - events
+      - traces
+      - alerts
+    variables:
+      - name: verify_kind
+        type: multi_enum
+        default: [mutation_guard, release_guard, informational]
+      - name: verify_status
+        type: multi_enum
+        default: [passed, warning, failed, blocked, stale]
+      - name: environment_match
+        type: multi_enum
+        default: [exact, compatible, drifted, unknown]
+      - name: time_range
+        type: time_range
+        default: now-24h_to_now
+    sections:
+      - id: verify_summary
+        title: Verify Health
+        panels:
+          - id: verify_runs_rate
+            title: Verify Runs
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_verify_runs_total[5m])) by (verify_kind, verify_status)
+            description: Verify run rate split by kind and status.
+          - id: verify_duration_p95
+            title: Verify p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_verify_run_duration_ms_bucket[5m])) by (le, verify_kind))
+            description: Verify latency by kind.
+          - id: verify_stale_total
+            title: Stale Verify Results
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_verify_stale_results_total[5m])) by (verify_kind)
+            description: Stale verify result rate.
+      - id: replay_summary
+        title: Replay Health
+        panels:
+          - id: replay_runs_rate
+            title: Replay Runs
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_replay_runs_total[5m])) by (replay_status)
+            description: Replay run rate by status.
+          - id: replay_duration_p95
+            title: Replay p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_replay_run_duration_ms_bucket[5m])) by (le))
+            description: Replay latency.
+          - id: nondeterministic_replay_rate
+            title: Non-deterministic Replay Rate
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_replay_non_deterministic_total[5m]))
+            description: Count of non-deterministic replay outcomes.
+      - id: governance_summary
+        title: Governance Decisions
+        panels:
+          - id: governance_decisions
+            title: Governance Decisions
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_governance_decisions_total[5m])) by (decision, authority_surface)
+            description: Allow, warn, and deny decision rates.
+          - id: governance_denials
+            title: Governance Denials
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_governance_denials_total[5m])) by (authority_surface)
+            description: Denial rate by authority surface.
+          - id: recent_verify_replay_events
+            title: Recent Verify/Replay/Governance Events
+            kind: event_stream
+            data_source: events
+            query: category in [verify, replay, governance]
+            description: Recent relevant audit and anomaly events.
+      - id: causal_trace
+        title: Trace Drilldown
+        panels:
+          - id: gate_trace_list
+            title: Failed or Slow Gate Traces
+            kind: trace_list
+            data_source: traces
+            query: span_name in [verify.run, replay.run, governance.decision, patch.apply] and outcome in [failed, blocked, denied, timed_out]
+            description: Trace candidates for blocked verify/replay/governance flows.
+    drilldowns:
+      - from_panel: governance_denials
+        target_dashboard: security_and_governance
+        preserve_filters: [time_range]
+      - from_panel: gate_trace_list
+        target_dashboard: release_and_recovery
+        preserve_filters: [time_range]
+
+  - id: security_and_governance
+    title: Security and Governance Integrity
+    audience: security
+    purpose: >-
+      Answer whether secrets handling, authority boundaries, and governance
+      denials are behaving safely, and whether any path suggests exfiltration,
+      policy bypass, or renderer authority drift.
+    freshness_class: near_realtime
+    data_sources:
+      - metrics
+      - events
+      - logs
+      - alerts
+    variables:
+      - name: authority_surface
+        type: multi_enum
+        default: [main_process_service, governed_agent_rpc, governed_cli_command, governed_scheduler_job]
+      - name: decision
+        type: multi_enum
+        default: [allow, allow_with_warning, deny]
+      - name: time_range
+        type: time_range
+        default: now-24h_to_now
+    sections:
+      - id: security_summary
+        title: Security Summary
+        panels:
+          - id: secret_redactions
+            title: Secret Redactions Applied
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_security_secret_redactions_total[5m])) by (surface, outcome)
+            description: Redaction activity by surface.
+          - id: security_policy_violations
+            title: Security Policy Violations
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_security_policy_violations_total[5m])) by (authority_surface, outcome)
+            description: Security policy violation rate.
+          - id: governance_denials_stat
+            title: Governance Denials
+            kind: stat
+            data_source: metrics
+            query: sum(rate(adjutorix_governance_denials_total[5m]))
+            description: Current governance denial rate.
+      - id: evidence
+        title: Evidence Streams
+        panels:
+          - id: security_events_stream
+            title: Security Events
+            kind: event_stream
+            data_source: events
+            query: category=security OR event_name=governance.denial_emitted
+            description: Security and governance denial events.
+          - id: security_logs
+            title: Security Logs
+            kind: table
+            data_source: logs
+            query: category in [security, governance] and level in [warn, error, fatal]
+            description: Recent structured log records for security-relevant activity.
+          - id: active_security_alerts
+            title: Security Alerts
+            kind: alert_list
+            data_source: alerts
+            query: severity in [warning, critical] and domain in [security, governance]
+            description: Active security/governance alerts.
+    drilldowns:
+      - from_panel: security_events_stream
+        target_dashboard: release_and_recovery
+        preserve_filters: [time_range]
+
+  - id: release_and_recovery
+    title: Release and Recovery Control Plane
+    audience: release_manager
+    purpose: >-
+      Answer whether release promotion, rollback, and recovery flows are safe,
+      timely, and causally explainable, and whether emergency paths are being
+      overused.
+    freshness_class: operational
+    data_sources:
+      - metrics
+      - events
+      - traces
+      - alerts
+    variables:
+      - name: release_channel
+        type: multi_enum
+        default: [internal, beta, rc, stable, emergency]
+      - name: outcome
+        type: multi_enum
+        default: [success, warning, failed, blocked, rolled_back, timed_out, recovered]
+      - name: time_range
+        type: time_range
+        default: now-7d_to_now
+    sections:
+      - id: release_summary
+        title: Release Summary
+        panels:
+          - id: release_promotions
+            title: Release Promotions
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_release_promotions_total[1h])) by (release_channel, outcome, decision)
+            description: Release promotion attempts and outcomes.
+          - id: release_promotion_p95
+            title: Release Promotion p95 Duration
+            kind: timeseries
+            data_source: metrics
+            query: histogram_quantile(0.95, sum(rate(adjutorix_release_promotion_duration_ms_bucket[1h])) by (le, release_channel))
+            description: Release promotion latency by channel.
+          - id: release_rollbacks
+            title: Release Rollbacks
+            kind: timeseries
+            data_source: metrics
+            query: sum(rate(adjutorix_release_rollbacks_total[1h])) by (release_channel, outcome)
+            description: Rollback and revocation rates.
+      - id: recovery_summary
+        title: Recovery Summary
+        panels:
+          - id: recovery_events
+            title: Recovery Events
+            kind: event_stream
+            data_source: events
+            query: category in [recovery, release]
+            description: Recovery and release-related state transitions.
+          - id: recovery_traces
+            title: Release/Recovery Traces
+            kind: trace_list
+            data_source: traces
+            query: span_name in [release.promote, rollback.execute, recovery.resume] and outcome in [failed, blocked, timed_out, rolled_back, recovered]
+            description: Trace candidates for release and recovery analysis.
+          - id: release_alerts
+            title: Release Alerts
+            kind: alert_list
+            data_source: alerts
+            query: domain in [release, recovery]
+            description: Active release and recovery alerts.
+    drilldowns:
+      - from_panel: recovery_traces
+        target_dashboard: scheduler_flow
+        preserve_filters: [time_range]
+
+dashboard_links:
+  - source: runtime_overview
+    target: scheduler_flow
+    rationale: Runtime latency and degradation usually route through queueing or execution bottlenecks.
+  - source: scheduler_flow
+    target: verify_replay_governance
+    rationale: Queue stalls and failures often originate in verify, replay, or governance gates.
+  - source: verify_replay_governance
+    target: security_and_governance
+    rationale: Denials and blocked states may be policy- or security-driven.
+  - source: security_and_governance
+    target: release_and_recovery
+    rationale: Security and governance incidents frequently surface in rollback or release control paths.
+validation_rules:
+  require_dashboard_id_unique: true
+  require_panel_id_unique_per_dashboard: true
+  require_all_variables_declared: true
+  forbid_forbidden_variables: true
+  require_drilldowns_reference_existing_dashboards: true
+review:
+  cadence: quarterly
+  triggers:
+    - new_metric_registry_version
+    - new_trace_registry_version
+    - incident_missing_dashboard_visibility

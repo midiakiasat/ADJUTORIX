@@ -1,0 +1,756 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.dev/schemas/verify_summary.schema.json",
+  "title": "ADJUTORIX Verify Summary",
+  "description": "Canonical schema for authoritative verification summaries in ADJUTORIX. A verify summary is the compact, policy-bound representation of a governed verification outcome used by apply gates, release gates, replay consumers, UI surfaces, CLI output, and ledger-linked artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "verify_id",
+    "verify_kind",
+    "scope",
+    "workspace",
+    "status",
+    "apply_readiness",
+    "freshness",
+    "environment",
+    "checks",
+    "policy",
+    "attestation"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "adjutorix.verify-summary"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "verify_id": {
+      "$ref": "#/$defs/non_empty_string"
+    },
+    "verify_kind": {
+      "type": "string",
+      "enum": [
+        "informational",
+        "mutation_guard",
+        "release_guard"
+      ]
+    },
+    "scope": {
+      "$ref": "#/$defs/scope_binding"
+    },
+    "workspace": {
+      "$ref": "#/$defs/workspace_binding"
+    },
+    "status": {
+      "$ref": "#/$defs/verify_status"
+    },
+    "status_reason": {
+      "type": "string"
+    },
+    "apply_readiness": {
+      "$ref": "#/$defs/apply_readiness"
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshness"
+    },
+    "environment": {
+      "$ref": "#/$defs/environment_binding"
+    },
+    "checks": {
+      "$ref": "#/$defs/check_collection"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary_block"
+    },
+    "replay": {
+      "$ref": "#/$defs/replay_binding"
+    },
+    "ledger": {
+      "$ref": "#/$defs/ledger_binding"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy_decision"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact_ref"
+      }
+    },
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(x|ext)_[A-Za-z0-9_.-]+$"
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verify_kind": {
+            "const": "mutation_guard"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replay"
+        ],
+        "properties": {
+          "status": {
+            "not": {
+              "const": "stale"
+            }
+          },
+          "apply_readiness": {
+            "not": {
+              "const": "unknown"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verify_kind": {
+            "const": "release_guard"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replay",
+          "artifacts"
+        ],
+        "properties": {
+          "environment": {
+            "properties": {
+              "environment_match": {
+                "const": "exact"
+              }
+            },
+            "required": [
+              "environment_match"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "summary": {
+            "properties": {
+              "blocking_failures": {
+                "const": 0
+              }
+            },
+            "required": [
+              "blocking_failures"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "summary": {
+            "properties": {
+              "blocking_failures": {
+                "minimum": 1
+              }
+            },
+            "required": [
+              "blocking_failures"
+            ]
+          },
+          "apply_readiness": {
+            "const": "blocked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "stale"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "apply_readiness": {
+            "const": "blocked"
+          },
+          "freshness": {
+            "properties": {
+              "fresh": {
+                "const": false
+              }
+            },
+            "required": [
+              "fresh"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verify_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "passed",
+        "warning",
+        "failed",
+        "blocked",
+        "stale",
+        "superseded"
+      ]
+    },
+    "apply_readiness": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "caution",
+        "blocked",
+        "unknown"
+      ]
+    },
+    "scope_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_kind",
+        "target_identity",
+        "summary"
+      ],
+      "properties": {
+        "scope_kind": {
+          "type": "string",
+          "enum": [
+            "patch",
+            "workspace",
+            "ledger_selection",
+            "release_candidate",
+            "targeted_files",
+            "command_result"
+          ]
+        },
+        "target_identity": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "target_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relative_workspace_path"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "relative_workspace_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "workspace_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "canonical_root_path",
+        "trust_level",
+        "workspace_health"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "canonical_root_path": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": [
+            "none",
+            "observed",
+            "tentative",
+            "trusted",
+            "elevated",
+            "quarantined",
+            "revoked"
+          ]
+        },
+        "workspace_health": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "unhealthy",
+            "blocked"
+          ]
+        },
+        "filesystem_fingerprint": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "workspace_kind": {
+          "type": "string"
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fresh",
+        "evaluated_at",
+        "max_age_seconds"
+      ],
+      "properties": {
+        "fresh": {
+          "type": "boolean"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "max_age_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "stale_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "age_exceeded",
+              "environment_changed",
+              "selected_seq_changed",
+              "workspace_identity_changed",
+              "target_identity_changed",
+              "required_evidence_not_fresh"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "environment_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recorded_environment_fingerprint",
+        "current_environment_fingerprint",
+        "environment_match"
+      ],
+      "properties": {
+        "recorded_environment_fingerprint": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "current_environment_fingerprint": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "environment_match": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "compatible",
+            "drifted",
+            "unknown"
+          ]
+        },
+        "toolchain": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "check_collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "blocking_classes"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/check_item"
+          }
+        },
+        "blocking_classes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "replay",
+              "policy",
+              "diagnostics",
+              "tests",
+              "typecheck",
+              "lint",
+              "build",
+              "environment",
+              "ledger",
+              "artifact",
+              "command",
+              "secret_scan",
+              "workspace_health"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "check_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "title",
+        "class",
+        "status",
+        "blocking",
+        "fresh",
+        "summary",
+        "payload_digest"
+      ],
+      "properties": {
+        "check_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "title": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "replay",
+            "policy",
+            "diagnostics",
+            "tests",
+            "typecheck",
+            "lint",
+            "build",
+            "environment",
+            "ledger",
+            "artifact",
+            "command",
+            "secret_scan",
+            "workspace_health"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "skipped"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "error",
+            "fatal"
+          ]
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "summary_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_count",
+        "blocking_failures",
+        "warnings",
+        "headline"
+      ],
+      "properties": {
+        "check_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocking_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "headline": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "replay_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replay_status",
+        "determinism_state",
+        "replayable_lineage"
+      ],
+      "properties": {
+        "replay_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "passed",
+            "warning",
+            "failed",
+            "blocked",
+            "stale",
+            "superseded"
+          ]
+        },
+        "determinism_state": {
+          "type": "string",
+          "enum": [
+            "deterministic",
+            "non_deterministic",
+            "unknown"
+          ]
+        },
+        "replayable_lineage": {
+          "type": "boolean"
+        },
+        "ledger_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ledger_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger_id",
+        "selected_seq",
+        "head_seq"
+      ],
+      "properties": {
+        "ledger_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "selected_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "head_seq": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "policy_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "policy_bindings",
+        "evaluated_at"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "allow_with_warning",
+            "deny"
+          ]
+        },
+        "policy_bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verify_policy",
+            "workspace_policy",
+            "trust_policy"
+          ],
+          "properties": {
+            "verify_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "workspace_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "trust_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "mutation_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "release_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "command_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "secrets_policy": {
+              "$ref": "#/$defs/non_empty_string"
+            }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_kind",
+        "artifact_id"
+      ],
+      "properties": {
+        "artifact_kind": {
+          "type": "string",
+          "enum": [
+            "verify_artifact",
+            "replay_artifact",
+            "ledger_entry",
+            "release_metadata",
+            "command_audit"
+          ]
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256_hex"
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_at",
+        "summary_hash",
+        "evidence_digest"
+      ],
+      "properties": {
+        "evaluated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "summary_hash": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "evidence_digest": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "type": "string"
+            },
+            "key_id": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

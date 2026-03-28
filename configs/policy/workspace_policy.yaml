@@ -1,0 +1,591 @@
+version: 1
+policy_id: adjutorix.workspace-policy
+title: ADJUTORIX Workspace Policy
+description: >-
+  Canonical governance policy for workspace discovery, identity, trust,
+  admissibility, health, path boundaries, watching, persistence, session
+  restoration, mutation scope, ignore handling, export behavior, and authority
+  binding. This policy defines what a workspace is, when it is considered safe
+  enough to act on, and which runtime surfaces may observe or mutate it.
+status: active
+owners:
+  - team: core-governance
+  - team: workspace-runtime
+  - team: app-runtime
+  - team: cli-runtime
+default_decision: deny
+principles:
+  - id: explicit_workspace_identity
+    statement: Every workspace must resolve to a stable canonical root and identity before any consequential action may proceed.
+  - id: no_workspace_without_boundary
+    statement: A workspace must have explicit root boundaries, path normalization, and traversal-deny semantics.
+  - id: no_mutation_outside_root
+    statement: No workspace-governed mutation may target paths outside the approved workspace root set.
+  - id: no_ambiguous_trust
+    statement: Workspace trust state must be explicit, persisted, and invalidated when identity materially changes.
+  - id: no_hidden_degradation
+    statement: Health, ignore, watch, restore, and path classification failures must surface as policy-relevant state, not implicit tolerances.
+shared_enums:
+  decision:
+    - allow
+    - allow_with_warning
+    - deny
+  trust_level:
+    - untrusted
+    - tentative
+    - trusted
+    - quarantined
+  workspace_kind:
+    - filesystem_root
+    - git_repository
+    - monorepo_root
+    - detached_snapshot
+    - archive_mount
+    - readonly_bundle
+  workspace_health:
+    - healthy
+    - degraded
+    - unhealthy
+    - blocked
+  path_class:
+    - source
+    - generated
+    - config
+    - hidden_internal
+    - dependency_cache
+    - artifact_output
+    - forbidden
+  authority_surface:
+    - preload_bridge
+    - main_process_service
+    - governed_cli_command
+    - governed_agent_rpc
+    - governed_scheduler_job
+  denied_surface:
+    - renderer_direct_fs
+    - ad_hoc_shell_exec
+    - raw_path_mutation
+    - ungoverned_background_watcher
+  watch_mode:
+    - disabled
+    - local_fs_events
+    - polling_fallback
+  restore_mode:
+    - disabled
+    - safe_restore
+    - trust_gated_restore
+    - explicit_only
+  export_mode:
+    - deny
+    - metadata_only
+    - approved_subtree
+    - user_selected_with_scan
+identity:
+  canonicalization:
+    resolve_symlinks: true
+    normalize_case_if_case_insensitive_fs: true
+    require_absolute_root: true
+    collapse_dot_segments: true
+    deny_unclear_network_paths: true
+  required_fields:
+    - workspace_id
+    - root_path
+    - canonical_root_path
+    - workspace_kind
+    - trust_level
+  derived_fields:
+    - filesystem_fingerprint
+    - root_device_id
+    - root_inode_or_equivalent
+    - vcs_root
+    - manifest_fingerprint
+    - ignore_profile_id
+  trust_invalidation_triggers:
+    - canonical_root_changed
+    - filesystem_fingerprint_changed
+    - vcs_root_changed
+    - manifest_fingerprint_changed
+    - readonly_status_changed
+    - network_mount_status_changed
+admissibility:
+  allowed_workspace_kinds:
+    - filesystem_root
+    - git_repository
+    - monorepo_root
+    - detached_snapshot
+    - readonly_bundle
+  denied_workspace_conditions:
+    - root_missing
+    - root_not_directory
+    - canonicalization_failed
+    - traversal_escape_detected
+    - forbidden_mount_type
+    - quarantine_flag_present
+    - hidden_system_root
+  allow_with_warning_conditions:
+    - detached_snapshot
+    - readonly_bundle
+    - missing_vcs_metadata
+    - degraded_watch_capability
+    - large_workspace
+trust:
+  defaults:
+    first_open: untrusted
+    explicit_user_approval_required_for_trust: true
+    trust_elevation_requires_confirmation: true
+  trusted_capabilities:
+    - preview
+    - verify
+    - replay
+    - mutate
+    - export
+    - watch
+    - restore_session
+  tentative_capabilities:
+    - preview
+    - verify
+    - limited_watch
+  untrusted_capabilities:
+    - preview
+    - metadata_scan
+  quarantined_capabilities: []
+  trust_elevation_requirements:
+    workspace_health_at_least: healthy
+    root_identity_visible: true
+    mutation_policy_bound: true
+    confirmation_present: true
+  trust_demotion_triggers:
+    - root_identity_changed
+    - forbidden_artifact_detected
+    - secret_violation_detected
+    - renderer_authority_violation_detected
+    - apply_gate_bypass_detected
+boundaries:
+  root_policy:
+    require_single_canonical_root: true
+    allow_additional_roots: false
+    allow_nested_workspaces: explicit_only
+    nested_workspace_behavior: isolate
+  traversal:
+    deny_parent_escape: true
+    deny_symlink_escape: true
+    deny_mount_escape: true
+    deny_drive_escape_on_windows: true
+  allowed_path_prefixes:
+    - workspace_root
+  denied_path_prefixes:
+    - .git
+    - node_modules
+    - dist
+    - build
+    - out
+    - coverage
+    - .tmp
+    - tmp
+    - __pycache__
+    - .pytest_cache
+    - .mypy_cache
+    - .ruff_cache
+  file_size_limits:
+    preview_max_bytes: 1048576
+    inline_diff_max_bytes: 524288
+    watch_max_file_bytes: 10485760
+    mutation_max_file_bytes_without_extra_confirmation: 2097152
+classification:
+  source_patterns:
+    include:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.py'
+      - '**/*.json'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.md'
+      - '**/*.cjs'
+      - '**/*.mjs'
+      - '**/*.sh'
+  generated_patterns:
+    include:
+      - '**/*.generated.*'
+      - '**/*.min.*'
+      - '**/*.map'
+      - '**/*.whl'
+      - '**/*.tar.gz'
+      - '**/*.dmg'
+      - '**/*.pkg'
+      - '**/*.app'
+  config_patterns:
+    include:
+      - 'configs/**'
+      - '.github/**'
+      - '.vscode/**'
+      - '**/package.json'
+      - '**/pyproject.toml'
+      - '**/tsconfig*.json'
+  hidden_internal_patterns:
+    include:
+      - '.git/**'
+      - '.tmp/**'
+      - '.pytest_cache/**'
+      - '.mypy_cache/**'
+      - '.ruff_cache/**'
+      - '__pycache__/**'
+  dependency_cache_patterns:
+    include:
+      - 'node_modules/**'
+      - '.venv/**'
+      - 'venv/**'
+  artifact_output_patterns:
+    include:
+      - 'dist/**'
+      - 'build/**'
+      - 'out/**'
+      - 'coverage/**'
+      - 'artifacts/**'
+  forbidden_patterns:
+    include:
+      - '/etc/**'
+      - '/var/**'
+      - '/System/**'
+      - 'C:\\Windows\\**'
+      - '**/.DS_Store'
+health:
+  signals:
+    required_for_healthy:
+      - canonical_identity_resolved
+      - trust_state_present
+      - boundary_check_passed
+      - ignore_profile_loaded
+      - mutation_policy_bound
+      - command_policy_bound
+      - secrets_policy_bound
+    degrade_on:
+      - watcher_unavailable
+      - ignore_profile_partial
+      - vcs_metadata_missing
+      - file_classifier_partial
+      - large_workspace_threshold_exceeded
+    block_on:
+      - boundary_check_failed
+      - forbidden_surface_detected
+      - trust_state_missing_for_mutation
+      - canonical_identity_ambiguous
+      - workspace_root_not_readable
+      - secret_violation_detected
+  thresholds:
+    large_workspace_file_count: 200000
+    large_workspace_total_bytes: 2147483648
+    max_open_file_scan_errors: 25
+ignore_handling:
+  sources:
+    - .gitignore
+    - .ignore
+    - workspace_ignore_overrides
+    - policy_builtin_ignores
+  precedence:
+    - policy_builtin_ignores
+    - workspace_ignore_overrides
+    - .ignore
+    - .gitignore
+  builtins:
+    deny_from_preview:
+      - node_modules/**
+      - dist/**
+      - build/**
+      - out/**
+      - coverage/**
+      - .tmp/**
+      - tmp/**
+    deny_from_mutation:
+      - .git/**
+      - node_modules/**
+      - dist/**
+      - build/**
+      - out/**
+      - coverage/**
+    allow_explicit_override_for:
+      - generated
+      - artifact_output
+  requirements:
+    ignore_state_visible: true
+    override_reason_required: true
+watchers:
+  default_mode: local_fs_events
+  fallback_mode: polling_fallback
+  disabled_when:
+    - workspace_untrusted
+    - readonly_bundle
+    - forbidden_mount_type
+    - watcher_error_rate_exceeded
+  watch_scope:
+    include:
+      - source
+      - config
+    exclude:
+      - hidden_internal
+      - dependency_cache
+      - artifact_output
+      - forbidden
+  event_rules:
+    coalesce_burst_window_ms: 250
+    require_canonical_path_recheck: true
+    ignore_self_generated_events_if_attested: true
+  degradation:
+    on_fallback_to_polling: allow_with_warning
+    on_watch_disabled: degrade
+session_restore:
+  default_mode: trust_gated_restore
+  persistable_fields:
+    - selected_files
+    - open_tabs
+    - split_layout
+    - selected_seq
+    - sidebar_state
+    - panel_state
+    - workspace_settings_scope
+  denied_persisted_fields:
+    - plaintext_secrets
+    - raw_terminal_transcript
+    - ad_hoc_command_buffer
+    - unconfirmed_mutation_state
+    - hidden_authority_flags
+  restore_requirements:
+    workspace_identity_match: true
+    trust_level_at_least: trusted
+    canonical_root_match: true
+    environment_fingerprint_compatible: true
+  invalidators:
+    - workspace_identity_changed
+    - trust_level_downgraded
+    - selected_seq_missing
+    - session_version_mismatch
+mutation_scope:
+  allowed_subjects:
+    - source
+    - config
+    - generated
+  denied_subjects:
+    - hidden_internal
+    - dependency_cache
+    - forbidden
+  require_target_classification: true
+  require_within_workspace_root: true
+  require_trust_at_least: trusted
+  require_workspace_health_at_least: healthy
+  require_mutation_policy_binding: true
+  require_governed_target_binding: true
+  deny_when:
+    - target_path_ambiguous
+    - symlink_escape_detected
+    - readonly_root
+    - workspace_blocked
+export:
+  default_mode: user_selected_with_scan
+  allowed_modes:
+    metadata_only:
+      description: Export identity, diagnostics, and attestation metadata only.
+    approved_subtree:
+      description: Export only explicit approved subtrees under workspace root.
+    user_selected_with_scan:
+      description: Export user-selected content after secret scan and policy scan.
+  denied_exports:
+    - hidden_internal
+    - forbidden
+    - dependency_cache
+    - plaintext_secret_material
+  requirements:
+    pre_export_secret_scan: true
+    pre_export_policy_scan: true
+    destination_visible: true
+    subtree_visible: true
+authority:
+  allowed_surfaces:
+    preload_bridge:
+      may_read:
+        - identity
+        - classification
+        - session_restore_safe_fields
+      may_preview:
+        - source
+        - config
+        - generated
+      may_mutate:
+        - app_session_state_only
+    main_process_service:
+      may_read: all
+      may_preview: all
+      may_mutate:
+        - source
+        - config
+        - generated
+        - workspace_settings
+        - trust_state
+        - session_state
+      may_watch: true
+      may_export: true
+    governed_cli_command:
+      may_read: all
+      may_preview: all
+      may_mutate:
+        - source
+        - config
+        - generated
+        - trust_state
+      may_export: true
+    governed_agent_rpc:
+      may_read: all
+      may_preview: all
+      may_mutate:
+        - source
+        - config
+        - generated
+      may_export: true
+    governed_scheduler_job:
+      may_read: all
+      may_preview: all
+      may_mutate:
+        - source
+        - generated
+      may_watch: false
+  denied_surfaces:
+    - renderer_direct_fs
+    - ad_hoc_shell_exec
+    - raw_path_mutation
+    - ungoverned_background_watcher
+rules:
+  - id: open-workspace
+    description: Open and classify a candidate workspace.
+    allow_when:
+      canonical_identity_resolved: true
+      boundary_check_passed: true
+      workspace_kind_allowed: true
+    deny_when:
+      - canonicalization_failed
+      - root_not_directory
+      - forbidden_mount_type
+      - traversal_escape_detected
+    decision: allow
+
+  - id: elevate-trust
+    description: Elevate workspace from untrusted or tentative to trusted.
+    allow_when:
+      workspace_health_in:
+        - healthy
+      canonical_identity_resolved: true
+      mutation_policy_bound: true
+      command_policy_bound: true
+      secrets_policy_bound: true
+      explicit_confirmation_present: true
+    deny_when:
+      - workspace_blocked
+      - secret_violation_detected
+      - forbidden_surface_detected
+      - canonical_identity_ambiguous
+    decision: allow
+
+  - id: mutate-workspace-path
+    description: Mutate a classified workspace path.
+    allow_when:
+      trust_level_in:
+        - trusted
+      workspace_health_in:
+        - healthy
+      path_class_in:
+        - source
+        - config
+        - generated
+      target_within_root: true
+      symlink_escape_detected: false
+      governed_target_bound: true
+      mutation_policy_allows: true
+    deny_when:
+      - target_outside_root
+      - path_class_in_denied_set
+      - workspace_blocked
+      - readonly_root
+    decision: allow
+
+  - id: restore-session
+    description: Restore saved workspace session state.
+    allow_when:
+      restore_mode_in:
+        - safe_restore
+        - trust_gated_restore
+      trust_level_in:
+        - trusted
+      workspace_identity_match: true
+      canonical_root_match: true
+    deny_when:
+      - trust_level_in_untrusted_set
+      - workspace_identity_changed
+      - persisted_secret_field_detected
+    decision: allow
+
+  - id: export-workspace-content
+    description: Export workspace content or metadata.
+    allow_when:
+      export_mode_in:
+        - metadata_only
+        - approved_subtree
+        - user_selected_with_scan
+      secret_scan_passed: true
+      policy_scan_passed: true
+      destination_visible: true
+    deny_when:
+      - forbidden_path_selected
+      - plaintext_secret_material_detected
+      - subtree_outside_root
+    decision: allow
+telemetry:
+  emit_on:
+    - allow
+    - allow_with_warning
+    - deny
+  required_dimensions:
+    - workspace_kind
+    - trust_level
+    - workspace_health
+    - watch_mode
+    - restore_mode
+    - export_mode
+    - decision
+    - authority_surface
+audit:
+  required_fields:
+    - policy_id
+    - policy_version
+    - workspace_id
+    - canonical_root_path
+    - trust_level
+    - workspace_health
+    - authority_surface
+    - action
+    - decision
+    - evaluated_at
+  write_targets:
+    - governance_log
+    - workspace_audit_log
+exceptions:
+  mechanism: explicit_allowlist
+  required_fields:
+    - exception_id
+    - owner
+    - scope
+    - rationale
+    - expiry
+    - approving_surface
+  constraints:
+    max_duration_days: 14
+    allow_outside_root_mutation: false
+    allow_renderer_fs_access: false
+    allow_plaintext_secret_restore: false
+review:
+  cadence: quarterly
+  triggers:
+    - new_workspace_kind
+    - watcher_incident
+    - path_escape_incident
+    - trust_demotion_incident
+    - export_violation

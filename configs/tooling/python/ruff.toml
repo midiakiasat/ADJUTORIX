@@ -1,0 +1,197 @@
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".git",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".venv",
+  "venv",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".tmp",
+  "tmp",
+  "__pycache__",
+  "*.egg-info",
+]
+extend-exclude = [
+  "**/generated/**",
+  "**/*.generated.py",
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = 88
+
+[lint]
+preview = true
+select = [
+  "E",
+  "W",
+  "F",
+  "I",
+  "N",
+  "UP",
+  "B",
+  "A",
+  "C4",
+  "DTZ",
+  "EM",
+  "ERA",
+  "EXE",
+  "FA",
+  "FBT",
+  "G",
+  "ICN",
+  "INP",
+  "ISC",
+  "LOG",
+  "PIE",
+  "PL",
+  "PT",
+  "PTH",
+  "RET",
+  "RSE",
+  "RUF",
+  "S",
+  "SIM",
+  "SLOT",
+  "T10",
+  "T20",
+  "TC",
+  "TID",
+  "TRY",
+]
+ignore = [
+  "COM812",
+  "ISC001",
+  "PLR0912",
+  "PLR0913",
+  "PLR2004",
+  "TRY003",
+  "EM101",
+  "EM102",
+]
+fixable = ["ALL"]
+unfixable = [
+  "ERA001",
+]
+task-tags = ["TODO", "FIXME", "NOTE", "HACK"]
+logger-objects = ["logging_setup.logger", "adjutorix_cli.logging.logger"]
+
+[lint.per-file-ignores]
+"packages/adjutorix-cli/tests/**/*.py" = [
+  "S101",
+  "PLR0915",
+  "FBT001",
+  "FBT002",
+  "ANN201",
+  "ANN001",
+  "ANN202",
+]
+"tests/**/*.py" = [
+  "S101",
+  "PLR0915",
+  "FBT001",
+  "FBT002",
+  "ANN201",
+  "ANN001",
+  "ANN202",
+]
+"configs/ci/**/*.py" = [
+  "T201",
+  "S603",
+  "S607",
+]
+"configs/hooks/**/*.py" = [
+  "T201",
+]
+"**/__init__.py" = [
+  "F401",
+]
+
+[lint.isort]
+combine-as-imports = true
+force-single-line = false
+force-sort-within-sections = true
+known-first-party = [
+  "adjutorix_cli",
+  "adjutorix_agent",
+  "adjutorix_shared",
+]
+section-order = [
+  "future",
+  "standard-library",
+  "third-party",
+  "first-party",
+  "local-folder",
+]
+split-on-trailing-comma = true
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[lint.flake8-builtins]
+strict-checking = true
+
+[lint.flake8-boolean-trap]
+extend-allowed-calls = [
+  "Field",
+  "Option",
+  "Argument",
+]
+
+[lint.flake8-import-conventions.aliases]
+typing = "t"
+pydantic = "pyd"
+pathlib = "pl"
+
+[lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+parametrize-names-type = "tuple"
+parametrize-values-type = "tuple"
+raises-require-match-for = ["Exception", "ValueError", "TypeError", "RuntimeError"]
+
+[lint.flake8-quotes]
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"
+avoid-escape = true
+
+[lint.mccabe]
+max-complexity = 12
+
+[lint.pep8-naming]
+classmethod-decorators = ["classmethod", "pydantic.field_validator", "pydantic.model_validator"]
+staticmethod-decorators = ["staticmethod"]
+
+[lint.pylint]
+max-args = 6
+max-branches = 12
+max-returns = 6
+max-statements = 60
+allow-magic-value-types = ["int", "str", "bytes"]
+
+[lint.pyupgrade]
+keep-runtime-typing = true
+
+[lint.ruff]
+extend-safe-fixes = [
+  "TC",
+  "UP",
+  "RUF013",
+]
+
+[lint.flake8-bandit]
+check-typed-exception = true
+
+[analyze]
+detect-string-imports = true

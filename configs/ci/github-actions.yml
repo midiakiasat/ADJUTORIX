@@ -1,89 +1,384 @@
-name: Adjutorix CI (Verify Parity)
+name: ADJUTORIX CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches:
+      - main
+      - develop
+      - release/**
+      - feature/**
   pull_request:
-    branches: [ "main", "develop" ]
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: adjutorix-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+  NODE_OPTIONS: --max-old-space-size=4096
+  CI: "true"
 
 jobs:
-  verify:
-    name: Verify (CI Parity)
+  repo-guard:
+    name: Repository guard / structure / generated-artifact discipline
     runs-on: ubuntu-latest
-
-    timeout-minutes: 30
-
+    timeout-minutes: 15
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 22
+          cache: npm
 
-      - name: Install system dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install CLI dev dependencies
+        working-directory: packages/adjutorix-cli
+        run: python -m pip install -e .[dev]
+
+      - name: Verify repository invariants
+        run: bash configs/ci/scripts/check.sh
+
+      - name: Verify generated artifact discipline
+        run: bash configs/ci/scripts/guard_generated_artifacts.sh
+
+      - name: Verify CI-only guards
+        run: bash configs/ci/scripts/ci_guard_only.sh
+
+  js-quality:
+    name: JS quality / types / unit / contracts (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: repo-guard
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Print toolchain versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Lint monorepo
+        run: npm run lint --workspaces --if-present
+
+      - name: Typecheck monorepo
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Run shared/library tests
+        run: npm test --workspaces --if-present -- --runInBand
+
+      - name: Run app verify gate
+        run: npm --prefix packages/adjutorix-app run verify
+
+      - name: Run invariant tests
+        run: npm test --workspaces --if-present -- tests/invariants
+
+      - name: Run contract tests
+        run: npm test --workspaces --if-present -- tests/contracts
+
+      - name: Run replay/recovery tests
+        run: npm test --workspaces --if-present -- tests/replay tests/recovery
+
+      - name: Run performance smoke constraints
+        run: npm test --workspaces --if-present -- tests/performance
+
+  python-cli-quality:
+    name: Python CLI quality / types / tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: repo-guard
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: packages/adjutorix-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Upgrade packaging toolchain
+        run: |
+          python -m pip install --upgrade pip wheel
+
+      - name: Install CLI package with dev extras
+        run: |
+          python -m pip install -e .[dev]
+
+      - name: Print toolchain versions
+        run: |
+          python --version
+          python -m pip --version
+
+      - name: Ruff lint
+        run: ruff check src tests
+
+      - name: Ruff format check
+        run: ruff format --check src tests
+
+      - name: Mypy strict typecheck
+        run: mypy src
+
+      - name: Pytest
+        run: pytest -q
+
+  app-smoke-electron:
+    name: Electron app smoke / preload / renderer / main policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - js-quality
+      - python-cli-quality
+    defaults:
+      run:
+        working-directory: packages/adjutorix-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Xvfb runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep universal-ctags jq
+          sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2t64
 
-      - name: Install Python dependencies (Agent)
-        run: |
-          cd packages/adjutorix-agent
-          python -m pip install --upgrade pip
-          pip install -e .
+      - name: Run renderer tests
+        run: xvfb-run -a npm test -- tests/renderer
 
-      - name: Install Node dependencies (VSCode Extension + Shared)
-        run: |
-          npm install
-        working-directory: packages/shared
+      - name: Run main-process tests
+        run: xvfb-run -a npm test -- tests/main
 
-      - name: Build Shared Package
+      - name: Run smoke tests
+        run: xvfb-run -a npm test -- tests/smoke
+
+      - name: Build Electron app
         run: npm run build
-        working-directory: packages/shared
 
-      - name: Install VSCode Extension Dependencies
-        run: npm install
-        working-directory: packages/adjutorix-vscode
+  integration-agent-cli:
+    name: Agent + CLI integration / governed RPC surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs:
+      - js-quality
+      - python-cli-quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Build VSCode Extension
-        run: npm run build
-        working-directory: packages/adjutorix-vscode
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-      - name: Run Agent Tests
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Install CLI dev dependencies
+        working-directory: packages/adjutorix-cli
+        run: python -m pip install -e .[dev]
+
+      - name: Bootstrap local auth token
         run: |
-          cd packages/adjutorix-agent
-          pytest -v
+          mkdir -p ~/.adjutorix
+          python - <<'PY'
+          from pathlib import Path
+          Path.home().joinpath('.adjutorix', 'token').write_text('ci-test-token\n', encoding='utf-8')
+          PY
 
-      - name: Run Shared Package Tests
-        run: npm test
-        working-directory: packages/shared
-
-      - name: Run Lint / Type / Format Checks
+      - name: Start agent in background
         run: |
-          ./configs/ci/scripts/check.sh
+          nohup python -m packages.adjutorix_agent.adjutorix_agent.server.main > /tmp/adjutorix-agent.log 2>&1 &
+          echo $! > /tmp/adjutorix-agent.pid
 
-      - name: Run Verify Script (Parity Check)
+      - name: Wait for agent readiness
         run: |
-          ./configs/ci/scripts/verify.sh
+          python - <<'PY'
+          import json, time, urllib.request
+          url = 'http://127.0.0.1:8000/rpc'
+          payload = json.dumps({"jsonrpc":"2.0","id":1,"method":"system.ping","params":{}}).encode()
+          headers = {
+              'Content-Type': 'application/json',
+              'x-adjutorix-token': 'ci-test-token',
+          }
+          deadline = time.time() + 40
+          last_error = None
+          while time.time() < deadline:
+              try:
+                  req = urllib.request.Request(url, data=payload, headers=headers, method='POST')
+                  with urllib.request.urlopen(req, timeout=3) as resp:
+                      body = json.loads(resp.read().decode())
+                      if body.get('jsonrpc') == '2.0':
+                          print('agent-ready')
+                          raise SystemExit(0)
+              except Exception as exc:
+                  last_error = exc
+                  time.sleep(1)
+          raise SystemExit(f'agent not ready: {last_error}')
+          PY
 
-      - name: Upload Logs on Failure
+      - name: Run CLI smoke against agent
+        working-directory: packages/adjutorix-cli
+        run: |
+          adjutorix ping --agent-url http://127.0.0.1:8000/rpc --output json
+
+      - name: Run CLI test suite
+        working-directory: packages/adjutorix-cli
+        run: pytest -q
+
+      - name: Collect agent logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: adjutorix-logs
-          path: runtime/logs
+        run: |
+          echo '=== /tmp/adjutorix-agent.log ==='
+          cat /tmp/adjutorix-agent.log || true
 
-      - name: Upload Test Reports
+      - name: Stop agent
         if: always()
+        run: |
+          if [ -f /tmp/adjutorix-agent.pid ]; then
+            kill $(cat /tmp/adjutorix-agent.pid) || true
+          fi
+
+  package-artifacts:
+    name: Package artifacts / sdist / wheel / app bundle proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - app-smoke-electron
+      - integration-agent-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Install Python build tooling
+        run: python -m pip install --upgrade pip build
+
+      - name: Build CLI wheel and sdist
+        working-directory: packages/adjutorix-cli
+        run: python -m build
+
+      - name: Build app distributable
+        working-directory: packages/adjutorix-app
+        run: npm run build
+
+      - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: adjutorix-test-reports
+          name: adjutorix-cli-dist
+          path: packages/adjutorix-cli/dist/*
+          if-no-files-found: error
+
+      - name: Upload app build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjutorix-app-build
           path: |
-            packages/adjutorix-agent/.pytest_cache
-            packages/shared/coverage
+            packages/adjutorix-app/dist/**
+            packages/adjutorix-app/out/**
+            packages/adjutorix-app/build/**
+          if-no-files-found: warn
+
+  final-status:
+    name: Final status
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - repo-guard
+      - js-quality
+      - python-cli-quality
+      - app-smoke-electron
+      - integration-agent-cli
+      - package-artifacts
+    steps:
+      - name: Fail if any upstream job failed or was cancelled
+        run: |
+          results='${{ toJson(needs) }}'
+          echo "$results"
+          python - <<'PY'
+          import json, os, sys
+          needs = json.loads('''${{ toJson(needs) }}''')
+          bad = {name: meta['result'] for name, meta in needs.items() if meta['result'] != 'success'}
+          if bad:
+              print('Non-success job results detected:', bad)
+              sys.exit(1)
+          print('All upstream CI jobs succeeded.')
+          PY
