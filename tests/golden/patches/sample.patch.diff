@@ -1,0 +1,45 @@
+diff --git a/src/index.js b/src/index.js
+index 1111111..2222222 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,7 +1,11 @@
+ export function sum(values) {
+   if (!Array.isArray(values)) {
+     throw new TypeError("values must be an array");
+   }
+   return values.reduce((total, value) => total + value, 0);
+ }
++
++export function max(values) {
++  return Math.max(...values);
++}
+ EOF
+
+cat > tests/golden/patches/patch_artifact.json <<'EOF'
+{
+  "patch_id": "patch-20260328-0001",
+  "transaction_id": "tx-20260328-0001",
+  "basis_transaction_id": "tx-20260328-0000",
+  "targets": [
+    {
+      "path": "src/index.js",
+      "kind": "modify",
+      "language": "javascript"
+    }
+  ],
+  "summary": {
+    "file_count": 1,
+    "insertions": 4,
+    "deletions": 0,
+    "risk": "low"
+  },
+  "rollback": {
+    "strategy": "reverse-apply",
+    "expected_clean_revert": true
+  },
+  "metadata": {
+    "generator": "adjutorix.patch_builder",
+    "normalized": "true",
+    "verification_required": "true"
+  }
+}

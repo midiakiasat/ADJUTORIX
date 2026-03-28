@@ -1,0 +1,44 @@
+{
+  "head_transaction_id": "tx-20260328-0003",
+  "transactions": [
+    {
+      "id": "tx-20260328-0001",
+      "state": "planned",
+      "sequence": 1
+    },
+    {
+      "id": "tx-20260328-0002",
+      "state": "running",
+      "sequence": 2
+    },
+    {
+      "id": "tx-20260328-0003",
+      "state": "completed",
+      "sequence": 3
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact-verify-summary-0001",
+      "kind": "verify-summary",
+      "transaction_id": "tx-20260328-0003"
+    }
+  ],
+  "edges": [
+    {
+      "from": "tx-20260328-0002",
+      "to": "tx-20260328-0001",
+      "type": "basis"
+    },
+    {
+      "from": "tx-20260328-0003",
+      "to": "tx-20260328-0002",
+      "type": "basis"
+    },
+    {
+      "from": "artifact-verify-summary-0001",
+      "to": "tx-20260328-0003",
+      "type": "produced_by"
+    }
+  ]
+}

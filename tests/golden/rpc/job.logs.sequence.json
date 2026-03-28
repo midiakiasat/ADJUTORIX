@@ -1,0 +1,38 @@
+{
+  "jsonrpc": "2.0",
+  "id": "rpc-logs-001",
+  "result": {
+    "job_id": "job-20260328-0001",
+    "entries": [
+      {
+        "seq": 1,
+        "timestamp": "2026-03-28T15:40:02.010Z",
+        "level": "info",
+        "component": "scheduler",
+        "message": "job accepted"
+      },
+      {
+        "seq": 2,
+        "timestamp": "2026-03-28T15:40:02.180Z",
+        "level": "info",
+        "component": "workspace",
+        "message": "workspace indexed"
+      },
+      {
+        "seq": 3,
+        "timestamp": "2026-03-28T15:40:03.920Z",
+        "level": "info",
+        "component": "verify",
+        "message": "verification started"
+      },
+      {
+        "seq": 4,
+        "timestamp": "2026-03-28T15:40:05.250Z",
+        "level": "info",
+        "component": "verify",
+        "message": "verification still running"
+      }
+    ],
+    "next_seq": 5
+  }
+}

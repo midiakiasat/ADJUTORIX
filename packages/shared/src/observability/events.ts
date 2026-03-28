@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 /**
  * ADJUTORIX APP — MAIN / OBSERVABILITY / events.ts
@@ -191,7 +191,7 @@ function stableJson(value: unknown): string {
 }
 
 function sha256(value: string): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function iso(ts: number): string {

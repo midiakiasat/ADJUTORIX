@@ -1,0 +1,30 @@
+{
+  "name": "@adjutorix/shared",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./invariants/*": "./dist/invariants/*.js",
+    "./ledger/*": "./dist/ledger/*.js",
+    "./observability/*": "./dist/observability/*.js",
+    "./patch/*": "./dist/patch/*.js",
+    "./rpc/*": "./dist/rpc/*.js",
+    "./runtime/*": "./dist/runtime/*.js",
+    "./workspace/*": "./dist/workspace/*.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^20.19.37"
+  }
+}

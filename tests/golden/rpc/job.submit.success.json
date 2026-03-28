@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": "rpc-submit-001",
+  "result": {
+    "job_id": "job-20260328-0001",
+    "transaction_id": "tx-20260328-0001",
+    "accepted_at": "2026-03-28T15:40:00.000Z",
+    "capabilities": [
+      "workspace.scan",
+      "patch.preview",
+      "verify.run"
+    ],
+    "queue_position": 0
+  }
+}

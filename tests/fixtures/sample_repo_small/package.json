@@ -1,0 +1,11 @@
+{
+  "name": "sample-repo-small",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ./src/index.js",
+    "test": "node ./tests/basic.test.js"
+  }
+}

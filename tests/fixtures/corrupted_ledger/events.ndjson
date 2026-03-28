@@ -1,0 +1,5 @@
+{"seq":3,"event_id":"evt-3","transaction_id":"tx-0003","type":"transaction.completed"}
+{"seq":1,"event_id":"evt-1","transaction_id":"tx-0001","type":"transaction.planned"}
+{"seq":2,"event_id":"evt-2","transaction_id":"tx-0002","type":"transaction.running"}
+{"seq":2,"event_id":"evt-2","transaction_id":"tx-0002","type":"transaction.failed"}
+{"seq":5,"event_id":"evt-5","transaction_id":"tx-9999","type":"artifact.missing"}

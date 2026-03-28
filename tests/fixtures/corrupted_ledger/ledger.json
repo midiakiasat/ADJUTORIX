@@ -1,0 +1,30 @@
+{
+"transactions": [
+{
+"id": "tx-0003",
+"state": "completed",
+"sequence": 3,
+"basis": "tx-0002",
+"artifacts": ["artifact-1"]
+},
+{
+"id": "tx-0002",
+"state": "running",
+"sequence": 2,
+"basis": "tx-9999",
+"artifacts": []
+},
+{
+"id": "tx-0002",
+"state": "failed",
+"sequence": 2,
+"basis": "tx-0001",
+"artifacts": ["artifact-2"]
+}
+],
+"edges": [
+{ "from": "tx-0003", "to": "tx-0002", "type": "depends_on" },
+{ "from": "tx-0002", "to": "tx-9999", "type": "depends_on" },
+{ "from": "artifact-2", "to": "tx-0002", "type": "produced_by" }
+]
+}

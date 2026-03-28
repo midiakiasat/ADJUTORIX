@@ -1,0 +1,3 @@
+{"seq":1,"transaction_id":"tx-20260328-0001","state":"planned","timestamp":"2026-03-28T15:40:00.000Z"}
+{"seq":2,"transaction_id":"tx-20260328-0002","state":"running","timestamp":"2026-03-28T15:40:02.000Z"}
+{"seq":3,"transaction_id":"tx-20260328-0003","state":"completed","timestamp":"2026-03-28T15:40:07.000Z"}

@@ -1,0 +1,26 @@
+{
+  "transaction_id": "tx-20260328-0003",
+  "status": "passed",
+  "started_at": "2026-03-28T15:40:03.000Z",
+  "finished_at": "2026-03-28T15:40:07.000Z",
+  "checks": [
+    {
+      "name": "workspace-health",
+      "status": "passed",
+      "duration_ms": 120
+    },
+    {
+      "name": "contract-validation",
+      "status": "passed",
+      "duration_ms": 340
+    },
+    {
+      "name": "deterministic-replay",
+      "status": "passed",
+      "duration_ms": 510
+    }
+  ],
+  "artifacts": [
+    "artifact-verify-summary-0001"
+  ]
+}

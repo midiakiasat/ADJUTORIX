@@ -1,0 +1,18 @@
+{
+  "transaction_id": "tx-20260328-0099",
+  "status": "failed",
+  "started_at": "2026-03-28T15:42:03.000Z",
+  "finished_at": "2026-03-28T15:42:04.120Z",
+  "checks": [
+    {
+      "name": "ledger-consistency",
+      "status": "failed",
+      "duration_ms": 92,
+      "details": "missing basis transaction tx-9999"
+    }
+  ],
+  "violations": [
+    "ledger edge references unknown transaction",
+    "duplicate transaction sequence detected"
+  ]
+}

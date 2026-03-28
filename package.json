@@ -1,0 +1,30 @@
+{
+  "name": "adjutorix",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.6.3",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "check": "bash ./scripts/check.sh",
+    "clean": "bash ./scripts/clean.sh",
+    "dev": "bash ./scripts/dev.sh",
+    "doctor": "bash ./scripts/doctor.sh",
+    "lint": "turbo run lint",
+    "smoke": "bash ./scripts/smoke.sh",
+    "test": "turbo run test",
+    "verify": "bash ./scripts/verify.sh",
+    "package:macos": "bash ./scripts/package-macos.sh"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
+  }
+}
