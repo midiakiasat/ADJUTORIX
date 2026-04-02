@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","result":{"ts":1775155631738,"protocol_version":"1.0.0","services":{"scheduler":true,"tx_store":true,"verify":false,"patch":false,"ledger":false}},"error":null,"id":"1"}

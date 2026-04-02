@@ -753,12 +753,12 @@ function registerIpc(config: RuntimeConfig): void {
   });
 
   safeHandle("adjutorix:patch:preview", async (intent: Record<string, Json>) => {
-    return rpcInvoke("patch.preview", { intent });
+    return Promise.reject(new Error("agent_method_not_exposed:patch.preview"));
   });
 
   safeHandle("adjutorix:patch:apply", async (patchId: string) => {
     assert(typeof patchId === "string" && patchId.length > 0, "invalid_patch_id");
-    return rpcInvoke("patch.apply", { patch_id: patchId });
+    return Promise.reject(new Error("agent_method_not_exposed:patch.apply"));
   });
 
   safeHandle("adjutorix:verify:run", async (targets: string[]) => {
@@ -768,11 +768,11 @@ function registerIpc(config: RuntimeConfig): void {
 
   safeHandle("adjutorix:verify:status", async (verifyId: string) => {
     assert(typeof verifyId === "string" && verifyId.length > 0, "invalid_verify_id");
-    return rpcInvoke("verify.status", { verify_id: verifyId });
+    return Promise.reject(new Error("agent_method_not_exposed:verify.status"));
   });
 
   safeHandle("adjutorix:ledger:current", async () => {
-    return rpcInvoke("ledger.current", {});
+    return Promise.reject(new Error("agent_method_not_exposed:ledger.current"));
   });
 }
 

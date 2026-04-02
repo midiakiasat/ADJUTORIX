@@ -506,9 +506,9 @@ export function createWorkspaceFacade(workspace: WorkspaceBridgeApi): ExposedWor
 
 export function createPatchFacade(patch: PatchBridgeApi): ExposedPatchApi {
   return deepFreeze({
-    preview: async (input) => normalizeBridgeEnvelope(await patch.preview(input)),
+    preview: async (_input) => { throw new Error("agent_method_not_exposed:patch.preview"); },
     approve: async (input) => normalizeBridgeEnvelope(await patch.approve(input)),
-    apply: async (input) => normalizeBridgeEnvelope(await patch.apply(input)),
+    apply: async (_input) => { throw new Error("agent_method_not_exposed:patch.apply"); },
     clear: async () => normalizeBridgeEnvelope(await patch.clear()),
     events: deepFreeze({
       subscribe: (callback) => bindTrackedSubscription("patch", patch.events.subscribe, callback),
@@ -519,7 +519,7 @@ export function createPatchFacade(patch: PatchBridgeApi): ExposedPatchApi {
 export function createVerifyFacade(verify: VerifyBridgeApi): ExposedVerifyApi {
   return deepFreeze({
     run: async (input) => normalizeBridgeEnvelope(await verify.run(input)),
-    status: async (input) => normalizeBridgeEnvelope(await verify.status(input)),
+    status: async (_input) => { throw new Error("agent_method_not_exposed:verify.status"); },
     bind: async (input) => normalizeBridgeEnvelope(await verify.bind(input)),
     events: deepFreeze({
       subscribe: (callback) => bindTrackedSubscription("verify", verify.events.subscribe, callback),
@@ -529,7 +529,7 @@ export function createVerifyFacade(verify: VerifyBridgeApi): ExposedVerifyApi {
 
 export function createLedgerFacade(ledger: LedgerBridgeApi): ExposedLedgerApi {
   return deepFreeze({
-    current: async () => normalizeBridgeEnvelope(await ledger.current()),
+    current: async () => { throw new Error("agent_method_not_exposed:ledger.current"); },
     timeline: async (input) => normalizeBridgeEnvelope(await ledger.timeline(input)),
     entry: async (input) => normalizeBridgeEnvelope(await ledger.entry(input)),
     heads: async () => normalizeBridgeEnvelope(await ledger.heads()),

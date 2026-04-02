@@ -1,0 +1,17 @@
+packages/adjutorix-agent/adjutorix_agent/tests/test_verify_pipeline.py:46:    return VerifyPipeline()
+packages/adjutorix-agent/adjutorix_agent/tests/test_verify_pipeline.py:294:    p1 = VerifyPipeline()
+packages/adjutorix-agent/adjutorix_agent/tests/test_verify_pipeline.py:295:    p2 = VerifyPipeline()
+packages/adjutorix-agent/adjutorix_agent/tests/test_patch_pipeline.py:41:    return PatchPipeline()
+packages/adjutorix-agent/adjutorix_agent/tests/test_patch_pipeline.py:216:    p1 = PatchPipeline()
+packages/adjutorix-agent/adjutorix_agent/tests/test_patch_pipeline.py:217:    p2 = PatchPipeline()
+packages/adjutorix-agent/adjutorix_agent/core/job_runner.py:96:        self._patch_pipeline = patch_pipeline or PatchPipeline()
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:134:        self.verify_boot_error = "verify_pipeline_reader_unwired"
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:257:        return {"ok": False, "state": "offline", "error": "scheduler_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:260:        return {"ok": False, "state": "offline", "job_id": params.get("job_id"), "error": "scheduler_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:263:        return {"ok": False, "state": "offline", "job_id": params.get("job_id"), "logs": [], "error": "scheduler_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:266:        return {"ok": False, "state": "offline", "error": "verify_pipeline_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:269:        return {"ok": False, "state": "offline", "verify_id": params.get("verify_id"), "error": "verify_pipeline_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:272:        return {"ok": False, "state": "offline", "verify_id": params.get("verify_id"), "artifacts": [], "error": "verify_pipeline_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:275:        return {"ok": False, "state": "offline", "error": "patch_pipeline_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:278:        return {"ok": False, "state": "offline", "error": "patch_pipeline_unwired"}
+packages/adjutorix-agent/adjutorix_agent/server/rpc.py:281:        return {"ok": False, "state": "offline", "error": "ledger_unwired"}

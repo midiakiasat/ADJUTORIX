@@ -106,9 +106,11 @@ class SQLiteEngine:
             conn.execute("BEGIN DEFERRED;")
             try:
                 yield conn
-                conn.execute("COMMIT;")
+                if getattr(conn, "in_transaction", False):
+                    conn.commit()
             except Exception:
-                conn.execute("ROLLBACK;")
+                if getattr(conn, "in_transaction", False):
+                    conn.rollback()
                 raise
 
     @contextmanager
@@ -118,9 +120,11 @@ class SQLiteEngine:
             conn.execute("BEGIN IMMEDIATE;")
             try:
                 yield conn
-                conn.execute("COMMIT;")
+                if getattr(conn, "in_transaction", False):
+                    conn.commit()
             except Exception:
-                conn.execute("ROLLBACK;")
+                if getattr(conn, "in_transaction", False):
+                    conn.rollback()
                 raise
 
     # ---------------------------------------------------------------------

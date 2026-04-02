@@ -1,0 +1,137 @@
+
+=== CALLERS OF NON-EXPOSED METHODS ===
+configs/ci/guard_contract_drift.sh:222:    "job.logs",
+packages/adjutorix-cli/adjutorix_cli/main.py:401:    result = client.call("verify.status", {"verify_id": verify_id})
+packages/adjutorix-cli/adjutorix_cli/main.py:412:            ("Status", verify.status),
+packages/adjutorix-cli/adjutorix_cli/main.py:461:            ("Apply Readiness", patch.apply_readiness),
+packages/adjutorix-cli/adjutorix_cli/main.py:480:    result = client.call("patch.apply", {"patch_id": patch_id, "confirmed": True})
+packages/adjutorix-cli/adjutorix_cli/main.py:509:            ("Replayable", ledger.replayable),
+configs/observability/tracing.yaml:120:    - span_name_in [governance.decision, transaction.transition, patch.apply, rollback.execute, release.promote, recovery.resume]
+configs/observability/tracing.yaml:317:      - verify.status
+configs/observability/tracing.yaml:344:  - name: patch.apply
+configs/observability/tracing.yaml:361:      - verify.status
+packages/adjutorix-app/src/preload/exposed_api.ts:117:  | "patch.preview"
+packages/adjutorix-app/src/preload/exposed_api.ts:119:  | "patch.apply"
+packages/adjutorix-app/src/preload/exposed_api.ts:122:  | "verify.status"
+packages/adjutorix-app/src/preload/exposed_api.ts:124:  | "ledger.current"
+packages/adjutorix-app/src/preload/exposed_api.ts:291:  "patch.preview",
+packages/adjutorix-app/src/preload/exposed_api.ts:293:  "patch.apply",
+packages/adjutorix-app/src/preload/exposed_api.ts:296:  "verify.status",
+packages/adjutorix-app/src/preload/exposed_api.ts:298:  "ledger.current",
+packages/adjutorix-app/src/preload/exposed_api.ts:509:    preview: async (input) => normalizeBridgeEnvelope(await patch.preview(input)),
+packages/adjutorix-app/src/preload/exposed_api.ts:511:    apply: async (input) => normalizeBridgeEnvelope(await patch.apply(input)),
+packages/adjutorix-app/src/preload/exposed_api.ts:522:    status: async (input) => normalizeBridgeEnvelope(await verify.status(input)),
+packages/adjutorix-app/src/preload/exposed_api.ts:532:    current: async () => normalizeBridgeEnvelope(await ledger.current()),
+packages/adjutorix-app/src/preload/exposed_api.ts:609:  if (typeof api.patch.preview !== "function") throw new Error("patch_preview_missing");
+packages/adjutorix-app/src/preload/exposed_api.ts:611:  if (typeof api.ledger.current !== "function") throw new Error("ledger_current_missing");
+configs/observability/dashboards.yaml:390:            query: span_name in [verify.run, replay.run, governance.decision, patch.apply] and outcome in [failed, blocked, denied, timed_out]
+packages/adjutorix-app/src/main/index.ts:756:    return rpcInvoke("patch.preview", { intent });
+packages/adjutorix-app/src/main/index.ts:761:    return rpcInvoke("patch.apply", { patch_id: patchId });
+packages/adjutorix-app/src/main/index.ts:771:    return rpcInvoke("verify.status", { verify_id: verifyId });
+packages/adjutorix-app/src/main/index.ts:775:    return rpcInvoke("ledger.current", {});
+scripts/contracts/freeze.sh:50:        "ledger.replay",
+scripts/contracts/freeze.sh:51:        "patch.preview",
+scripts/contracts/freeze.sh:52:        "patch.apply",
+packages/adjutorix-cli/tests/test_cli_verify.py:156:            assert method in {"verify.status", "verify.assess", "verify.governance"}
+scripts/transaction/inspect.sh:54:: "${ADJUTORIX_TX_INSPECT_LOGS_METHOD:=job.logs}"
+scripts/transaction/logs.sh:14:#   rather than an ad hoc mix of job.logs calls and local greps
+scripts/transaction/logs.sh:51:: "${ADJUTORIX_TX_LOGS_DEFAULT_METHOD:=job.logs}"
+packages/adjutorix-app/src/main/governance/governed_surface.ts:65:  | "patch.preview"
+packages/adjutorix-app/src/main/governance/governed_surface.ts:67:  | "patch.apply"
+packages/adjutorix-app/src/main/governance/governed_surface.ts:70:  | "verify.status"
+packages/adjutorix-app/src/main/governance/governed_surface.ts:72:  | "ledger.current"
+packages/adjutorix-app/src/main/governance/governed_surface.ts:403:  "patch.preview": makeSpec({
+packages/adjutorix-app/src/main/governance/governed_surface.ts:405:    operation: "patch.preview",
+packages/adjutorix-app/src/main/governance/governed_surface.ts:451:  "patch.apply": makeSpec({
+packages/adjutorix-app/src/main/governance/governed_surface.ts:453:    operation: "patch.apply",
+packages/adjutorix-app/src/main/governance/governed_surface.ts:523:  "verify.status": makeSpec({
+packages/adjutorix-app/src/main/governance/governed_surface.ts:525:    operation: "verify.status",
+packages/adjutorix-app/src/main/governance/governed_surface.ts:571:  "ledger.current": makeSpec({
+packages/adjutorix-app/src/main/governance/governed_surface.ts:573:    operation: "ledger.current",
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:54:  | "patch.preview"
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:56:  | "patch.apply"
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:168:  "patch.preview": "skip",
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:170:  "patch.apply": "require",
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:414:  if (req.surface === "patch.apply" && (req.risk === "high" || req.risk === "critical" || req.context.pendingChangeCount > 0)) {
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:469:    req.surface !== "patch.apply" &&
+packages/adjutorix-app/src/main/governance/confirmation_rules.ts:512:    req.surface === "patch.preview" &&
+configs/contracts/rpc_capabilities.json:738:    "verify.status": {
+configs/contracts/rpc_capabilities.json:927:    "patch.preview": {
+configs/contracts/rpc_capabilities.json:990:    "patch.apply": {
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:487:    return rpcInvokeThroughAgent(state, "patch.preview", { intent });
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:492:    return rpcInvokeThroughAgent(state, "patch.apply", { patch_id: patchId });
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:502:    return rpcInvokeThroughAgent(state, "verify.status", { verify_id: verifyId });
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:506:    return rpcInvokeThroughAgent(state, "ledger.current", {});
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:543:      await rpcInvokeThroughAgent(state, "patch.preview", { intent: { op: "noop" } });
+packages/adjutorix-app/src/main/workspace/workspace_trust.ts:53:  | "patch.preview"
+packages/adjutorix-app/src/main/workspace/workspace_trust.ts:55:  | "patch.apply"
+packages/adjutorix-app/src/main/workspace/workspace_trust.ts:436:      case "patch.preview":
+packages/adjutorix-app/src/main/workspace/workspace_trust.ts:462:      case "patch.apply":
+packages/adjutorix-app/src/main/workspace/workspace_trust.ts:517:      if (capability === "patch.apply" || capability === "rpc.proxy" || capability === "agent.control") {
+packages/adjutorix-app/src/renderer/components/JobPanel.tsx:673:                  {selectedJob && selectedJob.logs && selectedJob.logs.length > 0 ? (
+packages/adjutorix-app/src/renderer/components/JobPanel.tsx:675:                      {selectedJob.logs.map((log) => (
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:53:  | "patch.preview"
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:54:  | "patch.apply"
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:150:  "patch.preview",
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:151:  "patch.apply",
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:247:    case "patch.preview":
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:249:    case "patch.apply":
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:357:    case "patch.preview": {
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:367:    case "patch.apply": {
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:484:      case "patch.preview":
+packages/adjutorix-app/src/main/boundary/mutation_boundary.ts:487:      case "patch.apply":
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:52:  | "patch.preview"
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:53:  | "patch.apply"
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:55:  | "verify.status"
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:56:  | "ledger.current"
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:143:  "patch.preview": "governed-preview",
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:144:  "patch.apply": "governed-apply",
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:146:  "verify.status": "query",
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:147:  "ledger.current": "query",
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:317:    case "patch.preview": {
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:333:    case "patch.apply": {
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:385:    case "verify.status": {
+packages/adjutorix-app/src/main/boundary/capability_enforcer.ts:392:    case "ledger.current": {
+packages/adjutorix-app/src/main/boundary/authority_router.ts:52:  | "patch.preview"
+packages/adjutorix-app/src/main/boundary/authority_router.ts:53:  | "patch.apply"
+packages/adjutorix-app/src/main/boundary/authority_router.ts:55:  | "verify.status"
+packages/adjutorix-app/src/main/boundary/authority_router.ts:56:  | "ledger.current"
+packages/adjutorix-app/src/main/boundary/authority_router.ts:136:  "patch.preview": "governed-preview",
+packages/adjutorix-app/src/main/boundary/authority_router.ts:137:  "patch.apply": "governed-apply",
+packages/adjutorix-app/src/main/boundary/authority_router.ts:139:  "verify.status": "query",
+packages/adjutorix-app/src/main/boundary/authority_router.ts:140:  "ledger.current": "query",
+packages/adjutorix-app/src/main/boundary/authority_router.ts:307:    case "verify.status":
+packages/adjutorix-app/src/main/boundary/authority_router.ts:308:    case "ledger.current": {
+packages/adjutorix-app/src/main/boundary/authority_router.ts:327:    case "patch.preview": {
+packages/adjutorix-app/src/main/boundary/authority_router.ts:344:    case "patch.apply": {
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:46:  | "patch.preview.request"
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:47:  | "patch.apply.request"
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:49:  | "verify.status.read"
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:50:  | "ledger.current.read"
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:147:  "patch.preview.request",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:148:  "patch.apply.request",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:150:  "verify.status.read",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:151:  "ledger.current.read",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:174:  "patch.preview.request": "adjutorix.patch",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:175:  "patch.apply.request": "adjutorix.patch",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:177:  "verify.status.read": "adjutorix.verify",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:178:  "ledger.current.read": "adjutorix.ledger",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:274:    "patch.preview.request",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:275:    "patch.apply.request",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:277:    "verify.status.read",
+packages/adjutorix-app/src/main/boundary/renderer_policy.ts:278:    "ledger.current.read",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:70:  | "patch.preview"
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:71:  | "patch.apply"
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:73:  | "verify.status"
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:74:  | "ledger.current"
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:190:  "patch.preview": "governed-preview",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:191:  "patch.apply": "governed-apply",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:193:  "verify.status": "query",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:194:  "ledger.current": "query",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:305:      "patch.preview",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:306:      "patch.apply",
+packages/adjutorix-app/src/main/boundary/invariant_enforcer.ts:322:  if (input.request.operation === "patch.apply") {
+packages/adjutorix-app/src/main/boundary/ipc_guard.ts:145:    route: "patch.preview",
+packages/adjutorix-app/src/main/boundary/ipc_guard.ts:151:    route: "patch.apply",
+packages/adjutorix-app/src/main/boundary/ipc_guard.ts:163:    route: "verify.status",
+packages/adjutorix-app/src/main/boundary/ipc_guard.ts:169:    route: "ledger.current",

@@ -1,0 +1,9 @@
+
+=== EXPOSED RPC METHODS ===
+193:        self._register("health.ping", self._health_ping)
+194:        self._register("job.submit", self._job_submit)
+195:        self._register("job.status", self._job_status)
+196:        self._register("index.build", self._index_build)
+197:        self._register("index.related", self._index_related)
+198:        self._register("index.affected", self._index_affected)
+199:        self._register("index.health", self._index_health)

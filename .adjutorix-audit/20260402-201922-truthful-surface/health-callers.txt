@@ -1,0 +1,11 @@
+
+=== APP HEALTH CALLERS ===
+packages/adjutorix-app/src/main/index.ts:368:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/ipc/agent_ipc.ts:292:        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/agent/agent_client.ts:189:  healthMethod: "health.ping",
+packages/adjutorix-app/src/main/agent/agent_process.ts:503:        body: JSON.stringify({ jsonrpc: "2.0", id: started, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:295:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/runtime/startup_checks.ts:313:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/tests/main/agent_client.test.ts:139:          case "health.ping":
+packages/adjutorix-app/tests/main/agent_client.test.ts:258:      expect.objectContaining({ method: "health.ping", requestId: "rpc-1" }),
+packages/adjutorix-app/tests/main/agent_client.test.ts:464:          if (payload.method === "health.ping") {

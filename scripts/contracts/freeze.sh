@@ -47,9 +47,9 @@ write_json(out / "ledger_edges.json", {
 write_json(out / "rpc_capabilities.json", {
     "capabilities": [
         "workspace.scan",
-        "ledger.replay",
-        "patch.preview",
-        "patch.apply",
+        "job.status",
+        "job.submit",
+        "job.submit",
         "verify.run",
         "governance.audit"
     ]

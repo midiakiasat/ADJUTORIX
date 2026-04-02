@@ -208,5 +208,20 @@ def from_exception(
 REDACT_KEYS = {"password", "token", "secret", "key"}
 
 
-def redact 
- 
+def redact(value):
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            key_l = str(key).lower()
+            if any(tok in key_l for tok in REDACT_KEYS):
+                out[key] = "***REDACTED***"
+            else:
+                out[key] = redact(item)
+        return out
+    if isinstance(value, list):
+        return [redact(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact(item) for item in value)
+    if isinstance(value, set):
+        return {redact(item) for item in value}
+    return value

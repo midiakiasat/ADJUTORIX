@@ -26,6 +26,7 @@ import time
 from fastapi.testclient import TestClient
 
 from adjutorix_agent.server.rpc import create_app
+from adjutorix_agent.core.scheduler import Scheduler
 from adjutorix_agent.server.auth import _load_or_create_token
 
 
@@ -36,7 +37,7 @@ from adjutorix_agent.server.auth import _load_or_create_token
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    return TestClient(create_app())
+    return TestClient(create_app(container={"scheduler": Scheduler()}))
 
 
 @pytest.fixture(scope="module")
@@ -167,6 +168,7 @@ def test_http_idempotency(client: TestClient, token: str):
     r1 = raw_rpc(client, token, payload, headers)
     r2 = raw_rpc(client, token, payload, headers)
 
+
     assert r1["result"]["job_id"] == r2["result"]["job_id"]
 
 
@@ -202,7 +204,7 @@ def test_large_payload(client: TestClient, token: str):
     payload = {
         "jsonrpc": "2.0",
         "id": 7,
-        "method": "patch.preview",
+        "method": "job.submit",
         "params": {
             "intent": {
                 "op": "edit_file",
@@ -215,7 +217,7 @@ def test_large_payload(client: TestClient, token: str):
     res = raw_rpc(client, token, payload)
 
     assert "result" in res
-    assert "patch_id" in res["result"]
+    assert "job_id" in res["result"]
 
 
 # ---------------------------------------------------------------------------

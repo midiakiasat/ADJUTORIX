@@ -153,7 +153,7 @@ def _invoke_verify(monkeypatch: pytest.MonkeyPatch, args: list[str], payload: di
 
         def call(self, method: str, params: dict[str, Any] | None = None):
             self.calls.append((method, params or {}))
-            assert method in {"verify.status", "verify.assess", "verify.governance"}
+            assert method in {"verify.assess", "verify.governance"}
             return payload
 
     monkeypatch.setattr(main_mod, "RpcClient", DummyClient)

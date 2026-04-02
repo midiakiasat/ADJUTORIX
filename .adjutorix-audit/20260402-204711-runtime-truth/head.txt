@@ -1,0 +1,1 @@
+96fe72a fix(agent): align health service signals with exposed runtime authority

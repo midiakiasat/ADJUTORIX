@@ -10,18 +10,18 @@ Single entrypoint for process startup. Responsibilities:
 - Scheduler + concurrency guards
 - RPC server startup
 - Graceful shutdown + signal handling
-
-All side effects are centralized here. No other module performs process-wide initialization.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
+import importlib
 import os
 import signal
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from adjutorix_agent import (
     __protocol_version__,
@@ -30,12 +30,8 @@ from adjutorix_agent import (
     get_logger,
     register_invariants,
 )
-
-# --- runtime imports (kept local to avoid import-time side effects) ---
 from adjutorix_agent.runtime.config import load_config, validate_config
 from adjutorix_agent.runtime.wiring import build_container
-from adjutorix_agent.storage.sqlite.engine import create_engine
-from adjutorix_agent.storage.sqlite.migrations import run_migrations
 from adjutorix_agent.core.scheduler import Scheduler
 from adjutorix_agent.core.concurrency_guard import ConcurrencyGuard
 from adjutorix_agent.server.rpc import create_app
@@ -50,10 +46,6 @@ class RuntimeContext:
     shutdown_event: asyncio.Event
 
 
-# ---------------------------------------------------------------------------
-# ENV / GUARDS
-# ---------------------------------------------------------------------------
-
 def _assert_process_context() -> None:
     if os.environ.get("ADJUTORIX_RENDERER_CONTEXT") == "1":
         raise RuntimeError("Bootstrap cannot run in renderer context")
@@ -63,22 +55,148 @@ def _assert_process_context() -> None:
 
 def _normalize_env() -> None:
     os.environ.setdefault("PYTHONASYNCIODEBUG", "0")
-    os.environ.setdefault("UVICORN_WORKERS", "1")  # enforce single process
+    os.environ.setdefault("UVICORN_WORKERS", "1")
 
 
-# ---------------------------------------------------------------------------
-# INITIALIZATION PIPELINE
-# ---------------------------------------------------------------------------
+def _sqlite_path_from_url(db_url: str) -> str:
+    if db_url.startswith("sqlite:///"):
+        return db_url.removeprefix("sqlite:///")
+    if db_url.startswith("sqlite://"):
+        return db_url.removeprefix("sqlite://")
+    return db_url
+
+
+def _resolve_sqlite_engine(db_url: str):
+    mod = importlib.import_module("adjutorix_agent.storage.sqlite.engine")
+    exported = sorted(name for name in dir(mod) if not name.startswith("_"))
+
+    factory = None
+    for name in ("create_engine", "build_engine", "make_engine", "init_engine", "build_sqlite_engine"):
+        candidate = getattr(mod, name, None)
+        if callable(candidate):
+            factory = candidate
+            break
+
+    if factory is None:
+        raise ImportError(
+            f"No supported engine factory found in adjutorix_agent.storage.sqlite.engine; exported={exported}"
+        )
+
+    sqlite_path = _sqlite_path_from_url(db_url)
+    sqlite_config_cls = getattr(mod, "SQLiteConfig", None)
+
+    values = [db_url, sqlite_path]
+    config_candidates = []
+
+    if sqlite_config_cls is not None:
+        try:
+            sig = inspect.signature(sqlite_config_cls)
+            params = tuple(sig.parameters.keys())
+        except Exception:
+            params = ()
+
+        kwargs_candidates = [
+            {k: sqlite_path for k in ("path",) if k in params},
+            {k: db_url for k in ("url", "db_url", "sqlite_url", "dsn", "database") if k in params},
+        ]
+
+        for kwargs in kwargs_candidates:
+            if kwargs:
+                try:
+                    config_candidates.append(sqlite_config_cls(**kwargs))
+                except Exception:
+                    pass
+
+        for value in values:
+            try:
+                config_candidates.append(sqlite_config_cls(value))
+            except Exception:
+                pass
+
+    attempts = []
+    for args, kwargs in (
+        ((db_url,), {}),
+        ((sqlite_path,), {}),
+        *[((cfg,), {}) for cfg in config_candidates],
+        *[((), {"config": cfg}) for cfg in config_candidates],
+        *[((), {"cfg": cfg}) for cfg in config_candidates],
+        *[((), {"sqlite_config": cfg}) for cfg in config_candidates],
+    ):
+        try:
+            return factory(*args, **kwargs)
+        except TypeError as exc:
+            attempts.append(f"{factory.__name__}{args or ''}{kwargs or ''}: {exc}")
+
+    raise TypeError(f"Unable to construct sqlite engine; attempts={attempts}")
+
+
+async def _run_sqlite_migrations(engine, config: Dict[str, Any], db_url: str) -> None:
+    mod = importlib.import_module("adjutorix_agent.storage.sqlite.migrations")
+    exported = sorted(name for name in dir(mod) if not name.startswith("_"))
+
+    migrate_fn = None
+    for name in ("run_migrations", "migrate", "apply_migrations", "migrate_all"):
+        candidate = getattr(mod, name, None)
+        if callable(candidate):
+            migrate_fn = candidate
+            break
+
+    if migrate_fn is None:
+        raise ImportError(
+            f"No supported migration runner found in adjutorix_agent.storage.sqlite.migrations; exported={exported}"
+        )
+
+    attempts = []
+    for args, kwargs in (
+        ((engine,), {}),
+        ((engine, config), {}),
+        ((engine, db_url), {}),
+        ((), {"engine": engine}),
+        ((), {"engine": engine, "config": config}),
+        ((), {"db_url": db_url}),
+    ):
+        try:
+            result = migrate_fn(*args, **kwargs)
+            if inspect.isawaitable(result):
+                await result
+            return
+        except TypeError as exc:
+            attempts.append(f"{migrate_fn.__name__}{args or ''}{kwargs or ''}: {exc}")
+
+    raise TypeError(f"Unable to run migrations; attempts={attempts}")
+
 
 async def _init_storage(config: Dict[str, Any]) -> None:
     db_url = config["storage"]["sqlite_url"]
-    engine = create_engine(db_url)
-    await run_migrations(engine)
+    engine = _resolve_sqlite_engine(db_url)
+    await _run_sqlite_migrations(engine, config, db_url)
 
 
 async def _init_core(config: Dict[str, Any]) -> tuple[Scheduler, ConcurrencyGuard]:
-    scheduler = Scheduler(max_concurrent=config["runtime"]["max_concurrent_jobs"])
-    guard = ConcurrencyGuard(strict_sequential=config["runtime"]["strict_sequential_mutations"])
+    import inspect
+
+    runtime_cfg = config["runtime"]
+
+    scheduler_sig = inspect.signature(Scheduler)
+    scheduler_params = scheduler_sig.parameters
+
+    if "max_concurrent" in scheduler_params:
+        scheduler = Scheduler(max_concurrent=runtime_cfg["max_concurrent_jobs"])
+    elif "max_concurrency" in scheduler_params:
+        scheduler = Scheduler(max_concurrency=runtime_cfg["max_concurrent_jobs"])
+    else:
+        scheduler = Scheduler()
+
+    guard_sig = inspect.signature(ConcurrencyGuard)
+    guard_params = guard_sig.parameters
+
+    if "strict_sequential" in guard_params:
+        guard = ConcurrencyGuard(strict_sequential=runtime_cfg["strict_sequential_mutations"])
+    elif "strict_sequential_mutations" in guard_params:
+        guard = ConcurrencyGuard(strict_sequential_mutations=runtime_cfg["strict_sequential_mutations"])
+    else:
+        guard = ConcurrencyGuard()
+
     return scheduler, guard
 
 
@@ -92,7 +210,7 @@ async def _init_server(ctx: RuntimeContext):
 
     cfg = ctx.config["server"]
 
-    server = uvicorn.Server(
+    return uvicorn.Server(
         uvicorn.Config(
             app=app,
             host=cfg["host"],
@@ -104,12 +222,6 @@ async def _init_server(ctx: RuntimeContext):
         )
     )
 
-    return server
-
-
-# ---------------------------------------------------------------------------
-# SIGNALS / SHUTDOWN
-# ---------------------------------------------------------------------------
 
 def _install_signal_handlers(loop: asyncio.AbstractEventLoop, shutdown_event: asyncio.Event):
     def _handler(signame: str):
@@ -121,26 +233,18 @@ def _install_signal_handlers(loop: asyncio.AbstractEventLoop, shutdown_event: as
         try:
             loop.add_signal_handler(sig, _handler, sig.name)
         except NotImplementedError:
-            # Windows fallback
             signal.signal(sig, lambda *_: _handler(sig.name))
 
 
 async def _graceful_shutdown(ctx: RuntimeContext) -> None:
     logger = get_logger()
-
     logger.info("shutdown.begin")
-
     try:
         await ctx.scheduler.shutdown()
     except Exception as exc:
         logger.error("shutdown.scheduler_error", error=str(exc))
-
     logger.info("shutdown.complete")
 
-
-# ---------------------------------------------------------------------------
-# BOOTSTRAP
-# ---------------------------------------------------------------------------
 
 async def _bootstrap_async(dev: bool = False) -> int:
     logger = get_logger()
@@ -156,22 +260,13 @@ async def _bootstrap_async(dev: bool = False) -> int:
         dev=dev,
     )
 
-    # --- config ---
     config = load_config(dev=dev)
     validate_config(config)
-
-    # --- invariants ---
     register_invariants()
-
-    # --- storage ---
     await _init_storage(config)
 
-    # --- DI container ---
     container = build_container(config)
-
-    # --- core ---
     scheduler, concurrency_guard = await _init_core(config)
-
     shutdown_event = asyncio.Event()
 
     ctx = RuntimeContext(
@@ -182,7 +277,6 @@ async def _bootstrap_async(dev: bool = False) -> int:
         shutdown_event=shutdown_event,
     )
 
-    # --- server ---
     server = await _init_server(ctx)
 
     loop = asyncio.get_running_loop()
@@ -195,7 +289,6 @@ async def _bootstrap_async(dev: bool = False) -> int:
         await shutdown_event.wait()
         server.should_exit = True
 
-    # --- run ---
     try:
         await asyncio.gather(_serve(), _watch_shutdown())
     finally:
@@ -203,10 +296,6 @@ async def _bootstrap_async(dev: bool = False) -> int:
 
     return 0
 
-
-# ---------------------------------------------------------------------------
-# PUBLIC ENTRYPOINTS
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     try:

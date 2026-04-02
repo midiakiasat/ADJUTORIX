@@ -398,7 +398,7 @@ def verify_status(
 ) -> None:
     runtime = common_options(output, agent_url, token, token_file, timeout_seconds, no_color)
     client = RpcClient(runtime)
-    result = client.call("verify.status", {"verify_id": verify_id})
+    raise RuntimeError("agent_method_not_exposed:verify.status")
     if runtime.output is OutputMode.json:
         emit(runtime, result)
         return
@@ -477,7 +477,7 @@ def patch_apply(
     runtime = common_options(output, agent_url, token, token_file, timeout_seconds, no_color)
     require_confirmation(confirm, f"apply patch {patch_id}")
     client = RpcClient(runtime)
-    result = client.call("patch.apply", {"patch_id": patch_id, "confirmed": True})
+    raise RuntimeError("agent_method_not_exposed:patch.apply")
     emit(runtime, result, title="Patch Applied")
 
 

@@ -1,0 +1,52 @@
+packages/adjutorix-cli/adjutorix_cli/main.py:292:    result = client.call("system.ping", {})
+packages/adjutorix-cli/adjutorix_cli/main.py:308:    result = client.call("workspace.status", {"workspace_id": workspace_id} if workspace_id else {})
+packages/adjutorix-cli/adjutorix_cli/main.py:339:    result = client.call("workspace.open", {"path": os.fspath(Path(path).expanduser().resolve())})
+packages/adjutorix-cli/adjutorix_cli/main.py:354:    result = client.call("agent.connect", {})
+packages/adjutorix-cli/adjutorix_cli/main.py:369:    result = client.call("agent.status", {})
+packages/adjutorix-cli/adjutorix_cli/main.py:385:    result = client.call("agent.send", {"message": message})
+packages/adjutorix-cli/adjutorix_cli/main.py:432:    result = client.call("verify.start", {"patch_id": patch_id})
+packages/adjutorix-cli/adjutorix_cli/main.py:448:    result = client.call("patch.status", {"patch_id": patch_id})
+packages/adjutorix-cli/adjutorix_cli/main.py:496:    result = client.call("ledger.status", {"ledger_id": ledger_id})
+scripts/agent/doctor.sh:481:    if curl -fsS --max-time "$ADJUTORIX_AGENT_DOCTOR_HTTP_TIMEOUT_SECONDS" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"rpc.capabilities","params":{}}' "$RPC_URL" >/dev/null 2>&1; then
+packages/adjutorix-app/src/main/index.ts:364:      method: "POST",
+packages/adjutorix-app/src/main/index.ts:368:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/index.ts:581:async function rpcInvoke(method: string, params: Record<string, Json>): Promise<Json> {
+packages/adjutorix-app/src/main/index.ts:586:    method: "POST",
+packages/adjutorix-app/src/main/index.ts:591:    body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+packages/adjutorix-app/src/main/index.ts:766:    return rpcInvoke("verify.run", { targets });
+scripts/agent/status.sh:382:  if curl -fsS --max-time "$ADJUTORIX_AGENT_STATUS_HTTP_TIMEOUT_SECONDS" -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"rpc.capabilities","params":{}}' "$RPC_URL" >/dev/null 2>&1; then
+packages/adjutorix-app/src/main/ipc/agent_ipc.ts:290:        method: "POST",
+packages/adjutorix-app/src/main/ipc/agent_ipc.ts:292:        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/ipc/agent_ipc.ts:506:        method: "POST",
+packages/adjutorix-app/tests/main/exposed_api_contract.test.ts:195:      method: "load",
+packages/adjutorix-app/src/main/ipc/channels.ts:375:    preload: { namespace: "adjutorix.runtime", method: "getSnapshot", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:387:    preload: { namespace: "adjutorix.runtime", method: "getRuntimeInfo", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:399:    preload: { namespace: "adjutorix.rpc", method: "invoke", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:411:    preload: { namespace: "adjutorix.workspace", method: "open", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:423:    preload: { namespace: "adjutorix.workspace", method: "revealInShell", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:435:    preload: { namespace: "adjutorix.patch", method: "preview", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:447:    preload: { namespace: "adjutorix.patch", method: "apply", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:459:    preload: { namespace: "adjutorix.verify", method: "run", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:471:    preload: { namespace: "adjutorix.verify", method: "status", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:483:    preload: { namespace: "adjutorix.ledger", method: "current", exposed_to_renderer: true },
+packages/adjutorix-app/src/main/ipc/channels.ts:495:    preload: { namespace: "adjutorix.internal", method: "ping", exposed_to_renderer: false },
+scripts/transaction/submit.sh:355:      -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"job.status\",\"params\":{\"job_id\":\"${job_id}\"}}" \
+packages/adjutorix-app/tests/main/agent_client.test.ts:213:      expect.objectContaining({ method: "session.connect", requestId: "rpc-1" }),
+packages/adjutorix-app/tests/main/agent_client.test.ts:228:      expect.objectContaining({ method: "session.snapshot", requestId: "rpc-2" }),
+packages/adjutorix-app/tests/main/agent_client.test.ts:242:        method: "message.send",
+packages/adjutorix-app/tests/main/agent_client.test.ts:258:      expect.objectContaining({ method: "health.ping", requestId: "rpc-1" }),
+packages/adjutorix-app/tests/main/agent_client.test.ts:272:      expect.objectContaining({ method: "session.shutdown" }),
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:293:      method: "POST",
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:295:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:403:async function rpcInvokeThroughAgent(state: BootstrapState, method: string, params: Record<string, unknown>): Promise<unknown> {
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:412:    method: "POST",
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:417:    body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:472:    return rpcInvokeThroughAgent(state, method, params as Record<string, unknown>);
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:497:    return rpcInvokeThroughAgent(state, "verify.run", { targets });
+packages/adjutorix-app/src/main/runtime/bootstrap.ts:549:      await rpcInvokeThroughAgent(state, "verify.run", { targets: state.workspace.currentPath ? [state.workspace.currentPath] : [] });
+packages/adjutorix-app/src/main/runtime/startup_checks.ts:311:      method: "POST",
+packages/adjutorix-app/src/main/runtime/startup_checks.ts:313:      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "health.ping", params: {} }),
+scripts/transaction/logs.sh:405:    -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"${ADJUTORIX_TX_LOGS_STATUS_METHOD}\",\"params\":{\"job_id\":\"${job_id}\"}}" \
+packages/adjutorix-app/src/main/agent/agent_client.ts:442:          method: "POST",
+packages/adjutorix-app/src/main/agent/agent_process.ts:498:        method: "POST",
+packages/adjutorix-app/src/main/agent/agent_process.ts:503:        body: JSON.stringify({ jsonrpc: "2.0", id: started, method: "health.ping", params: {} }),
