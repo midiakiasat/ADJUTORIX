@@ -25,7 +25,8 @@ from adjutorix_agent.core.scheduler import Scheduler
 from adjutorix_agent.runtime.config import load_config, validate_config
 from adjutorix_agent.runtime.wiring import build_container
 from adjutorix_agent.server.rpc import create_app
-from adjutorix_agent.storage.sqlite.engine import create_engine
+import inspect
+import adjutorix_agent.storage.sqlite.engine as sqlite_engine_module
 from adjutorix_agent.storage.sqlite.migrations import run_migrations
 
 
@@ -52,8 +53,36 @@ def _normalize_env() -> None:
 
 async def _init_storage(config: Dict[str, Any]) -> None:
     db_url = config["storage"]["sqlite_url"]
-    engine = create_engine(db_url)
-    await run_migrations(engine)
+
+    engine_factory = None
+    for name in ("create_engine", "build_engine", "make_engine", "open_engine", "get_engine"):
+        candidate = getattr(sqlite_engine_module, name, None)
+        if callable(candidate):
+            engine_factory = candidate
+            break
+
+    if engine_factory is None:
+        exported = sorted(
+            name for name in dir(sqlite_engine_module)
+            if not name.startswith("_")
+        )
+        raise ImportError(
+            "No supported engine factory found in adjutorix_agent.storage.sqlite.engine; "
+            f"exported={exported}"
+        )
+
+    engine = engine_factory(db_url)
+
+    mig_params = tuple(inspect.signature(run_migrations).parameters.keys())
+    if len(mig_params) == 0:
+        result = run_migrations()
+    elif mig_params[0] in {"db_url", "url", "dsn", "sqlite_url"}:
+        result = run_migrations(db_url)
+    else:
+        result = run_migrations(engine)
+
+    if inspect.isawaitable(result):
+        await result
 
 
 async def _init_server(ctx: RuntimeContext):
