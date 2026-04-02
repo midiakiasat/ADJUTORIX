@@ -84,6 +84,18 @@ ERR_CONFLICT = 1003
 ERR_NOT_FOUND = 1004
 ERR_TIMEOUT = 1005
 
+READ_ONLY_METHODS = {
+    "health.ping",
+    "job.status",
+    "job.logs",
+    "verify.status",
+    "verify.artifacts",
+    "ledger.current",
+    "index.related",
+    "index.affected",
+    "index.health",
+}
+
 
 # ---------------------------------------------------------------------------
 # REQUEST/RESPONSE
@@ -147,8 +159,8 @@ class RpcServer:
 
             try:
                 req = self._parse_request(payload)
-                # auth (except ping)
-                if req.method != "health.ping":
+                # auth
+                if req.method not in READ_ONLY_METHODS:
                     require_token(request)
 
                 handler = self._methods.get(req.method)
@@ -157,6 +169,11 @@ class RpcServer:
 
                 result = await handler(req.params)
                 return self._success_response(req.id, result)
+            except HTTPException as e:
+                code = ERR_UNAUTHORIZED if e.status_code == 401 else ERR_CONFLICT if e.status_code == 409 else ERR_INVALID_PARAMS if e.status_code == 400 else ERR_INTERNAL
+                message = str(e.detail) if getattr(e, "detail", None) is not None else "http_error"
+                return self._error_response(payload.get("id"), _err(code, message, {"status_code": e.status_code}))
+
 
             except RpcError as e:
                 return self._error_response(payload.get("id"), e)
