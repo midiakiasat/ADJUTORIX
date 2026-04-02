@@ -1,6 +1,6 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, dialog, nativeTheme, shell } from "electron";
-import path from "node:path";
-import fs from "node:fs";
+import { app, BrowserWindow, Menu, type MenuItemConstructorOptions, dialog, nativeTheme, shell } from "electron";
+import * as path from "node:path";
+import * as fs from "node:fs";
 
 /**
  * ADJUTORIX APP — MAIN / app_menu.ts

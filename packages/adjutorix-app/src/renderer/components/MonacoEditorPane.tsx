@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Editor, { OnMount, Monaco } from "@monaco-editor/react";
+import Editor, { type OnMount, type Monaco } from "@monaco-editor/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,

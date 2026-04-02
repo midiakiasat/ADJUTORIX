@@ -292,8 +292,7 @@ def require_token(request: Request, *, method: Optional[str] = None) -> AuthCont
 
     # enforce for mutating methods
     if method and CapabilityMap.is_mutating(method):
-        if idem:
-            _IDEMP.check_and_put(f"{method}:{idem}")
+        # application handlers own idempotency; do not reject duplicate keys here
         if nonce and ts is not None:
             _REPLAY.check_and_put(f"{method}:{nonce}", ts)
 
