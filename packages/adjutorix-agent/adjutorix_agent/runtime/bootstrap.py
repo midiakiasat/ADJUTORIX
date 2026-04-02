@@ -27,7 +27,7 @@ from adjutorix_agent.runtime.wiring import build_container
 from adjutorix_agent.server.rpc import create_app
 import inspect
 import adjutorix_agent.storage.sqlite.engine as sqlite_engine_module
-from adjutorix_agent.storage.sqlite.migrations import run_migrations
+import adjutorix_agent.storage.sqlite.migrations as sqlite_migrations_module
 
 
 @dataclass(frozen=True)
@@ -73,13 +73,30 @@ async def _init_storage(config: Dict[str, Any]) -> None:
 
     engine = engine_factory(db_url)
 
-    mig_params = tuple(inspect.signature(run_migrations).parameters.keys())
+    migration_runner = None
+    for name in ("run_migrations", "apply_migrations", "migrate", "upgrade", "bootstrap_migrations", "initialize"):
+        candidate = getattr(sqlite_migrations_module, name, None)
+        if callable(candidate):
+            migration_runner = candidate
+            break
+
+    if migration_runner is None:
+        exported = sorted(
+            name for name in dir(sqlite_migrations_module)
+            if not name.startswith("_")
+        )
+        raise ImportError(
+            "No supported migration runner found in adjutorix_agent.storage.sqlite.migrations; "
+            f"exported={exported}"
+        )
+
+    mig_params = tuple(inspect.signature(migration_runner).parameters.keys())
     if len(mig_params) == 0:
-        result = run_migrations()
+        result = migration_runner()
     elif mig_params[0] in {"db_url", "url", "dsn", "sqlite_url"}:
-        result = run_migrations(db_url)
+        result = migration_runner(db_url)
     else:
-        result = run_migrations(engine)
+        result = migration_runner(engine)
 
     if inspect.isawaitable(result):
         await result
