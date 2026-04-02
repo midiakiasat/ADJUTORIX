@@ -1,0 +1,6 @@
+
+=== LIVE HEAD ===
+a0bf4b1 fix(agent): decouple policy engine from boot-critical runtime composition
+
+=== LIVE HEALTH ===
+{"jsonrpc":"2.0","result":{"ts":1775153962588,"protocol_version":"1.0.0","services":{"scheduler":true,"tx_store":true,"verify":false,"patch":false,"ledger":true}},"error":null,"id":"1"}

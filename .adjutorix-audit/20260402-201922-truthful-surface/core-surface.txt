@@ -1,0 +1,38 @@
+
+=== AUTHORITATIVE CORE SURFACE ===
+
+[Scheduler]
+  cancel(self, job_id: 'str') -> 'bool'
+  shutdown(self, timeout_s: 'float' = 2.0) -> 'None'
+  status(self, job_id: 'str') -> 'Optional[JobRecord]'
+  submit(self, fn: 'Callable[[ExecutionContext], Any]', *, priority: 'int' = 0, key: 'Optional[str]' = None, is_mutation: 'bool' = False, timeout_s: 'Optional[float]' = None, metadata: 'Optional[Dict[str, Any]]' = None) -> 'str'
+
+[VerifyRunner]
+  run(self, req: 'VerificationRequest', *, custom_stages: 'Optional[List[Tuple[str, ExecRequest]]]' = None) -> 'VerificationArtifacts'
+
+[PatchPipeline]
+  build(self, intents: 'List[MutationIntent]') -> 'PatchArtifact'
+
+[LedgerStore]
+  append_batch(self, nodes: 'Tuple[Iterable[SnapshotNode], Iterable[PatchNode], Iterable[TransactionNode], Iterable[ArtifactNode]]', edges: 'Iterable[Edge]') -> 'None'
+  append_edges(self, edges: 'Iterable[Edge]') -> 'None'
+  append_nodes(self, snapshots: 'Iterable[SnapshotNode]' = (), patches: 'Iterable[PatchNode]' = (), transactions: 'Iterable[TransactionNode]' = (), artifacts: 'Iterable[ArtifactNode]' = ()) -> 'None'
+  close(self) -> 'None'
+  get_edges_from(self, src: 'str') -> 'List[Dict]'
+  get_edges_to(self, dst: 'str') -> 'List[Dict]'
+  get_index(self, key: 'str') -> 'Optional[str]'
+  get_node(self, node_id: 'str') -> 'Optional[Dict]'
+  set_index(self, key: 'str', value: 'str') -> 'None'
+  stream_all(self) -> 'Iterable[Dict]'
+  verify_integrity(self) -> 'None'
+
+[TransactionStore]
+  append_event(self, rec: 'TxEventRecord', *, idem_key: 'Optional[str]' = None) -> 'None'
+  context(self, tx_id: 'str') -> 'TxContext'
+  create(self, tx_id: 'str', ctx: 'TxContext', state: 'TxState') -> 'None'
+  events(self, tx_id: 'str') -> 'List[TxEventRecord]'
+  last_event(self, tx_id: 'str') -> 'Optional[TxEventRecord]'
+  load(self, tx_id: 'str') -> 'Tuple[TxContext, TxState]'
+  save(self, tx_id: 'str', ctx: 'TxContext', state: 'TxState') -> 'None'
+  snapshot(self) -> 'Dict[str, Dict]'
+  state(self, tx_id: 'str') -> 'TxState'
