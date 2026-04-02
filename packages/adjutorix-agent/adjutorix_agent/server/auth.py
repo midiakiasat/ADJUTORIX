@@ -242,10 +242,6 @@ class CapabilityMap:
     READ_ONLY: Set[str] = {
         "health.ping",
         "job.status",
-        "job.logs",
-        "verify.status",
-        "verify.artifacts",
-        "ledger.current",
         "index.related",
         "index.affected",
         "index.health",
@@ -253,9 +249,6 @@ class CapabilityMap:
 
     MUTATING: Set[str] = {
         "job.submit",
-        "verify.run",
-        "patch.preview",
-        "patch.apply",
         "index.build",
     }
 

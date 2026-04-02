@@ -1,7 +1,7 @@
 """
 ADJUTORIX AGENT — SERVER / RPC
 
-Authoritative JSON-RPC 2.0 server.
+Truthful JSON-RPC 2.0 surface aligned to real runtime contracts.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ class RpcServer:
                 req = self._parse_request(payload)
 
                 if req.method != "health.ping":
-                    require_token(request)
+                    require_token(request, method=req.method)
 
                 handler = self._methods.get(req.method)
                 if handler is None:
@@ -191,23 +191,8 @@ class RpcServer:
 
     def _register_methods(self) -> None:
         self._register("health.ping", self._health_ping)
-
         self._register("job.submit", self._job_submit)
         self._register("job.status", self._job_status)
-        self._register("job.logs", self._job_logs)
-
-        self._register("verify.run", self._verify_run)
-        self._register("verify.status", self._verify_status)
-        self._register("verify.artifacts", self._verify_artifacts)
-
-        self._register("patch.preview", self._patch_preview)
-        self._register("patch.apply", self._patch_apply)
-
-        self._register("ledger.current", self._ledger_current)
-        self._register("ledger.at", self._ledger_at)
-        self._register("ledger.range", self._ledger_range)
-        self._register("ledger.replay", self._ledger_replay)
-
         self._register("index.build", self._index_build)
         self._register("index.related", self._index_related)
         self._register("index.affected", self._index_affected)
@@ -266,53 +251,6 @@ class RpcServer:
             state = getattr(record, "state")
             payload["state"] = getattr(state, "value", payload["state"])
         return payload
-
-    async def _job_logs(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        job_id = params.get("job_id")
-        if not isinstance(job_id, str) or not job_id.strip():
-            raise _err(ERR_INVALID_PARAMS, "missing_job_id")
-        since_seq = int(params.get("since_seq", 0))
-        return await self._invoke("scheduler", "logs", job_id, since_seq)
-
-    async def _verify_run(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._invoke("verify", "run", params)
-
-    async def _verify_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        verify_id = params.get("verify_id")
-        if not isinstance(verify_id, str) or not verify_id.strip():
-            raise _err(ERR_INVALID_PARAMS, "missing_verify_id")
-        return await self._invoke("verify", "status", verify_id)
-
-    async def _verify_artifacts(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        verify_id = params.get("verify_id")
-        if not isinstance(verify_id, str) or not verify_id.strip():
-            raise _err(ERR_INVALID_PARAMS, "missing_verify_id")
-        return await self._invoke("verify", "artifacts", verify_id)
-
-    async def _patch_preview(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._invoke("patch", "preview", params)
-
-    async def _patch_apply(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._invoke("patch", "apply", params)
-
-    async def _ledger_current(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._invoke("ledger", "current")
-
-    async def _ledger_at(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        ts = params.get("ts")
-        if ts is None:
-            raise _err(ERR_INVALID_PARAMS, "missing_ts")
-        return await self._invoke("ledger", "at", int(ts))
-
-    async def _ledger_range(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        if "start" not in params or "end" not in params:
-            raise _err(ERR_INVALID_PARAMS, "missing_range")
-        return await self._invoke("ledger", "range", int(params["start"]), int(params["end"]))
-
-    async def _ledger_replay(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        if "start" not in params or "end" not in params:
-            raise _err(ERR_INVALID_PARAMS, "missing_range")
-        return await self._invoke("ledger", "replay", int(params["start"]), int(params["end"]))
 
     async def _index_build(self, params: Dict[str, Any]) -> Dict[str, Any]:
         root = params.get("root")
