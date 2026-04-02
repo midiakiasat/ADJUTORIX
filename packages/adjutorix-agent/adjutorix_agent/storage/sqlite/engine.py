@@ -107,10 +107,10 @@ class SQLiteEngine:
             try:
                 yield conn
                 if getattr(conn, "in_transaction", False):
-                conn.commit()
+                    conn.commit()
             except Exception:
                 if getattr(conn, "in_transaction", False):
-                conn.rollback()
+                    conn.rollback()
                 raise
 
     @contextmanager
@@ -121,10 +121,10 @@ class SQLiteEngine:
             try:
                 yield conn
                 if getattr(conn, "in_transaction", False):
-                conn.commit()
+                    conn.commit()
             except Exception:
                 if getattr(conn, "in_transaction", False):
-                conn.rollback()
+                    conn.rollback()
                 raise
 
     # ---------------------------------------------------------------------
