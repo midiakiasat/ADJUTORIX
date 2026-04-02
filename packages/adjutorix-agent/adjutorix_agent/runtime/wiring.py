@@ -93,14 +93,14 @@ def _build_tx_store(reg: ServiceRegistry) -> TransactionStore:
     return TransactionStore()
 
 
-def _build_policy_engine(config: Dict[str, Any]) -> PolicyEngine:
+def _build_policy_engine(config: Dict[str, Any]) -> Any:
     security = config.get("security", {})
     if isinstance(security, dict):
         try:
             return build_engine_from_dicts(security)
         except Exception:
-            pass
-    return PolicyEngine()
+            return None
+    return None
 
 
 def build_registry(config: Dict[str, Any]) -> ServiceRegistry:
