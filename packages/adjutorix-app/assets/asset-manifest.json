@@ -1,42 +1,42 @@
 {
-  "generatedAt": "2026-04-02T14:03:46.308Z",
-  "root": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app",
-  "assetsDir": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets",
+  "generatedAt": "2026-04-13T17:29:07.878Z",
+  "root": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app",
+  "assetsDir": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets",
   "files": [
     {
       "kind": "asset",
       "relativePath": "icon.png",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/icon.png",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/icon.png",
       "size": 5000
     },
     {
       "kind": "asset",
       "relativePath": "icon.icns",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/icon.icns",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/icon.icns",
       "size": 9590
     },
     {
       "kind": "asset",
       "relativePath": "splash.png",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/splash.png",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/splash.png",
       "size": 8887
     },
     {
       "kind": "font",
       "relativePath": "fonts/Inter-Regular.woff2",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-Regular.woff2",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-Regular.woff2",
       "size": 6056
     },
     {
       "kind": "font",
       "relativePath": "fonts/Inter-Medium.woff2",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-Medium.woff2",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-Medium.woff2",
       "size": 6102
     },
     {
       "kind": "font",
       "relativePath": "fonts/Inter-SemiBold.woff2",
-      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-SemiBold.woff2",
+      "absolutePath": "/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/fonts/Inter-SemiBold.woff2",
       "size": 6086
     }
   ]
