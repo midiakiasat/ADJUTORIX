@@ -787,7 +787,65 @@ function ShellApp(): JSX.Element {
       : []),
   ];
 
-  const statusChips = [
+  
+  React.useEffect(() => {
+    const id = "ax-hit-debug";
+    let hud = document.getElementById(id);
+    if (!hud) {
+      hud = document.createElement("div");
+      hud.id = id;
+      hud.style.position = "fixed";
+      hud.style.right = "12px";
+      hud.style.bottom = "12px";
+      hud.style.zIndex = "2147483647";
+      hud.style.pointerEvents = "none";
+      hud.style.padding = "8px 10px";
+      hud.style.borderRadius = "10px";
+      hud.style.background = "rgba(0,0,0,0.85)";
+      hud.style.color = "#8ef0c6";
+      hud.style.font = "12px/1.4 monospace";
+      hud.style.maxWidth = "42vw";
+      hud.style.whiteSpace = "pre-wrap";
+      document.body.appendChild(hud);
+    }
+
+    const fmt = (el) => {
+      if (!(el instanceof Element)) return String(el);
+      const cls = typeof el.className === "string" ? el.className.trim().replace(/\s+/g, ".") : "";
+      return [el.tagName.toLowerCase(), el.id ? `#${el.id}` : "", cls ? `.${cls}` : ""].join("");
+    };
+
+    const update = (label, ev) => {
+      const target = ev.target;
+      const point = document.elementFromPoint(ev.clientX, ev.clientY);
+      hud.textContent = [
+        label,
+        `target=${fmt(target)}`,
+        `point=${fmt(point)}`,
+        `xy=${ev.clientX},${ev.clientY}`
+      ].join("\n");
+      console.log("[ax-hit]", {
+        label,
+        target: fmt(target),
+        point: fmt(point),
+        x: ev.clientX,
+        y: ev.clientY,
+      });
+    };
+
+    const onPointerDown = (ev) => update("pointerdown(capture)", ev);
+    const onClick = (ev) => update("click(capture)", ev);
+
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("click", onClick, true);
+    };
+  }, []);
+
+
+const statusChips = [
     { label: "Phase", value: state.phase, tone: shellHealth === "healthy" ? "good" : shellHealth === "degraded" ? "warn" : shellHealth === "unhealthy" ? "bad" : "neutral" },
     { label: "Bridge", value: state.manifest ? `${state.manifest.name} v${state.manifest.version}` : "Unavailable", tone: state.manifest ? "good" : "warn" },
     { label: "Capabilities", value: String(capabilities.length), tone: capabilities.length > 0 ? "good" : "warn" },
