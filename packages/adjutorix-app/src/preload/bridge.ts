@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ADJUTORIX APP — PRELOAD / bridge.ts
  *

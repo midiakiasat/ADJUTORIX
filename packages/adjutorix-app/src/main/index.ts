@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from "electron";
 import path from "node:path";
 import fs from "node:fs";

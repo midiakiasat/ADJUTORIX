@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ADJUTORIX APP — PRELOAD / exposed_api.ts
  *

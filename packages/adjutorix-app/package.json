@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "pnpm run build && pnpm exec electron .",
     "build": "pnpm run clean && pnpm run build:ts && pnpm run build:preload-entry && pnpm run build:renderer && pnpm run build:assets",
-    "build:ts": "tsc -p tsconfig.json --incremental false --noEmitOnError false || true",
+    "build:ts": "tsc -p tsconfig.json --incremental false --noEmitOnError true",
     "build:renderer": "node ./scripts/build-renderer.mjs",
     "build:assets": "node ./scripts/prepare-renderer-assets.js",
     "clean": "rimraf dist node_modules/.cache/tsbuildinfo .adjutorix.renderer.entry.html .adjutorix.vite.renderer.config.mjs",

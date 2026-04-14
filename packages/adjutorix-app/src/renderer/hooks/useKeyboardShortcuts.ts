@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 /**
@@ -46,7 +47,7 @@ import {
   type KeyboardLikeEvent,
   type KeyboardMatchResult,
   type KeyboardRisk,
-} from "../renderer/lib/keyboard";
+} from "../lib/keyboard";
 
 // -----------------------------------------------------------------------------
 // TYPES

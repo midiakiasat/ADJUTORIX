@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useCallback, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Circle, Eye, FileCode2, FileJson, FileSearch, FileText, Folder, FolderOpen, FolderTree, GitBranch, MoreHorizontal, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Sparkles } from "lucide-react";

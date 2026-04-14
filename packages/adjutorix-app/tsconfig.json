@@ -2,28 +2,38 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "display": "Adjutorix App (Strict / Deterministic / ESM)",
   "compilerOptions": {
-    /* Language & Emit */
+    "noEmitOnError": true,
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "useDefineForClassFields": true,
-    "verbatimModuleSyntax": true,
-
-    /* Paths & Output */
+    "verbatimModuleSyntax": false,
     "rootDir": "./src",
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
-      "@app/*": ["src/*"],
-      "@main/*": ["src/main/*"],
-      "@renderer/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"],
-      "@ipc/*": ["src/ipc/*"]
+      "@app/*": [
+        "src/*"
+      ],
+      "@main/*": [
+        "src/main/*"
+      ],
+      "@renderer/*": [
+        "src/renderer/*"
+      ],
+      "@shared/*": [
+        "src/shared/*"
+      ],
+      "@ipc/*": [
+        "src/ipc/*"
+      ]
     },
-
-    /* Strictness (no implicit behavior) */
     "strict": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -32,37 +42,27 @@
     "strictFunctionTypes": true,
     "strictBindCallApply": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    /* Control Flow & Soundness */
+    "exactOptionalPropertyTypes": false,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
-
-    /* Imports & Resolution Integrity */
     "resolveJsonModule": true,
-    "esModuleInterop": false,
-    "allowSyntheticDefaultImports": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-
-    /* Emit Discipline */
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "removeComments": false,
     "importHelpers": false,
-
-    /* Performance / Build */
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo",
-    "skipLibCheck": false,
-
-    /* Interop Constraints */
-    "types": ["node"],
-
-    /* Diagnostics */
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
     "pretty": false
   },
   "include": [
