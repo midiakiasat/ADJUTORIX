@@ -310,7 +310,7 @@ describe("smoke/open_workspace", () => {
       expect(screen.getByRole("heading", { name: /^adjutorix$/i })).toBeTruthy();
     });
 
-    await bridge.workspace.open();
+    fireEvent.click(screen.getByRole("button", { name: /open command surface/i }));
 
     await waitFor(() => {
       expect(bridge.workspace.open).toHaveBeenCalledTimes(1);
@@ -337,12 +337,12 @@ describe("smoke/open_workspace", () => {
       expect(screen.getByRole("heading", { name: /^adjutorix$/i })).toBeTruthy();
     });
 
-    await bridge.workspace.open();
+    fireEvent.click(screen.getByRole("button", { name: /open command surface/i }));
 
     await waitFor(() => {
       expect(bridge.workspace.open).toHaveBeenCalledTimes(1);
       const text = (document.body.textContent ?? "").toLowerCase();
-      expect(text).toMatch(/no workspace is currently attached|open workspace|workspace admission/);
+      expect(text).toMatch(/no workspace attached|no workspace is currently attached|open workspace|workspace admission/);
     });
   });
 
@@ -381,7 +381,7 @@ describe("smoke/open_workspace", () => {
       expect(screen.getByRole("heading", { name: /^adjutorix$/i })).toBeTruthy();
     });
 
-    await bridge.workspace.open();
+    fireEvent.click(screen.getByRole("button", { name: /open command surface/i }));
     await expect(bridge.workspace.load()).rejects.toThrow(/workspace load failed after open/i);
 
     const text = (document.body.textContent ?? "").toLowerCase();
