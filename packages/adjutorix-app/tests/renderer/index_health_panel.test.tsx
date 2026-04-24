@@ -24,7 +24,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import IndexHealthPanel from "../../../src/renderer/components/IndexHealthPanel";
+import IndexHealthPanel from "../../src/renderer/components/IndexHealthPanel";
 
 type IndexHealthPanelProps = React.ComponentProps<typeof IndexHealthPanel>;
 

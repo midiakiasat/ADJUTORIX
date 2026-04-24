@@ -31,7 +31,7 @@ import {
   normalizeWorkspaceTrustRoot,
   type WorkspaceTrustContext,
   type WorkspaceTrustEvaluation,
-} from "../../../src/main/governance/workspace_trust";
+} from "../../src/main/workspace/workspace_trust";
 
 function ctx(overrides: Partial<WorkspaceTrustContext> = {}): WorkspaceTrustContext {
   return {

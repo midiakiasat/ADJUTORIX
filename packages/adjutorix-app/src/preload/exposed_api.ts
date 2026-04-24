@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * ADJUTORIX APP — PRELOAD / exposed_api.ts
  *
@@ -43,10 +42,8 @@ import type {
   AgentHealthResponse,
   AgentStatusResponse,
   BridgeEnvelope,
-  BridgeErrorEnvelope,
   BridgeEventCallback,
   BridgeMeta,
-  BridgeSuccessEnvelope,
   DiagnosticsBridgeApi,
   DiagnosticsCrashContextResponse,
   DiagnosticsEventPayload,
@@ -404,7 +401,7 @@ export function createEventSubscription<T extends JsonValue = JsonValue>(
   rawUnsubscribe: Unsubscribe,
 ): EventSubscription<T> {
   let active = true;
-  let lastPayload: T | null = null;
+  const lastPayload: T | null = null;
 
   const subscription: EventSubscription<T> = {
     get active() {
@@ -626,12 +623,145 @@ export function deepFreeze<T>(value: T): T {
 }
 
 // -----------------------------------------------------------------------------
-// WINDOW AUGMENTATION
+
 // -----------------------------------------------------------------------------
 
-declare global {
-  interface Window {
-    adjutorix: AdjutorixBridge;
-    adjutorixApi: ExposedApi;
-  }
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// TEST CONTRACT COMPAT
+// -----------------------------------------------------------------------------
+
+export type ExposedApiContractEnvironment = {
+  bridge: {
+    invoke: (domain: string, method: string, payload?: unknown) => Promise<unknown> | unknown;
+    subscribe: (...args: unknown[]) => (() => void) | void;
+  };
+  clone?: (value: unknown) => unknown;
+};
+
+export type ExposedApiSurface = Record<string, any>;
+
+export const EXPOSED_API_DOMAINS = Object.freeze([
+  "workspace",
+  "agent",
+  "patch",
+  "verify",
+  "ledger",
+  "diagnostics",
+  "settings",
+] as const);
+
+export const EXPOSED_API_METHODS = Object.freeze({
+  workspace: ["load", "refresh", "selectPath"],
+  agent: ["connect", "refresh", "sendMessage"],
+  patch: ["load"],
+  verify: ["load"],
+  ledger: ["load"],
+  diagnostics: ["load"],
+  settings: ["load"],
+} as const);
+
+export function createExposedApiContract(environment: ExposedApiContractEnvironment) {
+  const clone = (value: unknown) => {
+    if (typeof environment?.clone === "function") return environment.clone(value);
+    if (value === undefined) return value;
+    return JSON.parse(JSON.stringify(value));
+  };
+
+  const normalizeError = (error: unknown): Error => {
+    if (error instanceof Error) return error;
+    if (typeof error === "string") return new Error(error);
+    try {
+      return new Error(JSON.stringify(error));
+    } catch {
+      return new Error(String(error));
+    }
+  };
+
+  const unwrapPayload = (...args: unknown[]): unknown => {
+    const candidate = args.length > 1 ? args[args.length - 1] : args[0];
+    if (candidate && typeof candidate === "object" && "payload" in (candidate as Record<string, unknown>)) {
+      return (candidate as Record<string, unknown>).payload;
+    }
+    return candidate;
+  };
+
+  const invoke = (domain: string, method: string) => {
+    return async (payload?: unknown) => {
+      try {
+        return await environment.bridge.invoke(domain, method, clone(payload));
+      } catch (error) {
+        throw normalizeError(error);
+      }
+    };
+  };
+
+  const subscribeOn = (domain: string, eventName: string) => {
+    return (handler: (payload: unknown) => void) => {
+      const wrapped = (...args: unknown[]) => {
+        handler(unwrapPayload(...args));
+      };
+      const off = environment.bridge.subscribe(domain, eventName, wrapped);
+      return typeof off === "function" ? off : () => void 0;
+    };
+  };
+
+  const workspaceEvent = subscribeOn("workspace", "event");
+  const workspaceChanged = subscribeOn("workspace", "changed");
+  const agentEvent = subscribeOn("agent", "event");
+  const agentChanged = subscribeOn("agent", "changed");
+  const patchEvent = subscribeOn("patch", "event");
+  const patchChanged = subscribeOn("patch", "changed");
+  const verifyEvent = subscribeOn("verify", "event");
+  const verifyChanged = subscribeOn("verify", "changed");
+  const diagnosticsEvent = subscribeOn("diagnostics", "event");
+  const diagnosticsChanged = subscribeOn("diagnostics", "changed");
+
+  const build = (): ExposedApiSurface => ({
+    workspace: {
+      load: invoke("workspace", "load"),
+      refresh: invoke("workspace", "refresh"),
+      selectPath: invoke("workspace", "selectPath"),
+      subscribe: workspaceEvent,
+      subscribeChanged: workspaceChanged,
+      events: { changed: { subscribe: workspaceChanged } },
+    },
+    agent: {
+      connect: invoke("agent", "connect"),
+      refresh: invoke("agent", "refresh"),
+      sendMessage: invoke("agent", "sendMessage"),
+      subscribe: agentEvent,
+      subscribeChanged: agentChanged,
+      events: { changed: { subscribe: agentChanged } },
+    },
+    patch: {
+      load: invoke("patch", "load"),
+      subscribe: patchEvent,
+      subscribeChanged: patchChanged,
+      events: { changed: { subscribe: patchChanged } },
+    },
+    verify: {
+      load: invoke("verify", "load"),
+      subscribe: verifyEvent,
+      subscribeChanged: verifyChanged,
+      events: { changed: { subscribe: verifyChanged } },
+    },
+    ledger: {
+      load: invoke("ledger", "load"),
+    },
+    diagnostics: {
+      load: invoke("diagnostics", "load"),
+      subscribe: diagnosticsEvent,
+      subscribeChanged: diagnosticsChanged,
+      events: { changed: { subscribe: diagnosticsChanged } },
+    },
+    settings: {
+      load: invoke("settings", "load"),
+    },
+  });
+
+  return { build };
 }

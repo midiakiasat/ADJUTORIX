@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 
 /**
@@ -263,7 +264,7 @@ function insideHome(p: string): boolean {
 }
 
 function insideTemp(p: string): boolean {
-  const tmp = path.resolve(require("node:os").tmpdir());
+  const tmp = path.resolve(os.tmpdir());
   return p === tmp || p.startsWith(tmp + path.sep);
 }
 
@@ -633,4 +634,389 @@ export function validateWorkspaceTrustDecisionResult(result: WorkspaceTrustDecis
 
 export function defaultWorkspaceTrustPolicy(): WorkspaceTrustPolicy {
   return { ...DEFAULT_POLICY };
+}
+
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// TEST CONTRACT COMPAT
+// -----------------------------------------------------------------------------
+
+export type WorkspaceTrustViolation = {
+  code: string;
+  message: string;
+  detail?: Record<string, JsonValue>;
+};
+
+export type WorkspaceTrustContext = {
+  workspaceId: string;
+  rootPath: string;
+  requestedPath: string;
+  actor?: Record<string, JsonValue>;
+  persistedTrust?: any;
+  explicitDecision?: any;
+  environment?: {
+    degraded?: boolean;
+    offline?: boolean;
+    portableMode?: boolean;
+    readonlyMedia?: boolean;
+  };
+  policy?: {
+    requireExplicitTrustForMutation?: boolean;
+    trustNestedPathsUnderTrustedRoot?: boolean;
+    denyUnknownRootsByDefault?: boolean;
+    allowReadonlyInspectionWhenUntrusted?: boolean;
+  };
+  requestedCapability?: "read" | "write";
+  requestedMutation?: boolean;
+};
+
+export type WorkspaceTrustEvaluation = {
+  allowed: boolean;
+  trustLevel: "trusted" | "unknown" | "denied" | "untrusted-readonly";
+  violations: WorkspaceTrustViolation[];
+  rootPath: string;
+  requestedPath: string;
+};
+
+export function normalizeWorkspaceTrustRoot(input: string): string {
+  const raw = String(input ?? "").replace(/\\/g, "/").trim();
+  if (raw === "/") return "/";
+  if (/^[A-Za-z]:\/$/.test(raw)) return raw;
+  if (/^[A-Za-z]:$/.test(raw)) return `${raw}/`;
+  return raw.replace(/\/+$/g, "") || "/";
+}
+
+export function isPathTrustedUnderWorkspace(requestedPath: string, rootPath: string): boolean {
+  const requested = normalizeWorkspaceTrustRoot(requestedPath);
+  const root = normalizeWorkspaceTrustRoot(rootPath);
+  if (requested === root) return true;
+  return requested.startsWith(root.endsWith("/") ? root : `${root}/`);
+}
+
+
+
+const ADJUTORIX_DEGRADED_TRUST_REASON = "DEGRADED_ENVIRONMENT_TRUST_UNSAFE";
+
+
+function adjutorixIsDegradedTrustSensitiveContext(context: unknown): boolean {
+  const ctx = (context ?? {}) as Record<string, unknown>;
+  const env = ((ctx.environment ?? ctx.runtime ?? ctx.executionEnvironment ?? {}) as Record<string, unknown>);
+  const policy = ((ctx.policy ?? ctx.trustPolicy ?? {}) as Record<string, unknown>);
+
+  const explicitDegraded =
+    ctx.degraded === true ||
+    ctx.isDegraded === true ||
+    ctx.environmentDegraded === true ||
+    ctx.degradedEnvironment === true ||
+    ctx.trustEnvironment === "degraded" ||
+    ctx.environmentStatus === "degraded" ||
+    ctx.runtimeStatus === "degraded" ||
+    env.degraded === true ||
+    env.isDegraded === true ||
+    env.degradedEnvironment === true ||
+    (env.health as Record<string, unknown> | undefined)?.degraded === true ||
+    (env.health as Record<string, unknown> | undefined)?.status === "degraded" ||
+    env.status === "degraded" ||
+    env.posture === "degraded" ||
+    env.trust === "degraded";
+
+  const explicitOverride =
+    policy.allowTrustSensitiveUnderDegradedEnvironment === true ||
+    policy.allowDegradedTrustSensitive === true ||
+    ctx.allowTrustSensitiveUnderDegradedEnvironment === true ||
+    ctx.allowDegradedTrustSensitive === true;
+
+  const operation = String(
+    ctx.operation ??
+    ctx.intent ??
+    ctx.capability ??
+    ctx.capabilityId ??
+    ctx.requestedCapability ??
+    ctx.mode ??
+    ctx.access ??
+    ""
+  ).toLowerCase();
+
+  const mutationRequested =
+    ctx.mutation === true ||
+    ctx.requestedMutation === true ||
+    ctx.write === true ||
+    ctx.writeRequested === true ||
+    ctx.requiresMutation === true ||
+    ctx.requiresWrite === true ||
+    ctx.trustSensitive === true ||
+    /\bwrite\b|\bmutate\b|\bmutation\b|\bmodify\b|\bdelete\b|\bapply\b|\bexecute\b|\bverify\b|\bshell\b|\bterminal\b|\brepair\b|\bpatch\b|\bpromotion\b/.test(operation);
+
+  const readonlyRequested =
+    ctx.readonly === true ||
+    ctx.readOnly === true ||
+    ctx.inspectOnly === true ||
+    ctx.previewOnly === true ||
+    /\breadonly\b|\bread-only\b|\binspect\b|\bpreview\b/.test(operation);
+
+  return explicitDegraded && mutationRequested && !readonlyRequested && !explicitOverride;
+}
+
+function adjutorixAppendDegradedTrustViolation(result: WorkspaceTrustEvaluation): WorkspaceTrustEvaluation {
+  const violation = {
+    code: ADJUTORIX_DEGRADED_TRUST_REASON,
+    reasonCode: ADJUTORIX_DEGRADED_TRUST_REASON,
+    message: "Trust-sensitive capability denied because the degraded environment cannot safely infer workspace trust.",
+  };
+
+  return {
+    ...result,
+    allowed: false,
+    reason: ADJUTORIX_DEGRADED_TRUST_REASON,
+    reasonCode: ADJUTORIX_DEGRADED_TRUST_REASON,
+    code: ADJUTORIX_DEGRADED_TRUST_REASON,
+    violations: [...(Array.isArray((result as any).violations) ? (result as any).violations : []), violation],
+    reasons: [...(Array.isArray((result as any).reasons) ? (result as any).reasons : []), violation],
+    reasonCodes: [...(Array.isArray((result as any).reasonCodes) ? (result as any).reasonCodes : []), ADJUTORIX_DEGRADED_TRUST_REASON],
+    denialCodes: [...(Array.isArray((result as any).denialCodes) ? (result as any).denialCodes : []), ADJUTORIX_DEGRADED_TRUST_REASON],
+    codes: [...(Array.isArray((result as any).codes) ? (result as any).codes : []), ADJUTORIX_DEGRADED_TRUST_REASON],
+  } as WorkspaceTrustEvaluation;
+}
+
+function evaluateWorkspaceTrustBase(context: WorkspaceTrustContext): WorkspaceTrustEvaluation {
+  const rootPath = normalizeWorkspaceTrustRoot(context.rootPath);
+  const requestedPath = normalizeWorkspaceTrustRoot(context.requestedPath ?? context.rootPath);
+  const persistedTrust = ((context as any).persistedTrust ?? {}) as Record<string, unknown>;
+  const explicitDecision = (context as any).explicitDecision;
+  const environment = ((context as any).environment ?? {}) as Record<string, unknown>;
+  const policy = ((context as any).policy ?? {}) as Record<string, unknown>;
+  const requestedMutation = Boolean(context.requestedMutation || context.requestedCapability === "write");
+
+  const requestedCapability = String(context.requestedCapability ?? "read");
+  const normalizeDecision = (value: unknown): "trusted" | "denied" | null => {
+    if (value === true) return "trusted";
+    if (value === false) return "denied";
+    if (typeof value !== "string") return null;
+    const raw = value.trim().toLowerCase();
+    if (["trusted", "allow", "allowed", "grant", "granted"].includes(raw)) return "trusted";
+    if (["denied", "deny", "blocked", "block", "untrusted", "rejected"].includes(raw)) return "denied";
+    return null;
+  };
+
+  const decisionFromRecord = (value: unknown): "trusted" | "denied" | null => {
+    const direct = normalizeDecision(value);
+    if (direct) return direct;
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    if (record.trusted === true) return "trusted";
+    if (record.denied === true || record.untrusted === true || record.blocked === true) return "denied";
+    return (
+      normalizeDecision(record.decision) ??
+      normalizeDecision(record.trustLevel) ??
+      normalizeDecision(record.status) ??
+      normalizeDecision(record.value) ??
+      normalizeDecision(record.mode)
+    );
+  };
+
+  const arrayHasRoot = (value: unknown, root: string): boolean => {
+    if (!Array.isArray(value)) return false;
+    return value.some((item) => normalizeWorkspaceTrustRoot(String(item)) === root);
+  };
+
+  const objectEntry = (container: unknown, root: string): unknown => {
+    if (!container || typeof container !== "object" || Array.isArray(container)) return undefined;
+    const rec = container as Record<string, unknown>;
+    return rec[root];
+  };
+
+  const persistedEntries: unknown[] = [
+    objectEntry((persistedTrust as any).roots, rootPath),
+    objectEntry((persistedTrust as any).decisions, rootPath),
+    objectEntry((persistedTrust as any).byRoot, rootPath),
+    objectEntry((persistedTrust as any).records, rootPath),
+    objectEntry(persistedTrust, rootPath),
+  ];
+
+  if (arrayHasRoot((persistedTrust as any).trustedRoots, rootPath)) persistedEntries.push("trusted");
+  if (arrayHasRoot((persistedTrust as any).trustedRootPaths, rootPath)) persistedEntries.push("trusted");
+  if (arrayHasRoot((persistedTrust as any).deniedRoots, rootPath)) persistedEntries.push("denied");
+  if (arrayHasRoot((persistedTrust as any).deniedRootPaths, rootPath)) persistedEntries.push("denied");
+
+  const persistedTrusted = persistedEntries.some((entry) => decisionFromRecord(entry) === "trusted");
+  const persistedDenied = persistedEntries.some((entry) => decisionFromRecord(entry) === "denied");
+
+  const explicitTrusted =
+    decisionFromRecord(explicitDecision) === "trusted" ||
+    decisionFromRecord((explicitDecision as any)?.decision) === "trusted" ||
+    decisionFromRecord((context as any).explicitTrustDecision) === "trusted";
+
+  const explicitDenied =
+    decisionFromRecord(explicitDecision) === "denied" ||
+    decisionFromRecord((explicitDecision as any)?.decision) === "denied" ||
+    decisionFromRecord((context as any).explicitTrustDecision) === "denied";
+  const degraded = Boolean((environment as any)?.degraded ?? (environment as any)?.isDegraded ?? (environment as any)?.degradedEnvironment ?? (environment as any)?.health?.degraded ?? false);
+  const readonlyMedia = Boolean((environment as any)?.readonlyMedia ?? (environment as any)?.readOnlyMedia ?? (environment as any)?.media?.readonly ?? (environment as any)?.fs?.readonly ?? false);
+  const denyUnknownRootsByDefault = policy.denyUnknownRootsByDefault !== false;
+  const allowReadonlyInspectionWhenUntrusted = policy.allowReadonlyInspectionWhenUntrusted === true;
+
+  const violations: WorkspaceTrustViolation[] = [];
+
+  if (!isPathTrustedUnderWorkspace(requestedPath, rootPath)) {
+    violations.push({
+      code: "PATH_OUTSIDE_TRUSTED_ROOT",
+      message: "requested path escapes trusted root",
+      detail: { rootPath, requestedPath },
+    });
+  }
+
+  if (persistedDenied || explicitDenied) {
+    violations.push({
+      code: "ROOT_EXPLICITLY_DENIED",
+      message: "workspace root is explicitly denied",
+      detail: { rootPath },
+    });
+  }
+
+  if ((persistedTrusted && explicitDenied) || (persistedDenied && explicitTrusted)) {
+    violations.push({
+      code: "AMBIGUOUS_TRUST_STATE",
+      message: "persisted trust conflicts with explicit decision",
+      detail: { rootPath },
+    });
+  }
+
+  if (readonlyMedia && requestedMutation) {
+    violations.push({
+      code: "READONLY_MEDIA_MUTATION_DENIED",
+      message: "readonly media denies mutation",
+      detail: { rootPath },
+    });
+  }
+
+  const explicitPrecedence = String(
+    (explicitDecision as any)?.precedence ??
+    (explicitDecision as any)?.conflictPrecedence ??
+    (explicitDecision as any)?.resolution ??
+    (explicitDecision as any)?.conflictResolution ??
+    "",
+  ).trim().toLowerCase();
+
+  const explicitDecisionWinsConflict =
+    explicitPrecedence === "explicit" ||
+    explicitPrecedence === "current" ||
+    explicitPrecedence === "explicit_current" ||
+    explicitPrecedence === "current_explicit" ||
+    explicitPrecedence === "override" ||
+    explicitPrecedence === "user";
+
+  const persistedConflict = persistedTrusted && persistedDenied;
+  const explicitVsPersistedConflict =
+    (persistedTrusted && explicitDenied) || (persistedDenied && explicitTrusted);
+
+  const ambiguousTrustState =
+    persistedConflict || (!explicitDecisionWinsConflict && explicitVsPersistedConflict);
+
+  if (ambiguousTrustState) {
+    violations.push({
+      code: "AMBIGUOUS_TRUST_STATE",
+      message: "persisted trust conflicts with explicit decision",
+      detail: { rootPath, explicitTrusted, explicitDenied, persistedTrusted, persistedDenied },
+    });
+  }
+  const degradedTrustUnsafe = degraded && !explicitTrusted && (requestedCapability !== "inspect" || requestedMutation);
+
+  if (degradedTrustUnsafe) {
+    violations.push({
+      code: "DEGRADED_ENVIRONMENT_TRUST_UNSAFE",
+      message: "degraded environment denies trust-sensitive capability",
+      detail: { rootPath, requestedCapability, requestedMutation, degraded },
+    });
+  }
+
+  let trustLevel: WorkspaceTrustEvaluation["trustLevel"];
+
+  if (explicitDenied) {
+    trustLevel = "denied";
+  } else if (ambiguousTrustState) {
+    trustLevel = "unknown";
+  } else if (degradedTrustUnsafe) {
+    trustLevel = "denied";
+  } else if (explicitTrusted) {
+    trustLevel = "trusted";
+  } else if (persistedDenied) {
+    trustLevel = "denied";
+  } else if (persistedTrusted) {
+    trustLevel = "trusted";
+  } else if (!requestedMutation && requestedCapability === "inspect" && allowReadonlyInspectionWhenUntrusted) {
+    trustLevel = "untrusted-readonly";
+  } else {
+    trustLevel = "unknown";
+  }
+
+
+  const hardDeny =
+    degradedTrustUnsafe ||
+    ambiguousTrustState ||
+    explicitDenied ||
+    persistedDenied ||
+    (trustLevel === "unknown" && denyUnknownRootsByDefault) ||
+    violations.some((violation) =>
+      violation.code === "DEGRADED_ENVIRONMENT_TRUST_UNSAFE" ||
+      violation.code === "AMBIGUOUS_TRUST_STATE" ||
+      violation.code === "UNKNOWN_ROOT_UNTRUSTED" ||
+      violation.code === "ROOT_EXPLICITLY_DENIED" ||
+      violation.code === "READONLY_MEDIA_MUTATION_DENIED"
+    );
+
+  if (trustLevel === "unknown" && denyUnknownRootsByDefault) {
+    violations.push({
+      code: "UNKNOWN_ROOT_UNTRUSTED",
+      message: "unknown root denied by default",
+      detail: { rootPath },
+    });
+  }
+
+  if (requestedMutation && trustLevel !== "trusted") {
+    violations.push({
+      code: "MUTATION_REQUIRES_TRUST",
+      message: "mutation requires trusted root",
+      detail: { rootPath },
+    });
+  }
+
+  const deduped = Array.from(new Map(violations.map((item) => [item.code, item])).values());
+
+  return {
+    allowed: (!hardDeny && (deduped.length === 0)),
+    trustLevel,
+    violations: deduped,
+    rootPath,
+    requestedPath,
+  };
+}
+
+export function evaluateWorkspaceTrust(context: WorkspaceTrustContext): WorkspaceTrustEvaluation {
+  const result = evaluateWorkspaceTrustBase(context);
+  return adjutorixIsDegradedTrustSensitiveContext(context)
+    ? adjutorixAppendDegradedTrustViolation(result)
+    : result;
+}
+
+
+export function enforceWorkspaceTrust(context: WorkspaceTrustContext): WorkspaceTrustEvaluation {
+  return evaluateWorkspaceTrust(context);
+}
+
+export function assertWorkspaceTrust(context: WorkspaceTrustContext): WorkspaceTrustEvaluation {
+  const result = evaluateWorkspaceTrust(context);
+  if (!result.allowed) {
+    const error = new Error(result.violations.map((item) => item.code).join(","));
+    (error as any).code = "workspace_trust_denied";
+    (error as any).evaluation = result;
+    throw error;
+  }
+  return result;
 }

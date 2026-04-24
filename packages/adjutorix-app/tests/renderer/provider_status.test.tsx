@@ -26,7 +26,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import ProviderStatus from "../../../src/renderer/components/ProviderStatus";
+import ProviderStatus from "../../src/renderer/components/ProviderStatus";
 
 type ProviderStatusProps = React.ComponentProps<typeof ProviderStatus>;
 
