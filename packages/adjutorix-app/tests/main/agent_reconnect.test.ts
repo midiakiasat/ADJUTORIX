@@ -28,7 +28,7 @@ import {
   type AgentReconnectEnvironment,
   type AgentReconnectState,
   type AgentReconnectEvent,
-} from "../../../src/main/services/agent_reconnect";
+} from "../../src/main/services/agent_reconnect";
 
 function reconnectState(overrides: Partial<AgentReconnectState> = {}): AgentReconnectState {
   return {

@@ -743,3 +743,163 @@ export function __private__normalizeExtension(extension?: string | null, path?: 
 export function __private__normalizeMime(mimeType?: string | null): string | null {
   return normalizeMime(mimeType);
 }
+
+
+// -----------------------------------------------------------------------------
+// COMPATIBILITY SURFACE
+// -----------------------------------------------------------------------------
+
+export interface LargeFilePolicy {
+  editorAllowBytes: number;
+  editorDegradeBytes: number;
+  diffAllowBytes: number;
+  diffDegradeBytes: number;
+  previewBytes: number;
+  denyBinaryLike: boolean;
+  binaryExtensions: string[];
+  binaryMimePrefixes: string[];
+  binaryMimeExact: string[];
+}
+
+export interface LargeFileProbe {
+  path?: string | null;
+  sizeBytes: number;
+  mimeType?: string | null;
+  purpose: "editor" | "diff";
+}
+
+export interface LargeFileCompatDecision {
+  enabled: boolean;
+  decision: LargeFileDecision;
+  reason: string | null;
+  previewBytes: number | null;
+}
+
+export const DEFAULT_LARGE_FILE_POLICY: Readonly<LargeFilePolicy> = Object.freeze({
+  editorAllowBytes: 256 * 1024,
+  editorDegradeBytes: 1024 * 1024,
+  diffAllowBytes: 128 * 1024,
+  diffDegradeBytes: 512 * 1024,
+  previewBytes: DEFAULT_LARGE_FILE_THRESHOLDS.previewBytes,
+  denyBinaryLike: true,
+  binaryExtensions: [...LARGE_FILE_KNOWN_BINARY_EXTENSIONS],
+  binaryMimePrefixes: [...LARGE_FILE_BINARY_MIME_PREFIXES].filter((item) => item.endsWith("/")),
+  binaryMimeExact: [...LARGE_FILE_BINARY_MIME_PREFIXES].filter((item) => !item.endsWith("/")),
+});
+
+function compatNormalizePath(path?: string | null): string | null {
+  const value = path?.trim();
+  return value ? value.replace(/\\/g, "/") : null;
+}
+
+function compatNormalizeMime(mimeType?: string | null): string | null {
+  const value = mimeType?.trim().toLowerCase();
+  return value ? value : null;
+}
+
+export function isBinaryLikePath(path?: string | null, policy: LargeFilePolicy = DEFAULT_LARGE_FILE_POLICY): boolean {
+  const normalized = compatNormalizePath(path);
+  if (!normalized) return false;
+  const match = normalized.match(/(\.[^./\\]+)$/);
+  const ext = match?.[1]?.toLowerCase() ?? "";
+  if (!ext) return false;
+  return policy.binaryExtensions.map((item) => item.toLowerCase()).includes(ext);
+}
+
+export function isBinaryLikeMime(mimeType?: string | null, policy: LargeFilePolicy = DEFAULT_LARGE_FILE_POLICY): boolean {
+  const normalized = compatNormalizeMime(mimeType);
+  if (!normalized) return false;
+
+  const exact = new Set(policy.binaryMimeExact.map((item) => item.toLowerCase()));
+  if (exact.has(normalized)) return true;
+
+  return policy.binaryMimePrefixes.some((prefix) => normalized.startsWith(prefix.toLowerCase()));
+}
+
+function compatDecision(
+  decision: LargeFileDecision,
+  reason: string | null,
+  previewBytes?: number,
+): LargeFileCompatDecision {
+  return {
+    enabled: decision !== "allow",
+    decision,
+    reason,
+    previewBytes: decision === "allow" ? null : (previewBytes ?? null),
+  };
+}
+
+export function classifyLargeFileDecision(
+  probe: LargeFileProbe,
+  policy: LargeFilePolicy = DEFAULT_LARGE_FILE_POLICY,
+): LargeFileCompatDecision {
+  const sizeBytes = Number.isFinite(probe.sizeBytes) ? probe.sizeBytes : -1;
+  const purpose = probe.purpose === "diff" ? "diff" : "editor";
+
+  if (sizeBytes < 0) {
+    return compatDecision("deny", "File size is invalid or unavailable; edit authority is denied safely.", policy.previewBytes);
+  }
+
+  const binaryLike =
+    isBinaryLikePath(probe.path ?? null, policy) ||
+    isBinaryLikeMime(probe.mimeType ?? null, policy);
+
+  if (policy.denyBinaryLike && binaryLike) {
+    return compatDecision("deny", "Content appears binary-like and is denied for text operations.", policy.previewBytes);
+  }
+
+  const allowBytes = purpose === "diff" ? policy.diffAllowBytes : policy.editorAllowBytes;
+  const degradeBytes = purpose === "diff" ? policy.diffDegradeBytes : policy.editorDegradeBytes;
+
+  if (sizeBytes < allowBytes) {
+    return compatDecision("allow", null);
+  }
+
+  if (sizeBytes < degradeBytes) {
+    return compatDecision(
+      "degrade",
+      "Large file exceeds the normal interactive threshold; preview mode is required.",
+      policy.previewBytes,
+    );
+  }
+
+  return compatDecision(
+    "deny",
+    "Large file exceeds the maximum safe threshold for this surface.",
+    policy.previewBytes,
+  );
+}
+
+export function buildLargeFileDecision(
+  probe: LargeFileProbe,
+  policy: LargeFilePolicy = DEFAULT_LARGE_FILE_POLICY,
+): LargeFileCompatDecision {
+  return classifyLargeFileDecision(
+    {
+      path: probe.path ?? null,
+      sizeBytes: probe.sizeBytes,
+      mimeType: probe.mimeType ?? null,
+      purpose: probe.purpose,
+    },
+    {
+      editorAllowBytes: policy.editorAllowBytes,
+      editorDegradeBytes: policy.editorDegradeBytes,
+      diffAllowBytes: policy.diffAllowBytes,
+      diffDegradeBytes: policy.diffDegradeBytes,
+      previewBytes: policy.previewBytes,
+      denyBinaryLike: policy.denyBinaryLike,
+      binaryExtensions: [...policy.binaryExtensions],
+      binaryMimePrefixes: [...policy.binaryMimePrefixes],
+      binaryMimeExact: [...policy.binaryMimeExact],
+    },
+  );
+}
+
+export function shouldAllowFullEditor(decision: LargeFileCompatDecision): boolean {
+  return decision.decision === "allow";
+}
+
+export function shouldAllowDiffEditor(decision: LargeFileCompatDecision): boolean {
+  return decision.decision === "allow";
+}
+

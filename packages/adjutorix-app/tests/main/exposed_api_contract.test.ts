@@ -29,7 +29,7 @@ import {
   EXPOSED_API_METHODS,
   type ExposedApiContractEnvironment,
   type ExposedApiSurface,
-} from "../../../src/main/preload/exposed_api_contract";
+} from "../../src/preload/exposed_api";
 
 function env(overrides: Partial<ExposedApiContractEnvironment> = {}): ExposedApiContractEnvironment {
   const invoked: Array<{ domain: string; method: string; payload: unknown }> = [];

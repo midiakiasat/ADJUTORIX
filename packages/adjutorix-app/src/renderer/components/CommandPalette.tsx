@@ -81,6 +81,8 @@ export type CommandPaletteItem = {
     | "system"
     | "run"
     | "bot";
+
+  shortcutLabel?: string;
 };
 
 export type CommandPaletteMetric = {
@@ -399,7 +401,9 @@ export default function CommandPalette(props: CommandPaletteProps): JSX.Element 
 
   useEffect(() => {
     const node = listRef.current?.querySelector<HTMLButtonElement>(`[data-index="${highlightIndex}"]`);
-    node?.scrollIntoView({ block: "nearest" });
+    if (typeof node?.scrollIntoView === "function") {
+      node.scrollIntoView({ block: "nearest" });
+    }
   }, [highlightIndex]);
 
   if (!props.isOpen) return null;
@@ -537,7 +541,12 @@ export default function CommandPalette(props: CommandPaletteProps): JSX.Element 
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="truncate text-sm font-semibold">{command.title}</span>
-                            <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", scopeTone(command.scope))}>{command.scope}</span>
+                            {command.shortcutLabel ? (
+                      <span className="rounded-full border border-zinc-700/30 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-medium tracking-[0.2em] text-zinc-300">
+                        {command.shortcutLabel}
+                      </span>
+                    ) : null}
+                    <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", scopeTone(command.scope))}>{command.scope}</span>
                             <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", riskTone(command.risk))}>{command.risk ?? "safe"}</span>
                             {!command.enabled ? <span className="rounded-full border border-zinc-700/30 bg-zinc-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-zinc-400">disabled</span> : null}
                           </div>

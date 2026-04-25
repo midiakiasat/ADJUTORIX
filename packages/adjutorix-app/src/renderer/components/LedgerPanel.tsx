@@ -139,6 +139,11 @@ export type LedgerPanelProps = {
   onToggleAttentionOnly?: (value: boolean) => void;
   onReplayAnchorChange?: (fromSeq: number | null, toSeq: number | null) => void;
   onReplayRequested?: (targetSeq: number) => void;
+
+  ledgerId?: string | null;
+  ledger?: { id?: string | null } | null;
+  identity?: { ledgerId?: string | null } | null;
+  selectedLedgerId?: string | null;
 };
 
 // -----------------------------------------------------------------------------
@@ -266,27 +271,30 @@ function MetricCard(props: { label: string; value: string; tone?: "neutral" | "g
 function ToggleChip(props: { label: string; active: boolean; icon?: React.ReactNode; onClick?: () => void }): JSX.Element {
   return (
     <button
+      type="button"
       onClick={props.onClick}
       disabled={!props.onClick}
       className={cx(
         "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
         props.active
-          ? "border-indigo-700/30 bg-indigo-500/10 text-indigo-200"
+          ? "border-zinc-600 bg-zinc-800 text-zinc-50"
           : "border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:bg-zinc-900",
         !props.onClick && "cursor-not-allowed opacity-40",
       )}
     >
-      {props.icon}
-      {props.label}
+      {props.icon ? <span className="shrink-0">{props.icon}</span> : null}
+      <span>{props.label}</span>
     </button>
   );
 }
 
-// -----------------------------------------------------------------------------
-// MAIN COMPONENT
-// -----------------------------------------------------------------------------
-
 export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
+  const compatLedgerId =
+    props.ledgerId ??
+    props.ledger?.id ??
+    props.identity?.ledgerId ??
+    props.selectedLedgerId ??
+    null;
   const title = props.title ?? "Ledger cockpit";
   const subtitle =
     props.subtitle ??
@@ -323,21 +331,39 @@ export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
   const selectedEntryId = props.selectedEntryId ?? localSelectedId ?? visibleEntries[0]?.id ?? null;
   const selectedEntry = visibleEntries.find((entry) => entry.id === selectedEntryId) ?? visibleEntries[0] ?? null;
 
-  const metrics = props.metrics ?? [
+  const metrics: LedgerMetric[] = Array.isArray(props.metrics)
+    ? props.metrics
+    : props.metrics && typeof props.metrics === "object"
+      ? Object.entries(props.metrics).map(([id, value]) => ({
+          id,
+          label: String(id)
+            .replace(/([A-Z])/g, " $1")
+            .replace(/^./, (ch) => ch.toUpperCase()),
+          value: String(value ?? 0),
+        }))
+      : [
     { id: "entries", label: "Visible entries", value: String(visibleEntries.length) },
     { id: "current", label: "Current head", value: props.heads?.currentSeq != null ? String(props.heads.currentSeq) : "None", tone: props.heads?.currentSeq != null ? "good" : "neutral" },
     { id: "verified", label: "Verified head", value: props.heads?.verifiedSeq != null ? String(props.heads.verifiedSeq) : "None", tone: props.heads?.verifiedSeq != null ? "good" : "neutral" },
     { id: "replay", label: "Replay anchor", value: props.replay?.lastReplayTargetSeq != null ? String(props.replay.lastReplayTargetSeq) : "None", tone: props.replay?.lastReplayTargetSeq != null ? "warn" : "neutral" },
   ];
 
-  const kindUniverse = useMemo(() => [...new Set(props.entries.map((entry) => entry.kind))].sort((a, b) => a.localeCompare(b)), [props.entries]);
+  const kindUniverse = useMemo(
+  () =>
+    [...new Set(
+      props.entries
+        .map((entry) => entry.kind)
+        .filter((kind): kind is LedgerEntryKind => typeof kind === "string" && kind.trim().length > 0),
+    )].sort((a, b) => a.localeCompare(b)),
+  [props.entries],
+);
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 shadow-xl">
       <div className="border-b border-zinc-800 px-5 py-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Ledger</div>
+            <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Transactions</div>
             <h2 className="mt-1 text-lg font-semibold text-zinc-50">{title}</h2>
             <p className="mt-2 text-sm leading-7 text-zinc-400">{subtitle}</p>
           </div>
@@ -362,6 +388,15 @@ export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
             </button>
           </div>
         </div>
+
+        {compatLedgerId ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Record id</div>
+              <div className="mt-1 text-sm font-medium text-zinc-100">{String(compatLedgerId)}</div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((metric) => (
@@ -398,7 +433,7 @@ export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
             const active = localKinds.includes(kind);
             return (
               <ToggleChip
-                key={kind}
+                key={`kind:${kind}`}
                 label={kind}
                 active={active}
                 icon={kindIcon(kind as LedgerEntryKind)}
@@ -433,7 +468,7 @@ export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
                   const selected = selectedEntry?.id === entry.id;
                   return (
                     <button
-                      key={entry.id}
+                      key={`${entry.id}:${entry.seq}:${entry.kind}:${entry.tsMs ?? "na"}`}
                       onClick={() => {
                         setLocalSelectedId(entry.id);
                         props.onSelectEntry?.(entry);
@@ -467,7 +502,7 @@ export default function LedgerPanel(props: LedgerPanelProps): JSX.Element {
 
               <div className="space-y-5">
                 <section className="rounded-[2rem] border border-zinc-800 bg-zinc-950/40 p-5 shadow-lg">
-                  <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Ledger heads</div>
+                  <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Heads</div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <MetricCard label="Current" value={props.heads?.currentSeq != null ? String(props.heads.currentSeq) : "None"} tone={props.heads?.currentSeq != null ? "good" : "neutral"} icon={<Target className="h-4 w-4" />} />
                     <MetricCard label="Applied" value={props.heads?.appliedSeq != null ? String(props.heads.appliedSeq) : "None"} tone={props.heads?.appliedSeq != null ? "good" : "neutral"} icon={<GitBranch className="h-4 w-4" />} />

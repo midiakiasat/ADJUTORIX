@@ -616,11 +616,11 @@ export default function AppShell(props: AppShellProps): JSX.Element {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-40">
-        {props.overlayLayer ? <div className="pointer-events-auto">{props.overlayLayer}</div> : null}
+        {props.overlayLayer}
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-50">
-        {props.modalLayer ? <div className="pointer-events-auto">{props.modalLayer}</div> : null}
+        {props.modalLayer}
       </div>
     </div>
   );

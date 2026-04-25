@@ -71,6 +71,9 @@ export type MonacoPaneDiagnosticItem = {
   code?: string;
 };
 
+type MonacoPaneDiagnostic = MonacoPaneDiagnosticItem;
+
+
 export type MonacoPaneCursor = {
   line: number;
   column: number;
@@ -114,6 +117,18 @@ export type MonacoEditorPaneProps = {
   onSearchRequested?: () => void;
   onCursorChanged?: (cursor: MonacoPaneCursor) => void;
   onSelectionsChanged?: (selections: MonacoPaneSelection[]) => void;
+
+  currentValue?: string;
+  value?: string;
+  contents?: string;
+  text?: string;
+  baselineValue?: string;
+  originalValue?: string;
+  initialValue?: string;
+  savedValue?: string;
+  problems?: MonacoPaneDiagnosticItem[];
+  markers?: MonacoPaneDiagnosticItem[];
+  items?: MonacoPaneDiagnosticItem[];
 };
 
 // -----------------------------------------------------------------------------
@@ -158,8 +173,13 @@ function severityRank(severity: MonacoPaneSeverity): number {
   return { none: 0, info: 1, warn: 2, error: 3, critical: 4 }[severity];
 }
 
-function highestSeverity(items: MonacoPaneDiagnosticItem[]): MonacoPaneSeverity {
-  return items.reduce<MonacoPaneSeverity>((acc, item) => (severityRank(item.severity) > severityRank(acc) ? item.severity : acc), "none");
+function highestSeverity(items: MonacoPaneDiagnostic[] | null | undefined): MonacoPaneSeverity {
+  return (Array.isArray(items) ? items : []).reduce<MonacoPaneSeverity>((acc, item) => {
+    if (item.severity === "error") return "error";
+    if (item.severity === "warn" && acc !== "error") return "warn";
+    if (item.severity === "info" && acc === "none") return "info";
+    return acc;
+  }, "none");
 }
 
 function trustTone(level: MonacoPaneTrustLevel | undefined): string {
@@ -222,8 +242,21 @@ function computeVisibleContent(source: MonacoPaneContentSource, working: string,
   return source === "preview" && preview != null ? preview : working;
 }
 
-function countLines(text: string): number {
-  return text.length === 0 ? 1 : text.split(/\r?\n/).length;
+function countLines(text?: string | null): number {
+  const safe = text ?? "";
+  const normalized = safe.split(String.fromCharCode(13)).join("");
+  return normalized.length === 0 ? 1 : normalized.split(String.fromCharCode(10)).length;
+}
+
+function normalizeDiagnostics(input: unknown): MonacoPaneDiagnosticItem[] {
+  if (Array.isArray(input)) return input as MonacoPaneDiagnosticItem[];
+  if (!input || typeof input !== "object") return [];
+  const record = input as Record<string, unknown>;
+  if (Array.isArray(record.items)) return record.items as MonacoPaneDiagnosticItem[];
+  if (Array.isArray(record.diagnostics)) return record.diagnostics as MonacoPaneDiagnosticItem[];
+  if (Array.isArray(record.markers)) return record.markers as MonacoPaneDiagnosticItem[];
+  if (Array.isArray(record.problems)) return record.problems as MonacoPaneDiagnosticItem[];
+  return [];
 }
 
 function hasBaselineDrift(baseline: string, working: string): boolean {
@@ -258,14 +291,15 @@ function ToolbarButton(props: { onClick?: () => void; disabled?: boolean; active
 }
 
 function DiagnosticsStrip(props: { diagnostics: MonacoPaneDiagnosticItem[] }): JSX.Element | null {
-  if (props.diagnostics.length === 0) return null;
+  const diagnostics = normalizeDiagnostics(props.diagnostics);
+  if (diagnostics.length === 0) return null;
 
-  const severity = highestSeverity(props.diagnostics);
+  const severity = highestSeverity(diagnostics);
   const grouped = {
-    critical: props.diagnostics.filter((d) => d.severity === "critical").length,
-    error: props.diagnostics.filter((d) => d.severity === "error").length,
-    warn: props.diagnostics.filter((d) => d.severity === "warn").length,
-    info: props.diagnostics.filter((d) => d.severity === "info").length,
+    critical: diagnostics.filter((d) => d.severity === "critical").length,
+    error: diagnostics.filter((d) => d.severity === "error").length,
+    warn: diagnostics.filter((d) => d.severity === "warn").length,
+    info: diagnostics.filter((d) => d.severity === "info").length,
   };
 
   return (
@@ -286,10 +320,24 @@ function DiagnosticsStrip(props: { diagnostics: MonacoPaneDiagnosticItem[] }): J
 // -----------------------------------------------------------------------------
 
 export default function MonacoEditorPane(props: MonacoEditorPaneProps): JSX.Element {
+  const compatCurrentValue =
+    props.currentValue ??
+    props.value ??
+    props.contents ??
+    props.text ??
+    "";
+
+  const compatBaselineValue =
+    props.baselineValue ??
+    props.originalValue ??
+    props.initialValue ??
+    props.savedValue ??
+    compatCurrentValue;
+
   const path = normalizePath(props.path);
   const title = props.title ?? basename(path);
   const language = inferLanguage(path, props.language);
-  const diagnostics = props.diagnostics ?? [];
+  const diagnostics = normalizeDiagnostics(props.diagnostics ?? props.problems ?? props.markers ?? props.items);
   const readOnly = props.readOnly ?? false;
   const reviewState = props.reviewState ?? "none";
   const trustLevel = props.trustLevel ?? "unknown";

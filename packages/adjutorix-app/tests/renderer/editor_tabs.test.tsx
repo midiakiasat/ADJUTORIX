@@ -24,7 +24,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import EditorTabs from "../../../src/renderer/components/EditorTabs";
+import EditorTabs from "../../src/renderer/components/EditorTabs";
 
 type EditorTabsProps = React.ComponentProps<typeof EditorTabs>;
 
