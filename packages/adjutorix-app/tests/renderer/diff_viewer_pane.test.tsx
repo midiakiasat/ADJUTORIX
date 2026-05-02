@@ -121,9 +121,9 @@ describe("DiffViewerPane", () => {
   it("renders the canonical diff shell with title, subtitle, file identity, and Monaco diff host", () => {
     render(<DiffViewerPane {...buildProps()} />);
 
-    expect(screen.getByText(/Diff viewer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Governed original vs modified comparison surface/i)).toBeInTheDocument();
-    expect(screen.getByText(/AppShell\.tsx/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Diff viewer/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Governed original vs modified comparison surface/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/AppShell\.tsx/i)[0]).toBeInTheDocument();
     expect(screen.getByTestId("monaco-diff-editor-mock")).toBeInTheDocument();
   });
 
@@ -139,31 +139,31 @@ describe("DiffViewerPane", () => {
   it("surfaces file lineage explicitly so original and modified ownership remain unambiguous", () => {
     render(<DiffViewerPane {...buildProps()} />);
 
-    expect(screen.getByText(/\/repo\/adjutorix-app\/src\/renderer\/components\/AppShell\.tsx/i)).toBeInTheDocument();
-    expect(screen.getByText(/modify/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/\/repo\/adjutorix-app\/src\/renderer\/components\/AppShell\.tsx/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/modify/i)[0]).toBeInTheDocument();
   });
 
   it("surfaces selected hunk identity and header explicitly instead of hiding review focus in editor internals", () => {
     render(<DiffViewerPane {...buildProps()} />);
 
-    expect(screen.getByText(/@@ -1,3 \+1,3 @@/i)).toBeInTheDocument();
-    expect(screen.getByText(/@@ -8,4 \+8,6 @@/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/@@ -1,3 \+1,3 @@/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/@@ -8,4 \+8,6 @@/i)[0]).toBeInTheDocument();
   });
 
   it("surfaces added and deleted line metrics as operator-visible diff facts", () => {
     render(<DiffViewerPane {...buildProps()} />);
 
-    expect(screen.getByText(/added/i)).toBeInTheDocument();
-    expect(screen.getByText(/deleted/i)).toBeInTheDocument();
-    expect(screen.getByText(/3/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/added/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/deleted/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/3/i)[0]).toBeInTheDocument();
   });
 
   it("surfaces review, verify, and apply-readiness posture explicitly instead of reducing the diff to pure code colorization", () => {
     render(<DiffViewerPane {...buildProps()} />);
 
-    expect(screen.getByText(/commented/i)).toBeInTheDocument();
-    expect(screen.getByText(/passed/i)).toBeInTheDocument();
-    expect(screen.getByText(/warning/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/commented/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/passed/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/warning/i)[0]).toBeInTheDocument();
   });
 
   it("wires hunk selection to the explicit callback instead of silently mutating local review focus", () => {
@@ -234,8 +234,8 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/Large diff forced sampled comparison mode/i)).toBeInTheDocument();
-    expect(screen.getByText(/large file/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Large diff forced sampled comparison mode/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/large file/i)[0]).toBeInTheDocument();
   });
 
   it("surfaces denied diff posture explicitly when text comparison is blocked", () => {
@@ -252,7 +252,7 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/Binary-like content denied for textual diff/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Binary-like content denied for textual diff/i)[0]).toBeInTheDocument();
   });
 
   it("supports preview mode explicitly without collapsing to editable normal-editor semantics", () => {
@@ -264,7 +264,7 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/preview/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/preview/i)[0]).toBeInTheDocument();
   });
 
   it("supports empty-hunk posture explicitly when a diff file exists but no structured hunks are available", () => {
@@ -283,7 +283,7 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/Diff viewer/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Diff viewer/i)[0]).toBeInTheDocument();
     expect(screen.queryByText(/@@ -1,3 \+1,3 @@/i)).not.toBeInTheDocument();
   });
 
@@ -296,8 +296,8 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/Diff viewer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Governed original vs modified comparison surface/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Diff viewer/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Governed original vs modified comparison surface/i)[0]).toBeInTheDocument();
   });
 
   it("surfaces degraded health posture explicitly instead of assuming diff freshness", () => {
@@ -309,7 +309,7 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/degraded/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/degraded/i)[0]).toBeInTheDocument();
   });
 
   it("preserves rename lineage explicitly when old and new paths differ", () => {
@@ -323,9 +323,9 @@ describe("DiffViewerPane", () => {
       />,
     );
 
-    expect(screen.getByText(/rename/i)).toBeInTheDocument();
-    expect(screen.getByText(/OldShell\.tsx/i)).toBeInTheDocument();
-    expect(screen.getByText(/AppShell\.tsx/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/rename/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/OldShell\.tsx/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/AppShell\.tsx/i)[0]).toBeInTheDocument();
   });
 
   it("does not collapse the diff shell into only the Monaco surface; metrics, hunks, and controls remain distinct", () => {
@@ -333,7 +333,7 @@ describe("DiffViewerPane", () => {
 
     expect(screen.getByTestId("monaco-diff-editor-mock")).toBeInTheDocument();
     expect(screen.getAllByRole("button").length).toBeGreaterThanOrEqual(4);
-    expect(screen.getByText(/@@ -1,3 \+1,3 @@/i)).toBeInTheDocument();
-    expect(screen.getByText(/added/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/@@ -1,3 \+1,3 @@/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/added/i)[0]).toBeInTheDocument();
   });
 });

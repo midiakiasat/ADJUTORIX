@@ -379,7 +379,7 @@ export function buildPathLabelModel(
   };
 }
 
-export function disambiguatePathLabels(
+export function disambiguatePathLabelGroups(
   rawPaths: string[],
   context?: PathLabelContext,
 ): PathCollisionGroup[] {
@@ -515,4 +515,169 @@ export function __private__computeWorkspaceRelative(
   context?: PathLabelContext,
 ): string | null {
   return computeWorkspaceRelative(normalizedPath, withContext(context));
+}
+
+
+// -----------------------------------------------------------------------------
+// ADJUTORIX_TEST_COMPAT_PATH_LABEL_EXPORTS
+// -----------------------------------------------------------------------------
+
+export interface ShortPathLabelContext {
+  workspaceRoot?: string | null;
+  workspaceRoots?: string[];
+  allPaths?: string[];
+  maxLabelLength?: number;
+}
+
+function pathLabelWorkspaceRoot(context?: ShortPathLabelContext): string | null {
+  if (context?.workspaceRoot) return normalizeRawPath(context.workspaceRoot);
+  const first = context?.workspaceRoots?.find((root) => root.trim().length > 0);
+  return first ? normalizeRawPath(first) : null;
+}
+
+function pathLabelSegments(rawPath: string, workspaceRoot?: string | null): string[] {
+  const normalized = normalizeRawPath(rawPath);
+  const root = workspaceRoot ? normalizeRawPath(workspaceRoot) : null;
+  const label = root ? relativePathLabel(normalized, root) : normalized;
+  if (!label || label === ".") return [];
+  return label.replace(/^\/+/, "").split("/").filter(Boolean);
+}
+
+export function normalizePathForLabeling(path: string): string {
+  return normalizeRawPath(path);
+}
+
+export function basenameLabel(path: string): string {
+  const normalized = normalizeRawPath(path);
+  if (!normalized) return "";
+
+  const parts = splitRoot(normalized);
+  if (!parts.rest) return parts.root || normalized;
+
+  const segments = parts.rest.split("/").filter(Boolean);
+  return segments[segments.length - 1] ?? parts.root ?? normalized;
+}
+
+export function dirnameLabel(path: string): string {
+  const normalized = normalizeRawPath(path);
+  if (!normalized) return "";
+
+  const parts = splitRoot(normalized);
+  if (!parts.rest) return parts.root || normalized;
+
+  const segments = parts.rest.split("/").filter(Boolean);
+  if (segments.length <= 1) return parts.root || ".";
+
+  return joinSegments(parts.root, segments.slice(0, -1));
+}
+
+export function relativePathLabel(path: string, workspaceRoot?: string | null): string {
+  const normalized = normalizeRawPath(path);
+  const root = workspaceRoot ? normalizeRawPath(workspaceRoot) : "";
+
+  if (!root) return normalized;
+  if (normalized === root) return ".";
+
+  const boundary = root.endsWith("/") ? root : `${root}/`;
+  if (normalized.startsWith(boundary)) return normalized.slice(boundary.length);
+
+  return normalized;
+}
+
+export function breadcrumbLabel(path: string, workspaceRoot?: string | null): string {
+  const label = workspaceRoot ? relativePathLabel(path, workspaceRoot) : normalizeRawPath(path);
+  if (label === ".") return ".";
+
+  const segments = label.replace(/^\/+/, "").split("/").filter(Boolean);
+  return segments.join(" / ") || label || basenameLabel(path);
+}
+
+export function commonPathPrefix(paths: string[]): string {
+  const normalized = paths.map(normalizeRawPath).filter(Boolean);
+  if (normalized.length === 0) return "";
+
+  const split = normalized.map((path) => {
+    const parts = splitRoot(path);
+    return {
+      root: parts.root,
+      absolute: parts.isAbsolute,
+      segments: parts.rest.split("/").filter(Boolean),
+    };
+  });
+
+  const firstRoot = split[0]?.root ?? "";
+  const sameRoot = split.every((entry) => entry.root === firstRoot);
+
+  if (!sameRoot) {
+    return split.every((entry) => entry.absolute) ? "/" : "";
+  }
+
+  const minLength = Math.min(...split.map((entry) => entry.segments.length));
+  let count = 0;
+
+  for (let index = 0; index < minLength; index += 1) {
+    const token = split[0]!.segments[index];
+    if (split.every((entry) => entry.segments[index] === token)) count += 1;
+    else break;
+  }
+
+  return joinSegments(firstRoot, split[0]!.segments.slice(0, count));
+}
+
+export function disambiguatePathLabels(
+  paths: string[],
+  context: ShortPathLabelContext = {},
+): Record<string, string> {
+  const workspaceRoot = pathLabelWorkspaceRoot(context);
+  const result: Record<string, string> = {};
+  const groups = new Map<string, string[]>();
+
+  for (const path of paths) {
+    const base = basenameLabel(path);
+    const bucket = groups.get(base) ?? [];
+    bucket.push(path);
+    groups.set(base, bucket);
+  }
+
+  for (const [base, group] of groups.entries()) {
+    if (group.length === 1) {
+      result[group[0]!] = base;
+      continue;
+    }
+
+    const segmentSets = group.map((path) => {
+      const segments = pathLabelSegments(path, workspaceRoot);
+      return segments.length > 0 ? segments : [basenameLabel(path)];
+    });
+
+    const maxDepth = Math.max(...segmentSets.map((segments) => segments.length));
+    let labels = group.map(() => base);
+
+    for (let depth = 1; depth <= maxDepth; depth += 1) {
+      const candidate = segmentSets.map((segments) => segments.slice(-depth).join("/"));
+      if (new Set(candidate).size === candidate.length) {
+        labels = candidate;
+        break;
+      }
+    }
+
+    if (new Set(labels).size !== labels.length) {
+      labels = group.map((path) => relativePathLabel(path, workspaceRoot) || normalizeRawPath(path));
+    }
+
+    group.forEach((path, index) => {
+      result[path] = labels[index] || basenameLabel(path);
+    });
+  }
+
+  return result;
+}
+
+export function shortPathLabel(path: string, context: ShortPathLabelContext = {}): string {
+  if (context.allPaths && context.allPaths.length > 0) {
+    const labels = disambiguatePathLabels(context.allPaths, context);
+    return labels[path] ?? basenameLabel(path);
+  }
+
+  return basenameLabel(path);
 }
