@@ -138,26 +138,26 @@ const DEFAULT_INVARIANTS: WelcomeInvariant[] = [
 const DEFAULT_QUICK_LINKS: WelcomeQuickLink[] = [
   {
     id: "open-workspace",
-    title: "Open workspace",
-    description: "Start from a real repository or project folder and establish trust/health state explicitly.",
+    title: "Open workspace posture",
+    description: "Workspace opening is guarded; refresh workspace posture first, then bind a trusted folder through the explicit bridge path.",
     icon: FolderOpen,
   },
   {
     id: "review-diagnostics",
-    title: "Diagnostics surface",
-    description: "Inspect startup posture, runtime state, logs, and crash context before doing any governed work.",
+    title: "Diagnostics posture",
+    description: "Inspect provider status, runtime state, logs, and crash context before governed work.",
     icon: Activity,
   },
   {
     id: "understand-patch-flow",
-    title: "Patch review flow",
-    description: "Preview, approve, verify, and only then consider apply. No silent mutation path exists.",
+    title: "Patch review contract",
+    description: "Preview lineage, approval state, and verification evidence before apply.",
     icon: FileCode2,
   },
   {
     id: "agent-readiness",
-    title: "Agent readiness",
-    description: "Agent process, auth posture, and reconnect state are explicit and inspectable before use.",
+    title: "Agent readiness posture",
+    description: "Agent process, auth posture, reconnect state, and failure state remain inspectable before use.",
     icon: Bot,
   },
 ];
@@ -443,8 +443,8 @@ export default function WelcomeScreen(props: WelcomeScreenProps): JSX.Element {
 
           <Section
             eyebrow="Entry paths"
-            title="Start from the surface you need"
-            subtitle="Open a workspace, inspect diagnostics first, review patch workflow expectations, or assess agent readiness before attaching product trust to a session."
+            title="Start from an explicit action"
+            subtitle="Every visible entry point must either perform an action, open an explicit surface, or explain why it is unavailable."
           >
             <div className="grid gap-4 md:grid-cols-2">
               {quickLinks.map((item) => (
