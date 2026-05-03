@@ -191,3 +191,73 @@ repo-private/
 .adjutorix-audit/
 
 *.bak.*
+
+# >>> ADJUTORIX LOCAL PRIVACY / GENERATED ARTIFACT PERIMETER >>>
+# macOS / editor residue
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# local logs / forensic scratch / repair archives
+*.log
+__adjutorix_*.log
+__adjutorix_*.tar.gz
+
+# local backups / rejects
+*.bak
+*.bak.*
+*.orig
+*.rej
+*.v*bak-*
+
+# environment / credentials / key material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# local databases / mutable runtime state
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.sqlite-*
+
+# package managers / build systems / caches
+node_modules/
+**/node_modules/
+.turbo/
+**/.turbo/
+.tmp/
+**/.tmp/
+.venv/
+.venv*/
+.conda/
+.pytest_cache/
+**/.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# app/build/release outputs
+dist/
+**/dist/
+release/
+**/release/
+*.dmg
+*.asar
+*.blockmap
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+# <<< ADJUTORIX LOCAL PRIVACY / GENERATED ARTIFACT PERIMETER <<<
