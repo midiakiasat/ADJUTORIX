@@ -25,7 +25,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import FileTreePane from "../../../src/renderer/components/FileTreePane";
+import FileTreePane from "../../src/renderer/components/FileTreePane";
 
 type FileTreePaneProps = React.ComponentProps<typeof FileTreePane>;
 

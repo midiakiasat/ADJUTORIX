@@ -23,9 +23,9 @@ import { MemoryRouter } from "react-router-dom";
  * - if actual bootstrap exports differ, adapt the harness first rather than weakening the smoke guarantees
  */
 
-import App from "../../../src/renderer/App";
-import { installRendererProviders } from "../../../src/renderer/bootstrap/installRendererProviders";
-import { createRendererRuntime } from "../../../src/renderer/bootstrap/createRendererRuntime";
+import App from "../../src/renderer/App";
+import { installRendererProviders } from "../../src/renderer/bootstrap/installRendererProviders";
+import { createRendererRuntime } from "../../src/renderer/bootstrap/createRendererRuntime";
 
 type SubscriptionHandler = (payload: unknown) => void;
 

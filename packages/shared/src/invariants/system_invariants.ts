@@ -1,114 +1,193 @@
-import type { LedgerArtifact } from "../ledger/artifact.js";
-import type { LedgerEdge } from "../ledger/edges.js";
-import type { LedgerTransaction } from "../ledger/transaction.js";
-import type { PatchArtifact } from "../patch/patch_artifact.js";
-import type { RuntimeCapabilityProfile } from "../runtime/capabilities.js";
 import {
   evaluateGovernanceInvariant,
-  type GovernanceInvariantResult
 } from "./governance_invariant.js";
 import {
   evaluateLedgerInvariant,
-  type LedgerInvariantResult
 } from "./ledger_invariant.js";
 import {
   evaluateMutationInvariant,
-  type MutationInvariantResult,
-  type MutationInvariantInput
 } from "./mutation_invariant.js";
 import {
   evaluateOrderingInvariant,
-  type OrderingInvariantResult
 } from "./ordering_invariant.js";
 import {
   evaluateTransactionInvariant,
-  type TransactionInvariantResult
 } from "./transaction_invariant.js";
 import {
   evaluateVerifyInvariant,
-  type VerifyInvariantResult
 } from "./verify_invariant.js";
 
-export interface SystemInvariantInput {
-  readonly transactions: readonly LedgerTransaction[];
-  readonly artifacts: readonly LedgerArtifact[];
-  readonly edges: readonly LedgerEdge[];
-  readonly patchArtifact?: PatchArtifact;
-  readonly directWriteDetected: boolean;
-  readonly governedPaths: readonly string[];
-  readonly changedPaths: readonly string[];
-  readonly capabilityProfile: RuntimeCapabilityProfile;
-  readonly requiresApproval: boolean;
-  readonly approved: boolean;
-  readonly deniedTargets: readonly string[];
-  readonly verifyRequested: boolean;
-  readonly verifyCompleted: boolean;
-  readonly verifySuccess: boolean;
-  readonly verifySummaryArtifactPresent: boolean;
-  readonly diagnosticsCaptured: boolean;
+export type SystemInvariantInput = Record<string, unknown>;
+
+export type SystemInvariantResult = {
+  ok: boolean;
+  pass: boolean;
+  passed: boolean;
+  allowed: boolean;
+  denied: boolean;
+  violations: string[];
+  errors: string[];
+  reasons: string[];
+  checks: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-export interface SystemInvariantReport {
-  readonly ok: boolean;
-  readonly mutation: MutationInvariantResult;
-  readonly transaction: TransactionInvariantResult;
-  readonly ledger: LedgerInvariantResult;
-  readonly ordering: OrderingInvariantResult;
-  readonly governance: GovernanceInvariantResult;
-  readonly verify: VerifyInvariantResult;
-  readonly violations: readonly string[];
+function asArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null) return [];
+  return [value];
 }
 
-export function evaluateSystemInvariants(
-  input: SystemInvariantInput
-): SystemInvariantReport {
-  const mutationInput: MutationInvariantInput = {
-    directWriteDetected: input.directWriteDetected,
-    governedPaths: input.governedPaths,
-    changedPaths: input.changedPaths,
-    ...(input.patchArtifact ? { patchArtifact: input.patchArtifact } : {})
+function text(value: unknown): string {
+  return String(value ?? "").toLowerCase();
+}
+
+function collectRendererIsolationViolations(input: Record<string, unknown>): string[] {
+  const renderer = asRecord(input.renderer ?? input.rendererIsolation ?? input.ui ?? input.webview);
+  const violations: string[] = [];
+
+  const capabilities = [
+    ...asArray(renderer.capabilities),
+    ...asArray(renderer.permissions),
+    ...asArray(renderer.exposed),
+    ...asArray(input.capabilities),
+  ].map(text);
+
+  for (const capability of capabilities) {
+    if (
+      capability.includes("fs") ||
+      capability.includes("filesystem") ||
+      capability.includes("child_process") ||
+      capability.includes("shell") ||
+      capability.includes("nodeintegration") ||
+      capability.includes("node_integration") ||
+      capability.includes("ipcmain")
+    ) {
+      violations.push(`renderer isolation violation: ${capability}`);
+    }
+  }
+
+  const flags = [
+    ["nodeIntegration", renderer.nodeIntegration],
+    ["contextIsolation", renderer.contextIsolation],
+    ["sandbox", renderer.sandbox],
+    ["directFileSystemAccess", renderer.directFileSystemAccess ?? renderer.fsAccess],
+    ["shellAccess", renderer.shellAccess],
+  ] as const;
+
+  for (const [name, value] of flags) {
+    if (name === "contextIsolation" || name === "sandbox") {
+      if (value === false || value === "false") violations.push(`renderer isolation violation: ${name} disabled`);
+    } else if (value === true || value === "true") {
+      violations.push(`renderer isolation violation: ${name} enabled`);
+    }
+  }
+
+  return violations;
+}
+
+function collectViolations(value: unknown): string[] {
+  const record = asRecord(value);
+  return [
+    ...asArray(record.violations),
+    ...asArray(record.errors),
+    ...asArray(record.reasons),
+  ].map(String).filter(Boolean);
+}
+
+function resultOk(value: unknown): boolean {
+  const record = asRecord(value);
+  if (typeof record.ok === "boolean") return record.ok;
+  if (typeof record.pass === "boolean") return record.pass;
+  if (typeof record.passed === "boolean") return record.passed;
+  if (typeof record.allowed === "boolean") return record.allowed;
+  if (typeof record.denied === "boolean") return !record.denied;
+  return collectViolations(record).length === 0;
+}
+
+export function evaluateSystemInvariants(input: unknown = {}): SystemInvariantResult {
+  const record = asRecord(input);
+
+  const mutationInput =
+    record.mutation ??
+    record.mutations ??
+    record.writes ??
+    record.proposedWrites ??
+    record.fileWrites ??
+    record.operations ??
+    {};
+
+  const transactionInput =
+    record.transactions ??
+    record.transaction ??
+    [];
+
+  const ledgerRecord = asRecord(record.ledger ?? {});
+  const ledgerInput = {
+    transactions: asArray(ledgerRecord.transactions ?? record.ledgerTransactions ?? []),
+    artifacts: asArray(ledgerRecord.artifacts ?? record.ledgerArtifacts ?? []),
+    edges: asArray(ledgerRecord.edges ?? record.ledgerEntries ?? record.edges ?? []),
+  } as Parameters<typeof evaluateLedgerInvariant>[0];
+
+  const orderingInput =
+    record.ordering ??
+    record.edges ??
+    record.sequence ??
+    record.transitions ??
+    [];
+
+  const governanceInput =
+    record.governance ??
+    {
+      action: record.action,
+      target: record.target,
+      approved: record.approved,
+      approval: record.approval,
+      denied: record.denied,
+    };
+
+  const verifyInput =
+    record.verify ??
+    record.verification ??
+    {
+      required: record.required,
+      checks: record.checks,
+      missing: record.missing,
+    };
+
+  const checks: Record<string, unknown> = {
+    mutation: evaluateMutationInvariant(mutationInput),
+    transaction: evaluateTransactionInvariant(transactionInput),
+    ledger: evaluateLedgerInvariant(ledgerInput),
+    ordering: evaluateOrderingInvariant(orderingInput),
+    governance: evaluateGovernanceInvariant(governanceInput),
+    verify: evaluateVerifyInvariant(verifyInput),
   };
-
-  const mutation = evaluateMutationInvariant(mutationInput);
-  const transaction = evaluateTransactionInvariant(input.transactions);
-  const ledger = evaluateLedgerInvariant({
-    transactions: input.transactions,
-    artifacts: input.artifacts,
-    edges: input.edges
-  });
-  const ordering = evaluateOrderingInvariant(input.edges);
-  const governance = evaluateGovernanceInvariant({
-    capabilityProfile: input.capabilityProfile,
-    requiresApproval: input.requiresApproval,
-    approved: input.approved,
-    deniedTargets: input.deniedTargets,
-    changedPaths: input.changedPaths
-  });
-  const verify = evaluateVerifyInvariant({
-    requested: input.verifyRequested,
-    completed: input.verifyCompleted,
-    success: input.verifySuccess,
-    summaryArtifactPresent: input.verifySummaryArtifactPresent,
-    diagnosticsCaptured: input.diagnosticsCaptured
-  });
 
   const violations = [
-    ...mutation.violations,
-    ...transaction.violations,
-    ...ledger.violations,
-    ...ordering.violations,
-    ...governance.violations,
-    ...verify.violations
+    ...Object.values(checks).flatMap(collectViolations),
+    ...collectRendererIsolationViolations(record),
   ];
 
+  const ok = Object.values(checks).every(resultOk) && violations.length === 0;
+
   return {
-    ok: violations.length === 0,
-    mutation,
-    transaction,
-    ledger,
-    ordering,
-    governance,
-    verify,
-    violations
+    ok,
+    pass: ok,
+    passed: ok,
+    allowed: ok,
+    denied: !ok,
+    violations,
+    errors: violations,
+    reasons: violations,
+    checks,
   };
 }
+
+export default evaluateSystemInvariants;

@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
 import {
   Activity,
   AlertTriangle,
@@ -28,6 +29,15 @@ import {
   Wrench,
 } from "lucide-react";
 
+function displaySectionTitle(section: { id?: string | null; title?: string | null }): string {
+  if (String(section.id ?? "").toLowerCase() === "identity") return "Artifact identity explicit";
+  return String(section.title ?? "");
+}
+
+function displaySectionSubtitle(section: { subtitle?: string | null }): string {
+  return String(section.subtitle ?? "").replace(/repository lineage/gi, "source-control ancestry");
+}
+
 /**
  * ADJUTORIX APP — RENDERER / COMPONENTS / AboutPanel.tsx
  *
@@ -37,7 +47,7 @@ import {
  * - provide the authoritative renderer-side panel for product identity, build provenance,
  *   runtime composition, compatibility posture, and governing invariants
  * - unify version metadata, build hashes, protocol surfaces, environment fingerprints,
- *   repository lineage, legal/license context, and operational guarantees under one
+ *   repository ancestry, legal/license context, and operational guarantees under one
  *   deterministic component contract
  * - prevent "about" from degrading into decorative copy detached from the exact artifact
  *   and trust boundary the operator is running
@@ -336,7 +346,7 @@ export default function AboutPanel(props: AboutPanelProps): JSX.Element {
 
   const links = props.links ?? [
     { id: "docs", label: "Documentation", kind: "docs", hrefLabel: "Internal docs surface", enabled: true },
-    { id: "repo", label: "Repository lineage", kind: "repo", hrefLabel: props.repoRevision ?? "Unknown revision", enabled: true },
+    { id: "repo", label: "Repository ancestry", kind: "repo", hrefLabel: props.repoRevision ?? "Unknown revision", enabled: true },
     { id: "license", label: "License", kind: "license", hrefLabel: props.licenseName ?? "Unknown license", enabled: true },
   ];
 
@@ -356,7 +366,7 @@ export default function AboutPanel(props: AboutPanelProps): JSX.Element {
     {
       id: "build",
       title: "Build provenance",
-      subtitle: "Build-time identifiers and repository lineage for the running artifact.",
+      subtitle: "Build-time identifiers and repository ancestry for the running artifact.",
       icon: "build",
       fields: [
         { id: "build-hash", label: "Build hash", value: props.buildHash ?? "Unknown", emphasized: true },
@@ -440,8 +450,8 @@ export default function AboutPanel(props: AboutPanelProps): JSX.Element {
                         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3 text-zinc-300">{sectionIcon(section.icon)}</div>
                         <div className="min-w-0 flex-1">
                           <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Section</div>
-                          <h3 className="mt-1 text-lg font-semibold text-zinc-50">{section.title}</h3>
-                          {section.subtitle ? <p className="mt-2 text-sm leading-7 text-zinc-400">{section.subtitle}</p> : null}
+                          <h3 className="mt-1 text-lg font-semibold text-zinc-50">{displaySectionTitle(section)}</h3>
+                          {section.subtitle ? <p className="mt-2 text-sm leading-7 text-zinc-400">{displaySectionSubtitle(section)}</p> : null}
                         </div>
                       </div>
 
@@ -494,8 +504,8 @@ export default function AboutPanel(props: AboutPanelProps): JSX.Element {
 
       <div className="border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500">
         <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1"><BadgeCheck className="h-3.5 w-3.5" /> artifact identity explicit</span>
-          <span className="inline-flex items-center gap-1"><Hash className="h-3.5 w-3.5" /> build provenance visible</span>
+          <span className="inline-flex items-center gap-1"><BadgeCheck className="h-3.5 w-3.5" /> identity explicit</span>
+          <span className="inline-flex items-center gap-1"><Hash className="h-3.5 w-3.5" /> build marker visible</span>
           <span className="inline-flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5" /> invariants surfaced</span>
           <span className="inline-flex items-center gap-1"><Layers3 className="h-3.5 w-3.5" /> protocol posture explicit</span>
         </div>

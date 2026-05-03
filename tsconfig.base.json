@@ -5,6 +5,13 @@
     "allowSyntheticDefaultImports": true,
     "exactOptionalPropertyTypes": false,
     "verbatimModuleSyntax": false,
-    "noEmitOnError": true
+    "noEmitOnError": true,
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "moduleResolution": "Bundler"
   }
 }

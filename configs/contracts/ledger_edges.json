@@ -868,4 +868,7 @@
       "$ref": "#/attestation"
     },
     "edge_schema": {
-      "$re
+      "$ref": "#/edge_schema"
+    }
+  }
+}

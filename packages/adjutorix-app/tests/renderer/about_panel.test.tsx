@@ -26,7 +26,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import AboutPanel from "../../../src/renderer/components/AboutPanel";
+import AboutPanel from "../../src/renderer/components/AboutPanel";
 
 type AboutPanelProps = React.ComponentProps<typeof AboutPanel>;
 

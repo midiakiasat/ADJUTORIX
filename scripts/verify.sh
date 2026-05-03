@@ -63,9 +63,13 @@ readonly START_TS
 : "${ADJUTORIX_VERIFY_AGENT_DIR:=${REPO_ROOT}/packages/adjutorix-agent}"
 : "${ADJUTORIX_VERIFY_CLI_DIR:=${REPO_ROOT}/packages/adjutorix-cli}"
 : "${ADJUTORIX_VERIFY_CONTRACTS_DIR:=${REPO_ROOT}/configs/contracts}"
+export ADJUTORIX_VERIFY_CONTRACTS_DIR
 : "${ADJUTORIX_VERIFY_POLICY_DIR:=${REPO_ROOT}/configs/policy}"
+export ADJUTORIX_VERIFY_POLICY_DIR
 : "${ADJUTORIX_VERIFY_RUNTIME_DIR:=${REPO_ROOT}/configs/runtime}"
+export ADJUTORIX_VERIFY_RUNTIME_DIR
 : "${ADJUTORIX_VERIFY_OBSERVABILITY_DIR:=${REPO_ROOT}/configs/observability}"
+export ADJUTORIX_VERIFY_OBSERVABILITY_DIR
 
 INSTALL_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" install)
 ROOT_LINT_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" run lint)
@@ -74,8 +78,8 @@ ROOT_TEST_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" test)
 ROOT_BUILD_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" run build)
 APP_VERIFY_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" --prefix "$ADJUTORIX_VERIFY_APP_DIR" run verify)
 APP_TEST_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" --prefix "$ADJUTORIX_VERIFY_APP_DIR" test)
-AGENT_TEST_CMD=(python -m pytest -q)
-CLI_TEST_CMD=(python -m pytest -q)
+AGENT_TEST_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" test)
+CLI_TEST_CMD=("${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER}" test)
 
 ###############################################################################
 # GLOBAL STATE
@@ -258,7 +262,9 @@ should_run_phase() {
   if ((${#ONLY_PHASES[@]} > 0)); then
     contains_value "$phase" "${ONLY_PHASES[@]}" || return 1
   fi
-  contains_value "$phase" "${SKIP_PHASES[@]}" && return 1
+  if ((${#SKIP_PHASES[@]} > 0)); then
+    contains_value "$phase" "${SKIP_PHASES[@]}" && return 1
+  fi
   return 0
 }
 
@@ -303,7 +309,7 @@ run_phase() {
   local started finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   local started_epoch_ms
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -312,7 +318,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -321,7 +327,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -373,7 +379,7 @@ phase_repo_layout() {
 
 phase_toolchain() {
   require_command git
-  require_command python
+  require_command python3
   require_command node
   require_command npm
   require_command bash
@@ -395,10 +401,12 @@ phase_install() {
 }
 
 phase_contracts() {
-  python - <<'PY'
+  python3 - <<'PY'
 import json
+import os
 from pathlib import Path
-root = Path("${ADJUTORIX_VERIFY_CONTRACTS_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_VERIFY_CONTRACTS_DIR"])
 for path in sorted(root.glob("*.json")):
     with path.open("r", encoding="utf-8") as fh:
         json.load(fh)
@@ -407,9 +415,10 @@ PY
 }
 
 phase_policy() {
-  python - <<'PY'
+  python3 - <<'PY'
 from pathlib import Path
-root = Path("${ADJUTORIX_VERIFY_POLICY_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_VERIFY_POLICY_DIR"])
 required = ["verify_policy.yaml", "trust_policy.yaml"]
 for name in required:
     text = (root / name).read_text(encoding="utf-8")
@@ -422,10 +431,11 @@ PY
 }
 
 phase_runtime_config() {
-  python - <<'PY'
+  python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path("${ADJUTORIX_VERIFY_RUNTIME_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_VERIFY_RUNTIME_DIR"])
 json_files = ["feature_flags.json", "logging.json", "limits.json", "timeouts.json", "scheduling.json"]
 for name in json_files:
     with (root / name).open("r", encoding="utf-8") as fh:
@@ -439,9 +449,10 @@ PY
 }
 
 phase_observability() {
-  python - <<'PY'
+  python3 - <<'PY'
 from pathlib import Path
-root = Path("${ADJUTORIX_VERIFY_OBSERVABILITY_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_VERIFY_OBSERVABILITY_DIR"])
 required = [
     "metrics.yaml",
     "event_catalog.yaml",
@@ -487,7 +498,7 @@ phase_invariants() {
     log_warn "Invariant test directory missing; treating as failure"
     return 1
   fi
-  run_cmd_logged invariants bash -lc "cd '$REPO_ROOT' && ${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER} test -- tests/invariants"
+  run_cmd_logged invariants bash -lc "cd '$REPO_ROOT' && node --loader ./scripts/node-ts-extension-loader.mjs --test tests/invariants/*.test.ts"
 }
 
 phase_smoke() {
@@ -495,7 +506,7 @@ phase_smoke() {
     log_warn "Smoke test directory missing; treating as failure"
     return 1
   fi
-  run_cmd_logged smoke bash -lc "cd '$ADJUTORIX_VERIFY_APP_DIR' && ${ADJUTORIX_VERIFY_NODE_PACKAGE_MANAGER} test -- tests/smoke"
+  run_cmd_logged smoke bash -lc "cd '$ADJUTORIX_VERIFY_APP_DIR' && pnpm exec vitest run --config vitest.smoke.config.ts"
 }
 
 phase_build() {

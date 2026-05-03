@@ -1256,4 +1256,9 @@
           "deny"
         ]
       },
-      "evalua
+      "evaluated_at": {
+        "$ref": "#/$defs/timestamp"
+      }
+    }
+  }
+}

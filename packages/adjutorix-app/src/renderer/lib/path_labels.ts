@@ -439,10 +439,8 @@ export function labelPathSet(
   const groups = disambiguatePathLabels(rawPaths, resolved);
   const disambiguatedMap = new Map<string, string>();
 
-  for (const group of groups) {
-    for (const [normalized, label] of Object.entries(group.labels)) {
-      disambiguatedMap.set(normalized, label);
-    }
+  for (const [normalized, label] of Object.entries(groups)) {
+    disambiguatedMap.set(normalized, label);
   }
 
   const out: Record<string, PathLabelModel> = {};
