@@ -63,8 +63,7 @@ function main() {
     manifestPath,
     JSON.stringify(
       {
-        generatedAt: new Date().toISOString(),
-        root,
+                root,
         assetsDir,
         files: manifest
       },
