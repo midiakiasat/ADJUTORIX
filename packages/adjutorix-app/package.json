@@ -22,11 +22,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/renderer/file_tree_pane.test.tsx tests/renderer/diagnostic_parser.test.ts tests/renderer/about_panel.test.tsx",
     "test:watch": "vitest",
-    "verify": "pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
-    "start": "pnpm exec electron .",
+    "verify": "pnpm run assert:electron && pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
+    "start": "pnpm run assert:electron && pnpm exec electron .",
     "package": "electron-builder",
     "postinstall": "node ./scripts/postinstall.mjs",
-    "build:preload-entry": "node -e \"const fs=require('node:fs');fs.mkdirSync('dist/preload',{recursive:true});fs.copyFileSync('dist/preload/preload.js','dist/preload/preload.mjs')\""
+    "build:preload-entry": "node -e \"const fs=require('node:fs');fs.mkdirSync('dist/preload',{recursive:true});fs.copyFileSync('dist/preload/preload.js','dist/preload/preload.mjs')\"",
+    "assert:electron": "node ./scripts/assert-electron-installed.cjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
