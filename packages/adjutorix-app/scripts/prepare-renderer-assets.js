@@ -41,12 +41,11 @@ function assertFile(filePath, label) {
 }
 
 function toManifestEntry(relativePath, kind) {
-  const absolutePath = path.join(assetsDir, relativePath);
-  const size = assertFile(absolutePath, kind);
+  const filePath = path.join(assetsDir, relativePath);
+  const size = assertFile(filePath, kind);
   return {
     kind,
     relativePath,
-    absolutePath,
     size
   };
 }
@@ -63,8 +62,7 @@ function main() {
     manifestPath,
     JSON.stringify(
       {
-                root,
-        assetsDir,
+        assetsDir: "assets",
         files: manifest
       },
       null,
