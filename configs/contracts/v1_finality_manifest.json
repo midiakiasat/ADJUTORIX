@@ -1,0 +1,31 @@
+{
+  "allowed_v1_mutation_classes": [
+    "security_remediation",
+    "privacy_remediation",
+    "verification_regression_repair",
+    "dependency_or_platform_compatibility_repair",
+    "proof_asset_repair",
+    "non_scope_expanding_documentation_correction"
+  ],
+  "basis_head": "303a6ec38d41ad3f95c9a549da38c63863e8296c",
+  "closed_surface": [
+    "repository_verification",
+    "local_replay",
+    "sterile_outsider_replay",
+    "remote_github_actions_verification",
+    "clean_tracked_tree_replay",
+    "privacy_artifact_perimeter",
+    "release_proof_bundles",
+    "sanitized_final_proof_assets",
+    "quarantined_deferred_smoke_scope",
+    "deterministic_renderer_asset_manifest",
+    "governed_verification_workflow"
+  ],
+  "declared_at": "20260503T165006Z",
+  "epoch": "v1",
+  "repo": "qzro/ADJUTORIX",
+  "schema": "adjutorix.v1.finality_manifest",
+  "scope_state": "closed",
+  "status": "feature_complete",
+  "supersession_rule": "future product expansion requires v2_or_later_epoch"
+}
