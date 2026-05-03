@@ -8,12 +8,12 @@ const root = path.resolve(__dirname, "..");
 const assetsDir = path.join(root, "assets");
 
 const requiredFiles = [
-  { relativePath: "icon.png", kind: "asset" },
-  { relativePath: "icon.icns", kind: "asset" },
-  { relativePath: "splash.png", kind: "asset" },
-  { relativePath: "fonts/Inter-Regular.woff2", kind: "font" },
   { relativePath: "fonts/Inter-Medium.woff2", kind: "font" },
-  { relativePath: "fonts/Inter-SemiBold.woff2", kind: "font" }
+  { relativePath: "fonts/Inter-Regular.woff2", kind: "font" },
+  { relativePath: "fonts/Inter-SemiBold.woff2", kind: "font" },
+  { relativePath: "icon.icns", kind: "asset" },
+  { relativePath: "icon.png", kind: "asset" },
+  { relativePath: "splash.png", kind: "asset" }
 ];
 
 function assertDirectory(dirPath, label) {

@@ -2,19 +2,9 @@
   "assetsDir": "assets",
   "files": [
     {
-      "kind": "asset",
-      "relativePath": "icon.png",
-      "size": 5000
-    },
-    {
-      "kind": "asset",
-      "relativePath": "icon.icns",
-      "size": 9590
-    },
-    {
-      "kind": "asset",
-      "relativePath": "splash.png",
-      "size": 8887
+      "kind": "font",
+      "relativePath": "fonts/Inter-Medium.woff2",
+      "size": 6102
     },
     {
       "kind": "font",
@@ -23,13 +13,23 @@
     },
     {
       "kind": "font",
-      "relativePath": "fonts/Inter-Medium.woff2",
-      "size": 6102
-    },
-    {
-      "kind": "font",
       "relativePath": "fonts/Inter-SemiBold.woff2",
       "size": 6086
+    },
+    {
+      "kind": "asset",
+      "relativePath": "icon.icns",
+      "size": 9590
+    },
+    {
+      "kind": "asset",
+      "relativePath": "icon.png",
+      "size": 5000
+    },
+    {
+      "kind": "asset",
+      "relativePath": "splash.png",
+      "size": 8887
     }
   ]
 }
