@@ -16,6 +16,7 @@ import ProviderStatus from "./components/ProviderStatus";
 import "./styles/theme.css";
 import "./styles/layout.css";
 import "./styles/app.css";
+import { createInitialInteractionContractState, recordInteraction } from "./lib/interaction_contract";
 
 
 /**
@@ -574,6 +575,11 @@ function FatalScreen(props: { title: string; message: string; diagnostics?: Json
 
 function NotificationCenter(): JSX.Element {
   const { state } = useAppContext();
+
+  const [interactionContract, setInteractionContract] = React.useState(createInitialInteractionContractState());
+  const selectInteractionView = React.useCallback((id: string, detail: string) => {
+    setInteractionContract((state) => recordInteraction(state, id, detail));
+  }, []);
   return (
     <div className="fixed right-4 top-4 z-50 flex max-w-md flex-col gap-3">
       {state.notifications.map((n) => (
@@ -811,7 +817,8 @@ const statusChips = [
         statusChips={statusChips as any}
         banners={banners as any}
         toasts={toasts as any}
-        headerActions={<CommandBar />}
+        onSelectView={(view) => selectInteractionView(view, `Navigation selected: ${view}`)}
+      headerActions={<CommandBar />}
         leftRail={
           <div className="space-y-6">
             <SnapshotCard title="Manifest" value={state.manifest as JsonValue | null} />
