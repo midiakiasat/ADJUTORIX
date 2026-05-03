@@ -21,9 +21,9 @@ import { MemoryRouter } from "react-router-dom";
  * - if actual bootstrap exports differ, adapt the harness first rather than weakening the smoke guarantees
  */
 
-import App from "../../../src/renderer/App";
-import { installRendererProviders } from "../../../src/renderer/bootstrap/installRendererProviders";
-import { createRendererRuntime } from "../../../src/renderer/bootstrap/createRendererRuntime";
+import App from "../../src/renderer/App";
+import { installRendererProviders } from "../../src/renderer/bootstrap/installRendererProviders";
+import { createRendererRuntime } from "../../src/renderer/bootstrap/createRendererRuntime";
 
 type SubscriptionHandler = (payload: unknown) => void;
 
@@ -556,5 +556,21 @@ describe("smoke/diagnostics_roundtrip", () => {
     await waitFor(() => {
       expect(document.body.textContent ?? "").toMatch(/Updated error in App\.tsx\./i);
     });
+    const normalizedRenderedA = String(
+      (renderedA as any)?.container?.textContent ??
+        (renderedA as any)?.baseElement?.textContent ??
+        (renderedA as any)?.textContent ??
+        renderedA ??
+        "",
+    );
+    const normalizedRenderedB = String(
+      (renderedB as any)?.container?.textContent ??
+        (renderedB as any)?.baseElement?.textContent ??
+        (renderedB as any)?.textContent ??
+        renderedB ??
+        "",
+    );
 
-    expect(renderedB
+    expect(normalizedRenderedB).toEqual(normalizedRenderedA);
+  });
+});

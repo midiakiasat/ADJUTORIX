@@ -1625,3 +1625,5 @@
     "jsonrpc_error": {
       "$ref": "#/schemas/jsonrpc_error"
     }
+  }
+}

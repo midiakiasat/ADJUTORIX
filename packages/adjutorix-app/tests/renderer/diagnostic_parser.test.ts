@@ -30,7 +30,7 @@ import {
   fingerprintDiagnostic,
   diagnosticSortKey,
   type NormalizedDiagnostic,
-} from "../../../src/renderer/lib/diagnostic_parser";
+} from "../../src/renderer/lib/diagnostic_parser";
 
 function diag(partial: Partial<NormalizedDiagnostic> & Pick<NormalizedDiagnostic, "id" | "severity" | "message">): NormalizedDiagnostic {
   return {

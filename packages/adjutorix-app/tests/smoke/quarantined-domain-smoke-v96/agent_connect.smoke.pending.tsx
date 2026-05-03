@@ -23,9 +23,9 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import App from "../../../src/renderer/App";
-import { installRendererProviders } from "../../../src/renderer/bootstrap/installRendererProviders";
-import { createRendererRuntime } from "../../../src/renderer/bootstrap/createRendererRuntime";
+import App from "../../src/renderer/App";
+import { installRendererProviders } from "../../src/renderer/bootstrap/installRendererProviders";
+import { createRendererRuntime } from "../../src/renderer/bootstrap/createRendererRuntime";
 
 type MockBridge = {
   agent: {

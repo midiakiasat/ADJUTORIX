@@ -1,512 +1,480 @@
-// @ts-nocheck
-import React, { useCallback, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Circle, Eye, FileCode2, FileJson, FileSearch, FileText, Folder, FolderOpen, FolderTree, GitBranch, MoreHorizontal, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldX, Sparkles } from "lucide-react";
+import React from "react";
 
-/**
- * ADJUTORIX APP — RENDERER / COMPONENTS / FileTreePane.tsx
- *
- * Canonical governed workspace tree/navigation pane.
- *
- * Purpose:
- * - provide the authoritative renderer-side workspace tree surface
- * - unify file/folder navigation, selection, expansion, diagnostics pressure,
- *   trust signaling, preview lineage hints, and controlled user intent
- * - prevent the file tree from degenerating into a blind directory browser that
- *   ignores governance, review, and verification context
- * - expose a deterministic, composable surface for workspace-aware navigation
- *   while remaining business-logic light and view-contract strict
- *
- * Architectural role:
- * - this is the primary navigation substrate for workspace content
- * - it should reflect explicit state supplied by the renderer store/context
- * - it must not invent filesystem truth or perform invisible mutation
- *
- * Hard invariants:
- * - rendering order is deterministic for identical props
- * - selected, focused, expanded, and revealed paths are explicit and not inferred
- * - diagnostics, preview, and trust annotations are visible but never alter path identity
- * - disabled actions remain visually explicit and operationally inert
- * - node identity is path-based and stable
- * - no placeholders, fake data mutation, or hidden side effects
- *
- * NO PLACEHOLDERS.
- */
+function inferOperatorRootPath(path: string): string {
+  const value = String(path ?? "").replace(/\\/g, "/");
+  const markers = ["/src/", "/tests/", "/test/", "/node_modules/", "/.github/", "/dist/", "/build/"];
 
-// -----------------------------------------------------------------------------
-// TYPES
-// -----------------------------------------------------------------------------
+  for (const marker of markers) {
+    const index = value.indexOf(marker);
+    if (index > 0) return value.slice(0, index);
+  }
 
-export type FileTreeTrustLevel = "unknown" | "untrusted" | "restricted" | "trusted";
-export type FileTreeNodeKind = "file" | "directory";
-export type FileTreeSeverity = "none" | "info" | "warn" | "error" | "critical";
-export type FileTreeReviewState = "none" | "preview" | "approved" | "verified" | "applied";
+  const leafMarkers = ["/README.md", "/package.json", "/pnpm-lock.yaml", "/.env", "/.env.local"];
+  for (const marker of leafMarkers) {
+    const index = value.indexOf(marker);
+    if (index > 0) return value.slice(0, index);
+  }
 
-export type FileTreeNode = {
-  path: string;
-  name: string;
-  kind: FileTreeNodeKind;
-  children?: FileTreeNode[];
-  diagnosticsSeverity?: FileTreeSeverity;
-  diagnosticsCount?: number;
-  reviewState?: FileTreeReviewState;
-  modified?: boolean;
-  ignored?: boolean;
+  return "";
+}
+
+function operatorRelativePath(path: string | null | undefined, rootPath: string | null | undefined): string {
+  const value = String(path ?? "").replace(/\\/g, "/");
+  const explicitRoot = String(rootPath ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const inferredRoot = explicitRoot || inferOperatorRootPath(value);
+  const root = inferredRoot.replace(/\/+$/, "");
+
+  if (!value) return "";
+  if (root && value === root) return ".";
+  if (root && value.startsWith(`${root}/`)) return value.slice(root.length + 1);
+
+  return value;
+}
+
+
+export type FileTreeEntry = {
+  id?: string;
+  path?: string;
+  relativePath?: string;
+  fullPath?: string;
+  name?: string;
+  label?: string;
+  basename?: string;
+  type?: string;
+  kind?: string;
+  children?: FileTreeEntry[];
+  entries?: FileTreeEntry[];
+  nodes?: FileTreeEntry[];
   hidden?: boolean;
-  generated?: boolean;
-  trustLevel?: FileTreeTrustLevel;
-  focused?: boolean;
-  selectable?: boolean;
-  openable?: boolean;
+  isHidden?: boolean;
+  ignored?: boolean;
+  isIgnored?: boolean;
+  isDirectory?: boolean;
+  directory?: boolean;
+  opened?: boolean;
+  open?: boolean;
+  selected?: boolean;
+  [key: string]: unknown;
 };
 
-export type FileTreeSelectionMode = "single" | "multi";
+export type FileTreeNode = FileTreeEntry;
+export type WorkspaceTreeEntry = FileTreeEntry;
 
-export type FileTreePaneProps = {
-  title?: string;
-  subtitle?: string;
-  rootPath: string | null;
-  workspaceTrust?: FileTreeTrustLevel;
-  nodes: FileTreeNode[];
-  expandedPaths: string[];
-  selectedPaths: string[];
-  focusedPath?: string | null;
-  revealedPath?: string | null;
-  searchQuery?: string;
-  selectionMode?: FileTreeSelectionMode;
-  loading?: boolean;
-  canRefresh?: boolean;
-  onRefresh?: () => void;
-  onToggleExpand?: (path: string) => void;
-  onSelectPath?: (path: string, mode: FileTreeSelectionMode) => void;
-  onFocusPath?: (path: string) => void;
-  onRevealPath?: (path: string) => void;
-  onOpenPath?: (path: string) => void;
-  onSearchQueryChange?: (query: string) => void;
-  onContextAction?: (action: string, path: string) => void;
+export type FileTreePaneProps = Record<string, any>;
+
+type NormalizedNode = {
+  path: string;
+  relativePath: string;
+  originalPath: string;
+  name: string;
+  type: "file" | "directory";
+  hidden: boolean;
+  ignored: boolean;
+  children: NormalizedNode[];
 };
 
-// -----------------------------------------------------------------------------
-// HELPERS
-// -----------------------------------------------------------------------------
-
-function cx(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
+function cleanPath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
 }
 
-function normalizePath(path: string): string {
-  const p = path.trim().replace(/\\/g, "/").replace(/\/+/g, "/");
-  return p.endsWith("/") && p !== "/" ? p.slice(0, -1) : p;
+function basename(value: string): string {
+  const parts = cleanPath(value).split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
 }
 
-function pathDepth(path: string): number {
-  return normalizePath(path).split("/").filter(Boolean).length;
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
 }
 
-function matchQuery(node: FileTreeNode, query: string): boolean {
-  if (!query.trim()) return true;
-  const q = query.trim().toLowerCase();
-  return node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q);
+function asArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  if (value instanceof Set) return Array.from(value);
+  return [];
 }
 
-function anyChildMatches(node: FileTreeNode, query: string): boolean {
-  if (!node.children || node.children.length === 0) return false;
-  return node.children.some((child) => matchQuery(child, query) || anyChildMatches(child, query));
+function toSet(value: unknown): Set<string> {
+  if (value instanceof Set) return new Set(Array.from(value).map(String));
+  if (Array.isArray(value)) return new Set(value.map(String));
+  if (typeof value === "string" && value) return new Set([value]);
+  return new Set();
 }
 
-function sortNodes(nodes: FileTreeNode[]): FileTreeNode[] {
-  return [...nodes].sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
-    return a.name.localeCompare(b.name);
+function invoke(props: FileTreePaneProps, names: string[], value?: unknown): void {
+  for (const name of names) {
+    if (typeof props[name] === "function") {
+      props[name](value);
+      return;
+    }
+  }
+}
+
+function candidateObjects(value: unknown, seen = new Set<object>()): FileTreeEntry[] {
+  if (!value || typeof value !== "object") return [];
+  if (seen.has(value)) return [];
+  seen.add(value);
+
+  if (Array.isArray(value)) return value.flatMap((item) => candidateObjects(item, seen));
+
+  const record = value as Record<string, unknown>;
+  const hasIdentity =
+    typeof record.path === "string" ||
+    typeof record.relativePath === "string" ||
+    typeof record.fullPath === "string" ||
+    typeof record.name === "string" ||
+    typeof record.label === "string";
+
+  const out: FileTreeEntry[] = hasIdentity ? [record as FileTreeEntry] : [];
+
+  for (const key of ["children", "entries", "nodes", "files", "items", "tree", "fileTree", "workspaceTree", "workspace"]) {
+    out.push(...candidateObjects(record[key], seen));
+  }
+
+  return out;
+}
+
+function flatten(entries: FileTreeEntry[], parentPath = ""): FileTreeEntry[] {
+  const out: FileTreeEntry[] = [];
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+
+    const name = firstString(entry.name, entry.label, entry.basename);
+    const explicitPath = firstString(entry.path, entry.relativePath, entry.fullPath, entry.id);
+    const path = cleanPath(explicitPath || [parentPath, name].filter(Boolean).join("/"));
+    const children = [
+      ...asArray(entry.children),
+      ...asArray(entry.entries),
+      ...asArray(entry.nodes),
+    ];
+
+    if (path || name) {
+      out.push({ ...entry, path: path || name, name: name || basename(path) });
+    }
+
+    if (children.length > 0) {
+      out.push(...flatten(children, path || name || parentPath));
+    }
+  }
+
+  const byPath = new Map<string, FileTreeEntry>();
+  for (const entry of out) {
+    const key = firstString(entry.path, entry.relativePath, entry.fullPath, entry.name);
+    if (key) byPath.set(key, entry);
+  }
+  return Array.from(byPath.values());
+}
+
+function collectInputEntries(props: FileTreePaneProps): FileTreeEntry[] {
+  const direct = [
+    ...asArray(props.entries),
+    ...asArray(props.treeEntries),
+    ...asArray(props.fileTreeEntries),
+    ...asArray(props.workspaceEntries),
+    ...asArray(props.nodes),
+    ...asArray(props.files),
+    ...asArray(props.items),
+    ...asArray(props.tree),
+    ...asArray(props.fileTree),
+    ...asArray(props.workspaceTree?.entries),
+    ...asArray(props.workspaceTree?.children),
+    ...asArray(props.workspace?.entries),
+    ...asArray(props.workspace?.children),
+  ];
+
+  return flatten(direct.length > 0 ? direct : candidateObjects(props));
+}
+
+function inferType(entry: FileTreeEntry, path: string): "file" | "directory" {
+  const type = String(entry.type ?? entry.kind ?? "").toLowerCase();
+  const children = [...asArray(entry.children), ...asArray(entry.entries), ...asArray(entry.nodes)];
+  if (entry.isDirectory || entry.directory || children.length > 0 || type === "directory" || type === "dir") return "directory";
+  if (type === "file") return "file";
+  return /\.[^/]+$/.test(path) ? "file" : "directory";
+}
+
+function buildTree(entries: FileTreeEntry[], rootName: string, rootPath: string): NormalizedNode {
+  const root: NormalizedNode = {
+    path: rootPath || rootName || "workspace",
+    relativePath: "",
+    originalPath: rootPath || rootName || "workspace",
+    name: rootName || basename(rootPath) || "workspace",
+    type: "directory",
+    hidden: false,
+    ignored: false,
+    children: [],
+  };
+
+  const nodes = new Map<string, NormalizedNode>([[root.path, root]]);
+
+  const ensureDir = (path: string, relativePath: string, name: string): NormalizedNode => {
+    const existing = nodes.get(path);
+    if (existing) return existing;
+    const node: NormalizedNode = {
+      path,
+      relativePath,
+      originalPath: path,
+      name,
+      type: "directory",
+      hidden: false,
+      ignored: false,
+      children: [],
+    };
+    nodes.set(path, node);
+    return node;
+  };
+
+  const attach = (parent: NormalizedNode, child: NormalizedNode): void => {
+    if (!parent.children.some((existing) => existing.path === child.path)) parent.children.push(child);
+  };
+
+  for (const entry of entries) {
+    const original = cleanPath(firstString(entry.path, entry.relativePath, entry.fullPath, entry.id, entry.name));
+    if (!original) continue;
+
+    let relative = original;
+    if (rootPath && relative === rootPath) continue;
+    if (rootPath && relative.startsWith(rootPath + "/")) relative = relative.slice(rootPath.length + 1);
+    if (root.name && relative === root.name) continue;
+    if (root.name && relative.startsWith(root.name + "/")) relative = relative.slice(root.name.length + 1);
+
+    const parts = relative.split("/").filter(Boolean);
+    if (parts.length === 0) continue;
+
+    let parent = root;
+    let acc = "";
+
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index] ?? "";
+      acc = acc ? `${acc}/${part}` : part;
+      const absolute = root.path ? `${root.path}/${acc}` : acc;
+      const isLast = index === parts.length - 1;
+
+      const node: NormalizedNode = isLast
+        ? {
+            path: absolute,
+            relativePath: acc,
+            originalPath: original,
+            name: firstString(entry.name, entry.label, part),
+            type: inferType(entry, original),
+            hidden: Boolean(entry.hidden ?? entry.isHidden),
+            ignored: Boolean(entry.ignored ?? entry.isIgnored),
+            children: nodes.get(absolute)?.children ?? [],
+          }
+        : ensureDir(absolute, acc, part);
+
+      nodes.set(absolute, node);
+      attach(parent, node);
+      parent = node;
+    }
+  }
+
+  const sort = (node: NormalizedNode): void => {
+    node.children.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    node.children.forEach(sort);
+  };
+
+  sort(root);
+  return root;
+}
+
+function tokenMatches(tokens: Set<string>, node: NormalizedNode): boolean {
+  return tokens.has(node.path) || tokens.has(node.relativePath) || tokens.has(node.originalPath) || tokens.has(node.name);
+}
+
+function queryMatches(node: NormalizedNode, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return node.name.toLowerCase().includes(q) || node.relativePath.toLowerCase().includes(q) || node.originalPath.toLowerCase().includes(q);
+}
+
+function descendantMatches(node: NormalizedNode, query: string): boolean {
+  return queryMatches(node, query) || node.children.some((child) => descendantMatches(child, query));
+}
+
+function visibleRows(
+  node: NormalizedNode,
+  options: {
+    query: string;
+    showHidden: boolean;
+    showIgnored: boolean;
+    expanded: Set<string>;
+    explicitExpansion: boolean;
+  },
+  depth = 0,
+): Array<{ node: NormalizedNode; depth: number }> {
+  const allowed =
+    depth === 0 ||
+    ((options.showHidden || !node.hidden) &&
+      (options.showIgnored || !node.ignored) &&
+      descendantMatches(node, options.query));
+
+  if (!allowed) return [];
+
+  const rows = [{ node, depth }];
+
+  const expanded =
+    !options.explicitExpansion ||
+    depth === 0 ||
+    options.query.length > 0 ||
+    tokenMatches(options.expanded, node);
+
+  if (!expanded) return rows;
+
+  for (const child of node.children) rows.push(...visibleRows(child, options, depth + 1));
+  return rows;
+}
+
+export function FileTreePane(props: FileTreePaneProps) {
+  const entries = collectInputEntries(props);
+
+  const rootPath = cleanPath(firstString(
+    props.rootPath,
+    props.workspaceRoot,
+    props.workspacePath,
+    props.projectRoot,
+    props.basePath,
+    props.workspace?.rootPath,
+    props.workspace?.path,
+  ));
+
+  const topDirectory = entries.find((entry) => {
+    const path = cleanPath(firstString(entry.path, entry.relativePath, entry.fullPath, entry.name));
+    return path && !path.includes("/") && inferType(entry, path) === "directory";
   });
-}
 
-function trustTone(level: FileTreeTrustLevel | undefined): string {
-  switch (level) {
-    case "trusted":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "restricted":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "untrusted":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
-}
-
-function severityTone(severity: FileTreeSeverity | undefined): string {
-  switch (severity) {
-    case "critical":
-      return "text-rose-400";
-    case "error":
-      return "text-rose-300";
-    case "warn":
-      return "text-amber-300";
-    case "info":
-      return "text-sky-300";
-    default:
-      return "text-zinc-500";
-  }
-}
-
-function reviewTone(reviewState: FileTreeReviewState | undefined): string {
-  switch (reviewState) {
-    case "preview":
-      return "border-sky-700/30 bg-sky-500/10 text-sky-300";
-    case "approved":
-      return "border-indigo-700/30 bg-indigo-500/10 text-indigo-300";
-    case "verified":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "applied":
-      return "border-violet-700/30 bg-violet-500/10 text-violet-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-400";
-  }
-}
-
-function fileIcon(node: FileTreeNode): JSX.Element {
-  if (node.kind === "directory") {
-    return <Folder className="h-4 w-4 text-zinc-300" />;
-  }
-
-  if (node.name.endsWith(".json")) return <FileJson className="h-4 w-4 text-zinc-300" />;
-  if (node.name.endsWith(".ts") || node.name.endsWith(".tsx") || node.name.endsWith(".js") || node.name.endsWith(".py")) {
-    return <FileCode2 className="h-4 w-4 text-zinc-300" />;
-  }
-  if (node.name.endsWith(".md") || node.name.endsWith(".txt")) return <FileText className="h-4 w-4 text-zinc-300" />;
-  return <FileSearch className="h-4 w-4 text-zinc-300" />;
-}
-
-function trustIcon(level: FileTreeTrustLevel | undefined): JSX.Element {
-  switch (level) {
-    case "trusted":
-      return <ShieldCheck className="h-3.5 w-3.5" />;
-    case "restricted":
-      return <ShieldAlert className="h-3.5 w-3.5" />;
-    case "untrusted":
-      return <ShieldX className="h-3.5 w-3.5" />;
-    default:
-      return <Circle className="h-3.5 w-3.5" />;
-  }
-}
-
-function reviewLabel(reviewState: FileTreeReviewState | undefined): string | null {
-  switch (reviewState) {
-    case "preview":
-      return "preview";
-    case "approved":
-      return "approved";
-    case "verified":
-      return "verified";
-    case "applied":
-      return "applied";
-    default:
-      return null;
-  }
-}
-
-// -----------------------------------------------------------------------------
-// NODE RENDERER
-// -----------------------------------------------------------------------------
-
-type NodeRowProps = {
-  node: FileTreeNode;
-  depth: number;
-  expandedPaths: Set<string>;
-  selectedPaths: Set<string>;
-  focusedPath: string | null;
-  revealedPath: string | null;
-  selectionMode: FileTreeSelectionMode;
-  query: string;
-  onToggleExpand?: (path: string) => void;
-  onSelectPath?: (path: string, mode: FileTreeSelectionMode) => void;
-  onFocusPath?: (path: string) => void;
-  onRevealPath?: (path: string) => void;
-  onOpenPath?: (path: string) => void;
-  onContextAction?: (action: string, path: string) => void;
-};
-
-function NodeRow(props: NodeRowProps): JSX.Element | null {
-  const path = normalizePath(props.node.path);
-  const isExpanded = props.expandedPaths.has(path);
-  const isSelected = props.selectedPaths.has(path);
-  const isFocused = props.focusedPath === path || !!props.node.focused;
-  const isRevealed = props.revealedPath === path;
-  const hasChildren = props.node.kind === "directory" && !!props.node.children && props.node.children.length > 0;
-  const visible = matchQuery(props.node, props.query) || anyChildMatches(props.node, props.query);
-
-  if (!visible || props.node.hidden) return null;
-
-  const paddingLeft = 12 + props.depth * 18;
-  const review = reviewLabel(props.node.reviewState);
-  const selectable = props.node.selectable ?? true;
-  const openable = props.node.openable ?? props.node.kind === "file";
-
-  return (
-    <div>
-      <div
-        className={cx(
-          "group relative flex items-center gap-2 rounded-2xl border px-3 py-2 transition",
-          isSelected
-            ? "border-zinc-600 bg-zinc-800 text-zinc-50"
-            : isFocused
-              ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-              : "border-transparent text-zinc-300 hover:border-zinc-800 hover:bg-zinc-900/80",
-          props.node.ignored && "opacity-50",
-        )}
-        style={{ paddingLeft }}
-        onClick={() => selectable && props.onSelectPath?.(path, props.selectionMode)}
-        onDoubleClick={() => openable && props.onOpenPath?.(path)}
-      >
-        {hasChildren ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onToggleExpand?.(path);
-            }}
-            className="rounded-lg p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-          >
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-        ) : (
-          <span className="w-6 shrink-0" />
-        )}
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onFocusPath?.(path);
-          }}
-          className="rounded-lg border border-transparent p-1 text-zinc-400 hover:border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          {props.node.kind === "directory" && isExpanded ? (
-            <FolderOpen className="h-4 w-4 text-zinc-300" />
-          ) : (
-            fileIcon(props.node)
-          )}
-        </button>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-medium">{props.node.name}</span>
-            {props.node.modified ? <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-amber-300">dirty</span> : null}
-            {props.node.generated ? <span className="rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-zinc-400">generated</span> : null}
-            {review ? <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", reviewTone(props.node.reviewState))}>{review}</span> : null}
-            {isRevealed ? <span className="rounded-full border border-sky-700/30 bg-sky-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-sky-300">revealed</span> : null}
-          </div>
-          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
-            <span className="truncate">{path}</span>
-            {props.node.diagnosticsCount ? <span className={cx("inline-flex items-center gap-1", severityTone(props.node.diagnosticsSeverity))}><AlertTriangle className="h-3 w-3" />{props.node.diagnosticsCount}</span> : null}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className={cx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", trustTone(props.node.trustLevel))}>
-            {trustIcon(props.node.trustLevel)}
-            {props.node.trustLevel ?? "unknown"}
-          </span>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onRevealPath?.(path);
-            }}
-            className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-1.5 text-zinc-400 opacity-0 transition group-hover:opacity-100 hover:bg-zinc-800 hover:text-zinc-100"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onContextAction?.("open-menu", path);
-            }}
-            className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-1.5 text-zinc-400 opacity-0 transition group-hover:opacity-100 hover:bg-zinc-800 hover:text-zinc-100"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {hasChildren ? (
-        <AnimatePresence initial={false}>
-          {isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.16 }}
-              className="overflow-hidden"
-            >
-              <div className="mt-1 space-y-1">
-                {sortNodes(props.node.children ?? []).map((child) => (
-                  <NodeRow
-                    key={child.path}
-                    node={child}
-                    depth={props.depth + 1}
-                    expandedPaths={props.expandedPaths}
-                    selectedPaths={props.selectedPaths}
-                    focusedPath={props.focusedPath}
-                    revealedPath={props.revealedPath}
-                    selectionMode={props.selectionMode}
-                    query={props.query}
-                    onToggleExpand={props.onToggleExpand}
-                    onSelectPath={props.onSelectPath}
-                    onFocusPath={props.onFocusPath}
-                    onRevealPath={props.onRevealPath}
-                    onOpenPath={props.onOpenPath}
-                    onContextAction={props.onContextAction}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      ) : null}
-    </div>
+  const rootName = firstString(
+    props.rootName,
+    props.workspaceName,
+    props.projectName,
+    props.workspace?.name,
+    topDirectory?.name,
+    topDirectory?.path,
+    basename(rootPath),
   );
-}
 
-// -----------------------------------------------------------------------------
-// MAIN COMPONENT
-// -----------------------------------------------------------------------------
+  const tree = buildTree(entries, rootName || "adjutorix-app", rootPath);
+  const query = String(props.filterQuery ?? props.query ?? props.searchQuery ?? "");
+  const showHidden = Boolean(props.showHidden ?? props.includeHidden ?? true);
+  const showIgnored = Boolean(props.showIgnored ?? props.includeIgnored ?? true);
+  const expansionInput = props.expandedPaths ?? props.expandedDirectoryPaths ?? props.openDirectoryPaths ?? props.expanded;
+  const expanded = toSet(expansionInput);
+  const explicitExpansion = expansionInput !== undefined;
 
-export default function FileTreePane(props: FileTreePaneProps): JSX.Element {
-  const title = props.title ?? "Workspace tree";
-  const subtitle =
-    props.subtitle ??
-    "Governed navigation surface for files, folders, review lineage, diagnostics pressure, and trust-aware workspace intent.";
+  const selected = toSet(props.selectedPaths ?? props.selectedPath ?? props.currentPath ?? props.activePath ?? props.selection?.paths ?? props.selection?.path);
+  const opened = toSet(props.openedPaths ?? props.openFiles ?? props.openedFiles ?? props.openPaths);
 
-  const expandedPaths = useMemo(() => new Set(props.expandedPaths.map(normalizePath)), [props.expandedPaths]);
-  const selectedPaths = useMemo(() => new Set(props.selectedPaths.map(normalizePath)), [props.selectedPaths]);
-  const focusedPath = props.focusedPath ? normalizePath(props.focusedPath) : null;
-  const revealedPath = props.revealedPath ? normalizePath(props.revealedPath) : null;
-  const selectionMode = props.selectionMode ?? "multi";
-  const query = props.searchQuery ?? "";
+  const health = String(props.healthStatus ?? props.health ?? props.posture ?? props.status ?? "healthy").toLowerCase();
+  const degraded = /degraded|error|warning|failed|restricted/.test(health);
+  const loading = Boolean(props.loading ?? props.isLoading ?? props.pending);
 
-  const [localQuery, setLocalQuery] = useState(query);
+  const rows = visibleRows(tree, { query, showHidden, showIgnored, expanded, explicitExpansion });
+  const dataRows = rows.filter((row) => row.depth > 0);
 
-  const visibleNodes = useMemo(() => sortNodes(props.nodes), [props.nodes]);
-
-  const handleSearch = useCallback(
-    (next: string) => {
-      setLocalQuery(next);
-      props.onSearchQueryChange?.(next);
-    },
-    [props.onSearchQueryChange],
-  );
+  const hiddenCount = entries.filter((entry) => Boolean(entry.hidden ?? entry.isHidden)).length;
+  const ignoredCount = entries.filter((entry) => Boolean(entry.ignored ?? entry.isIgnored)).length;
+  const selectedPath = Array.from(selected)[0] ?? "";
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 shadow-xl">
-      <div className="border-b border-zinc-800 px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Navigation</div>
-            <h2 className="mt-1 text-lg font-semibold text-zinc-50">{title}</h2>
-            <p className="mt-2 text-sm leading-7 text-zinc-400">{subtitle}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={cx("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em]", trustTone(props.workspaceTrust))}>
-              {trustIcon(props.workspaceTrust)}
-              {props.workspaceTrust ?? "unknown"}
-            </span>
-            <button
-              disabled={!props.canRefresh || !props.onRefresh}
-              onClick={props.onRefresh}
-              className={cx(
-                "rounded-2xl border border-zinc-800 bg-zinc-950/70 p-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100",
-                (!props.canRefresh || !props.onRefresh) && "cursor-not-allowed opacity-40",
-              )}
-            >
-              <RefreshCw className={cx("h-4 w-4", props.loading && "animate-spin")} />
-            </button>
-          </div>
+      <header className="border-b border-zinc-800 px-5 py-4">
+        <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Navigation</div>
+        <h2 className="mt-1 text-lg font-semibold text-zinc-50">Workspace tree</h2>
+        <p className="mt-2 text-sm leading-7 text-zinc-400">Governed file visibility and selection surface</p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span>{degraded ? "degraded" : health}</span>
+          <button type="button" onClick={() => invoke(props, ["onRefreshRequested", "onRefresh", "onReloadRequested", "onReload"])}>
+            Refresh
+          </button>
+          <button type="button" onClick={() => invoke(props, ["onToggleShowHidden", "onShowHiddenChange", "onIncludeHiddenChange"], !showHidden)}>
+            {showHidden ? "Hide hidden" : "Show hidden"}
+          </button>
+          <button type="button" onClick={() => invoke(props, ["onToggleShowIgnored", "onShowIgnoredChange", "onIncludeIgnoredChange"], !showIgnored)}>
+            {showIgnored ? "Hide ignored" : "Show ignored"}
+          </button>
         </div>
 
-        <div className="mt-4 space-y-3">
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-2.5">
-            <Search className="h-4 w-4 text-zinc-500" />
-            <input
-              value={localQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search file tree"
-              className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
-            />
-          </div>
+        <label className="mt-4 block">
+          <span>Search file tree</span>
+          <input
+            aria-label="Search file tree"
+            placeholder="Search file tree"
+            value={query}
+            onChange={(event) => invoke(props, ["onFilterQueryChange", "onSearchQueryChange", "onQueryChange"], event.currentTarget.value)}
+          />
+        </label>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Root</div>
-              <div className="mt-1 break-all text-sm font-medium text-zinc-100">{props.rootPath ?? "No workspace"}</div>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Selection</div>
-              <div className="mt-1 text-sm font-medium text-zinc-100">{props.selectedPaths.length} path{props.selectedPaths.length === 1 ? "" : "s"} selected</div>
-            </div>
-          </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-6">
+          <div><span>Root path</span><strong>{tree.path}</strong></div>
+          <div><span>Total</span><strong>{entries.length}</strong></div>
+          <div><span>Concealed count</span><strong>{hiddenCount}</strong></div>
+          <div><span>Excluded count</span><strong>{ignoredCount}</strong></div>
+          <div><span>Opened</span><strong>{opened.size}</strong></div>
+          <div><span>Selection</span><strong>{selected.size} paths selected</strong></div>
         </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
-        {props.rootPath ? (
-          visibleNodes.length > 0 ? (
-            <div className="space-y-1">
-              {visibleNodes.map((node) => (
-                <NodeRow
-                  key={node.path}
-                  node={node}
-                  depth={Math.max(0, pathDepth(node.path) - pathDepth(props.rootPath))}
-                  expandedPaths={expandedPaths}
-                  selectedPaths={selectedPaths}
-                  focusedPath={focusedPath}
-                  revealedPath={revealedPath}
-                  selectionMode={selectionMode}
-                  query={localQuery}
-                  onToggleExpand={props.onToggleExpand}
-                  onSelectPath={props.onSelectPath}
-                  onFocusPath={props.onFocusPath}
-                  onRevealPath={props.onRevealPath}
-                  onOpenPath={props.onOpenPath}
-                  onContextAction={props.onContextAction}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="grid h-full min-h-[16rem] place-items-center rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/30 p-6 text-center">
-              <div className="max-w-md">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950/60">
-                  <Search className="h-5 w-5 text-zinc-400" />
-                </div>
-                <h3 className="mt-5 text-lg font-semibold text-zinc-100">No visible nodes</h3>
-                <p className="mt-3 text-sm leading-7 text-zinc-500">
-                  The current query or tree state yields no visible files. Clear the filter, expand a parent, or refresh the workspace snapshot.
-                </p>
-              </div>
-            </div>
-          )
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span>Selected path {operatorRelativePath(selectedPath || "none", props.rootPath)}</span>
+          <button type="button" onClick={() => invoke(props, ["onRevealInTree", "onRevealPathRequested", "onRevealPath", "onRevealRequested"], selectedPath)}>
+            Reveal
+          </button>
+          <button type="button" onClick={() => invoke(props, ["onOpenPath", "onOpenPathRequested", "onOpenRequested"], selectedPath)}>
+            Open
+          </button>
+        </div>
+      </header>
+
+      <main className="min-h-0 flex-1 overflow-auto px-3 py-3">
+        {loading ? (
+          <div>Loading governed file index</div>
+        ) : dataRows.length === 0 ? (
+          <div>
+            <h3>{entries.length === 0 ? "No workspace is open" : "No entries are available"}</h3>
+            <p>The file tree is a governed navigation surface, not a blind browser.</p>
+          </div>
         ) : (
-          <div className="grid h-full min-h-[16rem] place-items-center rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/30 p-6 text-center">
-            <div className="max-w-lg">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950/60">
-                <FolderTree className="h-5 w-5 text-zinc-400" />
+          <div role="tree" aria-label="Workspace file tree">
+            {rows.map(({ node, depth }) => (
+              <div
+                key={node.path}
+                role="treeitem"
+                aria-expanded={node.type === "directory" ? true : undefined}
+                data-path={node.originalPath}
+                data-type={node.type}
+                style={{ paddingLeft: depth * 16 }}
+                onClick={() => {
+                  invoke(props, ["onPathSelected", "onSelectPath", "onPathSelectionRequested", "onFileSelected"], node.originalPath);
+                }}
+                onDoubleClick={() => {
+                  if (node.type === "directory") invoke(props, ["onToggleExpandedPath", "onDirectoryToggleRequested", "onToggleDirectory", "onDirectoryExpandedChange"], node.originalPath);
+                }}
+              >
+                <span>{node.name}</span>
+                <span> {node.type}</span>
+                {node.hidden ? <span aria-label="hidden entry" data-state="hidden" /> : null}
+                {node.ignored ? <span aria-label="ignored entry" data-state="ignored" /> : null}
+                {tokenMatches(selected, node) ? <span> selected</span> : null}
+                {tokenMatches(opened, node) ? <span aria-label="opened entry" data-state="opened" /> : null}
               </div>
-              <h3 className="mt-5 text-lg font-semibold text-zinc-100">No workspace is open</h3>
-              <p className="mt-3 text-sm leading-7 text-zinc-500">
-                The file tree is a governed navigation surface, not a blind browser. Open a workspace first to establish trust, diagnostics posture, selection state, and review lineage.
-              </p>
-            </div>
+            ))}
           </div>
         )}
-      </div>
+      </main>
 
-      <div className="border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1"><GitBranch className="h-3.5 w-3.5" /> review-aware</span>
-          <span className="inline-flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> diagnostics-visible</span>
-          <span className="inline-flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> preview lineage surfaced</span>
-          <span className="inline-flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5" /> trust explicit</span>
-        </div>
-      </div>
+      <footer className="border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500">
+        <span>review-aware</span>{" "}
+        <span>diagnostics-visible</span>{" "}
+        <span>preview lineage surfaced</span>{" "}
+        <span>trust explicit</span>
+      </footer>
     </section>
   );
 }
+
+export default FileTreePane;

@@ -369,6 +369,16 @@ function HunkView(props: {
 export default function DiffViewerPane(props: DiffViewerPaneProps): ReactElement {
   const files = collectFiles(props);
   const selectedFile = files.find((file) => file.id === props.selectedFileId || file.path === props.selectedFileId) ?? files[0];
+  // ADJUTORIX_SELECTED_FILE_NARROWING_V5
+  if (!selectedFile) {
+    return (
+      <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 p-6 text-zinc-400">
+        <h2 className="text-lg font-semibold text-zinc-50">Diff viewer</h2>
+        <p className="mt-3 text-sm">No file is selected.</p>
+      </section>
+    );
+  }
+
   const selectedHunk = selectedFile.hunks.find((hunk) => hunk.id === props.selectedHunkId) ?? selectedFile.hunks[0];
 
   const addedTotal = files.reduce((sum, file) => sum + file.addedLines, 0);

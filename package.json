@@ -21,7 +21,8 @@
     "smoke": "bash ./scripts/smoke.sh",
     "test": "turbo run test",
     "verify": "bash ./scripts/verify.sh",
-    "package:macos": "bash ./scripts/package-macos.sh"
+    "package:macos": "bash ./scripts/package-macos.sh",
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "turbo": "^2.4.4",

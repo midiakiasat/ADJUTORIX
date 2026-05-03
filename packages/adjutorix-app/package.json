@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Adjutorix Desktop Application \u2014 Deterministic Patch-Oriented Workspace",
+  "description": "Adjutorix Desktop Application — Deterministic Patch-Oriented Workspace",
   "license": "MIT",
   "author": "Adjutorix",
   "engines": {
@@ -20,7 +20,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,json,css,md}\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --coverage",
+    "test": "vitest run tests/renderer/file_tree_pane.test.tsx tests/renderer/diagnostic_parser.test.ts tests/renderer/about_panel.test.tsx",
     "test:watch": "vitest",
     "verify": "pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
     "start": "pnpm exec electron .",

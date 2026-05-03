@@ -8,12 +8,12 @@ const root = path.resolve(__dirname, "..");
 const assetsDir = path.join(root, "assets");
 
 const requiredFiles = [
-  { relativePath: "icon.png", kind: "asset" },
-  { relativePath: "icon.icns", kind: "asset" },
-  { relativePath: "splash.png", kind: "asset" },
-  { relativePath: "fonts/Inter-Regular.woff2", kind: "font" },
   { relativePath: "fonts/Inter-Medium.woff2", kind: "font" },
-  { relativePath: "fonts/Inter-SemiBold.woff2", kind: "font" }
+  { relativePath: "fonts/Inter-Regular.woff2", kind: "font" },
+  { relativePath: "fonts/Inter-SemiBold.woff2", kind: "font" },
+  { relativePath: "icon.icns", kind: "asset" },
+  { relativePath: "icon.png", kind: "asset" },
+  { relativePath: "splash.png", kind: "asset" }
 ];
 
 function assertDirectory(dirPath, label) {
@@ -41,12 +41,11 @@ function assertFile(filePath, label) {
 }
 
 function toManifestEntry(relativePath, kind) {
-  const absolutePath = path.join(assetsDir, relativePath);
-  const size = assertFile(absolutePath, kind);
+  const filePath = path.join(assetsDir, relativePath);
+  const size = assertFile(filePath, kind);
   return {
     kind,
     relativePath,
-    absolutePath,
     size
   };
 }
@@ -63,9 +62,7 @@ function main() {
     manifestPath,
     JSON.stringify(
       {
-        generatedAt: new Date().toISOString(),
-        root,
-        assetsDir,
+        assetsDir: "assets",
         files: manifest
       },
       null,
