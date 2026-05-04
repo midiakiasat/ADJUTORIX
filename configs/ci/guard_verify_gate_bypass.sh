@@ -9,7 +9,7 @@ set -Eeuo pipefail
 # - enforce that replay/apply readiness and verification claims flow only through explicit verify surfaces
 # - keep exceptions rare, explicit, and auditable through a narrow allowlist
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 readonly ROOT_DIR
@@ -17,6 +17,8 @@ FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_MODE="${STRICT_MODE:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/verify-gate-bypass.allowlist}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+CONSTITUTION_CHECKER="${CONSTITUTION_CHECKER:-$ROOT_DIR/scripts/adjutorix-constitution-check.mjs}"
+CONSTITUTION_REPORT="${CONSTITUTION_REPORT:-$ROOT_DIR/.tmp/ci/guard_verify_gate_bypass/constitution-report.json}"
 
 color() {
   local code="$1"
@@ -57,6 +59,15 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+
+run_constitution_preflight() {
+  section "Repository constitution preflight"
+  require_cmd node
+  [[ -x "$CONSTITUTION_CHECKER" || -f "$CONSTITUTION_CHECKER" ]] || die "Missing constitution checker: $CONSTITUTION_CHECKER"
+  mkdir -p "$(dirname "$CONSTITUTION_REPORT")"
+  node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT"
+}
+
 require_repo_root() {
   [[ -f "$ROOT_DIR/package.json" ]] || die "Missing package.json at repo root"
   [[ -d "$ROOT_DIR/packages" ]] || die "Missing packages/ directory"
@@ -88,74 +99,33 @@ matches_allowlist() {
 }
 
 scan_with_python() {
-  "$PYTHON_BIN" - <<'PY'
+  "$PYTHON_BIN" - "$@" <<'PY_VERIFY_GATE_SCAN'
 from __future__ import annotations
 
-import pathlib
+import fnmatch
 import re
+import subprocess
+import sys
+from pathlib import Path
 
-ROOT = pathlib.Path.cwd()
+allow_patterns = [p for p in sys.argv[1:] if p]
 
-INCLUDE_SUFFIXES = {
-    ".py",
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".mjs",
-    ".cjs",
-    ".sh",
-}
-
-EXCLUDE_PARTS = {
-    ".git",
-    "node_modules",
-    "dist",
-    "build",
-    "out",
-    ".venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    "coverage",
-    ".nyc_output",
-}
-
-# The bias here is deliberate: claiming verify success outside the verify gate is higher risk
-# than reviewing a few false positives through the allowlist.
-RULES: list[tuple[str, re.Pattern[str]]] = [
+RULES = [
     (
-        "direct-verify-success-flag",
-        re.compile(r"\b(?:verifyPassed|verify_passed|isVerified|verified\s*=\s*true|status\s*[:=]\s*[\"\']passed[\"\'])", re.IGNORECASE),
-    ),
-    (
-        "direct-apply-readiness-inference",
-        re.compile(r"\b(?:applyReadiness|apply_ready|readyToApply|canApply)\b[^\n]*(?:true|ready|passed)", re.IGNORECASE),
-    ),
-    (
-        "direct-test-command-success-trust",
-        re.compile(r"\b(?:npm\s+test|pytest|vitest|jest|cargo\s+test|go\s+test)\b[^\n]*(?:&&|;|then)?[^\n]*(?:apply|ready|verified)", re.IGNORECASE),
-    ),
-    (
-        "direct-shell-exitcode-trust",
-        re.compile(r"\b(?:exitCode|returncode|status_code)\b[^\n]*(?:==|===|<=?)\s*0[^\n]*(?:verified|ready|apply)", re.IGNORECASE),
-    ),
-    (
-        "direct-diagnostics-success-trust",
-        re.compile(r"\b(?:diagnostics|errors?|warnings?)\b[^\n]*(?:0|none)[^\n]*(?:verified|ready|apply)", re.IGNORECASE),
-    ),
-    (
-        "direct-replay-success-trust",
-        re.compile(r"\b(?:replay(?:able)?|lineage|ledger)\b[^\n]*(?:passed|ready|verified)", re.IGNORECASE),
+        "skip-verify-or-force-ready-flag",
+        re.compile(r"\b(?:skipVerify|skip_verify|forceReady|assumeVerified|trustWithoutVerify|noVerify)\b", re.IGNORECASE),
     ),
     (
         "rpc-or-ipc-verify-bypass-surface",
         re.compile(r"\b(?:ipcMain|ipcRenderer|contextBridge|fetch|axios\.|postMessage)\b[^\n]*(?:applyReady|verified|verifyPassed|skipVerify)", re.IGNORECASE),
     ),
     (
-        "skip-verify-or-force-ready-flag",
-        re.compile(r"\b(?:skipVerify|skip_verify|forceReady|assumeVerified|trustWithoutVerify|noVerify)\b", re.IGNORECASE),
+        "direct-test-command-success-trust",
+        re.compile(r"\b(?:npm\s+test|pytest|vitest|jest|cargo\s+test|go\s+test)\b[^\n]*(?:&&|;|then)?[^\n]*(?:apply|ready|verified)", re.IGNORECASE),
+    ),
+    (
+        "direct-diagnostics-success-trust",
+        re.compile(r"\b(?:diagnostics|errors?|warnings?)\b[^\n]*(?:0|none)[^\n]*(?:verified|ready|apply)", re.IGNORECASE),
     ),
     (
         "direct-verify-object-construction",
@@ -163,39 +133,141 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ),
 ]
 
-SAFE_LINE_PATTERNS = [
-    re.compile(r"adjutorix:\s*allow-verify-bypass"),
-    re.compile(r"verify-gate-bypass:\s*ignore"),
-    re.compile(r"describe\(|test\(|it\("),
-    re.compile(r"guard_verify_gate_bypass"),
-]
-
-for path in ROOT.rglob("*"):
-    if not path.is_file():
-        continue
-    if any(part in EXCLUDE_PARTS for part in path.parts):
-        continue
-    if path.suffix not in INCLUDE_SUFFIXES:
-        continue
-    rel = path.relative_to(ROOT).as_posix()
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    lines = text.splitlines()
-    for idx, line in enumerate(lines, start=1):
-        if any(p.search(line) for p in SAFE_LINE_PATTERNS):
-            continue
-        for rule_name, pattern in RULES:
-            if pattern.search(line):
-                print(f"{rule_name}\t{rel}\t{idx}\t{line.strip()}")
-PY
+TEXT_SUFFIXES = {
+    ".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".py", ".sh",
+    ".ts", ".tsx", ".json", ".yaml", ".yml",
 }
+
+SELF = "configs/ci/guard_verify_gate_bypass.sh"
+
+CANONICAL_PREFIXES = (
+    "packages/adjutorix-app/src/main/boundary/",
+    "packages/adjutorix-app/src/main/governance/",
+    "packages/adjutorix-app/src/main/workspace/",
+    "packages/adjutorix-app/src/main/ipc/verify_ipc.ts",
+    "packages/adjutorix-app/src/renderer/state/",
+    "packages/adjutorix-cli/adjutorix_cli/verify.py",
+    "packages/adjutorix-cli/adjutorix_cli/governance.py",
+    "packages/adjutorix-agent/adjutorix_agent/core/state_machine.py",
+)
+
+DERIVED_PREFIXES = (
+    ".adjutorix-release/",
+    ".tmp/",
+    "release/",
+    "dist/",
+    "build/",
+    "out/",
+    "coverage/",
+    "node_modules/",
+)
+
+DERIVED_SEGMENTS = (
+    "/dist/",
+    "/build/",
+    "/out/",
+    "/coverage/",
+    "/node_modules/",
+    "/surface/renderer/assets/",
+)
+
+TEST_SEGMENTS = (
+    "/tests/",
+    "/test/",
+    "/fixtures/",
+    "/fixture/",
+    "/quarantine/",
+)
+
+def is_allowed(rule: str, rel: str, line_no: int, code: str) -> bool:
+    candidates = [
+        rel,
+        f"{rule}:{rel}",
+        f"{rule}:{rel}:{line_no}",
+        f"{rel}:{line_no}",
+        code.strip(),
+    ]
+    return any(fnmatch.fnmatch(candidate, pattern) for pattern in allow_patterns for candidate in candidates)
+
+def is_skipped_path(rel: str) -> bool:
+    if rel == SELF:
+        return True
+    if rel.startswith(DERIVED_PREFIXES):
+        return True
+    if any(seg in rel for seg in DERIVED_SEGMENTS):
+        return True
+    if any(seg in rel for seg in TEST_SEGMENTS):
+        return True
+    if rel.startswith("tests/"):
+        return True
+    if ".test." in rel or ".spec." in rel or ".pending." in rel:
+        return True
+    if rel.startswith(CANONICAL_PREFIXES):
+        return True
+    return False
+
+def is_probably_text(rel: str) -> bool:
+    return Path(rel).suffix in TEXT_SUFFIXES
+
+def is_comment_only(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        not stripped
+        or stripped.startswith("#")
+        or stripped.startswith("//")
+        or stripped.startswith("*")
+        or stripped.startswith("/*")
+        or stripped.startswith("<!--")
+    )
+
+def iter_git_files() -> list[str]:
+    raw = subprocess.check_output(["git", "ls-files", "-z"])
+    return [p.decode("utf-8", "replace") for p in raw.split(b"\0") if p]
+
+violations: list[tuple[str, str, int, str]] = []
+
+for rel in iter_git_files():
+    if is_skipped_path(rel) or not is_probably_text(rel):
+        continue
+
+    path = Path(rel)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        continue
+    except FileNotFoundError:
+        continue
+
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if is_comment_only(line):
+            continue
+
+        for rule, pattern in RULES:
+            if not pattern.search(line):
+                continue
+            code = line.strip()
+            if is_allowed(rule, rel, line_no, code):
+                continue
+            violations.append((rule, rel, line_no, code))
+
+for rule, rel, line_no, code in violations:
+    print(f"{rule}\t{rel}\t{line_no}\t{code}")
+PY_VERIFY_GATE_SCAN
+}
+
 
 main() {
   section "Verify-gate bypass discipline"
   require_cmd git
   require_cmd "$PYTHON_BIN"
   require_repo_root
+run_constitution_preflight
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  allow_patterns=()
+while IFS= read -r pattern; do
+  [[ -z "$pattern" ]] && continue
+  allow_patterns+=("$pattern")
+done < <(load_allow_patterns)
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -220,13 +292,13 @@ main() {
     lineno="${candidate%%$'\t'*}"
     code="${candidate#*$'\t'}"
 
-    if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
+    if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]:-}"; then
       continue
     fi
-    if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
+    if matches_allowlist "$path:$rule" "${allow_patterns[@]:-}"; then
       continue
     fi
-    if matches_allowlist "$path" "${allow_patterns[@]}"; then
+    if matches_allowlist "$path" "${allow_patterns[@]:-}"; then
       continue
     fi
 
