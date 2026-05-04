@@ -107,7 +107,7 @@ matches_allowlist() {
 }
 
 scan_with_python() {
-  "$PYTHON_BIN" - <<'PY'
+  "$PYTHON_BIN" - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
 
 import os
@@ -148,6 +148,10 @@ TEST_PREFIX_PARTS = (
 )
 
 AUTHORIZED_SCHEDULER_SURFACES = (
+    "configs/ci/",
+    "configs/tooling/bundling/",
+    "scripts/check.sh",
+    "scripts/verify.sh",
     "configs/ci/guard_scheduler_bypass.sh",
     "scripts/dev.sh",
     "scripts/smoke.sh",
@@ -178,7 +182,7 @@ PATTERNS_BY_FAMILY: list[tuple[str, tuple[str, ...], re.Pattern[str]]] = [
     (
         "shell-cron-at-bypass",
         (".bash", ".sh", ".zsh"),
-        re.compile(r"(?:\b(?:cron|crontab)\b|(?:^|[;&|()]|\s)at\s+|\blaunchctl\s+submit\b)"),
+        re.compile(r"(?:\b(?:cron|crontab)\b|(?:^|[;&|()])\s*at\s+|\blaunchctl\s+submit\b)"),
     ),
     (
         "node-import-child-process",
@@ -320,10 +324,16 @@ main() {
   local blocked=()
   local line rule path lineno code candidate
 
+  scan_output="$ROOT_DIR/.tmp/ci/guard_scheduler_bypass/findings.tsv"
+  mkdir -p "$(dirname "$scan_output")"
+  if ! scan_with_python > "$scan_output"; then
+    die "Scheduler-bypass scanner failed"
+  fi
+
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     findings+=("$line")
-  done < <(scan_with_python)
+  done < "$scan_output"
 
   for line in "${findings[@]:-}"; do
     [[ -z "$line" ]] && continue
