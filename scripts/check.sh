@@ -29,6 +29,7 @@ readonly SCRIPT_DIR
 readonly REPO_ROOT
 readonly PROGRAM_NAME
 readonly START_TS
+export REPO_ROOT
 
 ###############################################################################
 # DEFAULTS
@@ -59,6 +60,8 @@ readonly START_TS
 : "${ADJUTORIX_CHECK_SUMMARY_FILE:=${ADJUTORIX_CHECK_REPORT_DIR}/summary.txt}"
 : "${ADJUTORIX_CHECK_PHASE_FILE:=${ADJUTORIX_CHECK_REPORT_DIR}/phases.tsv}"
 : "${ADJUTORIX_CHECK_NODE_PACKAGE_MANAGER:=npm}"
+: "${ADJUTORIX_CHECK_PYTHON_BIN:=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3 || command -v python)}"
+export ADJUTORIX_CHECK_PYTHON_BIN
 : "${ADJUTORIX_CHECK_APP_DIR:=${REPO_ROOT}/packages/adjutorix-app}"
 : "${ADJUTORIX_CHECK_AGENT_DIR:=${REPO_ROOT}/packages/adjutorix-agent}"
 : "${ADJUTORIX_CHECK_CLI_DIR:=${REPO_ROOT}/packages/adjutorix-cli}"
@@ -66,6 +69,13 @@ readonly START_TS
 : "${ADJUTORIX_CHECK_POLICY_DIR:=${REPO_ROOT}/configs/policy}"
 : "${ADJUTORIX_CHECK_RUNTIME_DIR:=${REPO_ROOT}/configs/runtime}"
 : "${ADJUTORIX_CHECK_OBSERVABILITY_DIR:=${REPO_ROOT}/configs/observability}"
+export ADJUTORIX_CHECK_APP_DIR
+export ADJUTORIX_CHECK_AGENT_DIR
+export ADJUTORIX_CHECK_CLI_DIR
+export ADJUTORIX_CHECK_CONTRACTS_DIR
+export ADJUTORIX_CHECK_POLICY_DIR
+export ADJUTORIX_CHECK_RUNTIME_DIR
+export ADJUTORIX_CHECK_OBSERVABILITY_DIR
 
 INSTALL_CMD=("${ADJUTORIX_CHECK_NODE_PACKAGE_MANAGER}" install)
 ROOT_LINT_CMD=("${ADJUTORIX_CHECK_NODE_PACKAGE_MANAGER}" run lint)
@@ -245,7 +255,9 @@ should_run_phase() {
   if ((${#ONLY_PHASES[@]} > 0)); then
     contains_value "$phase" "${ONLY_PHASES[@]}" || return 1
   fi
-  contains_value "$phase" "${SKIP_PHASES[@]}" && return 1
+  if ((${#SKIP_PHASES[@]} > 0)); then
+    contains_value "$phase" "${SKIP_PHASES[@]}" && return 1
+  fi
   return 0
 }
 
@@ -289,7 +301,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started finished duration_ms started_epoch_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -298,7 +310,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -307,7 +319,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -342,7 +354,7 @@ phase_repo_layout() {
 
 phase_toolchain() {
   require_command git
-  require_command python
+  require_command "$ADJUTORIX_CHECK_PYTHON_BIN"
   require_command node
   require_command npm
   require_command bash
@@ -362,10 +374,11 @@ phase_install() {
 }
 
 phase_manifests() {
-  python - <<'PY'
+  python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path("${REPO_ROOT}")
+import os
+root = Path(os.environ["REPO_ROOT"])
 package_files = [
     root / "package.json",
     root / "packages/adjutorix-app/package.json",
@@ -386,10 +399,11 @@ PY
 }
 
 phase_contracts() {
-  python - <<'PY'
+  python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path("${ADJUTORIX_CHECK_CONTRACTS_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_CHECK_CONTRACTS_DIR"])
 required = [
     "rpc_capabilities.json",
     "protocol_versions.json",
@@ -410,9 +424,10 @@ PY
 }
 
 phase_policy() {
-  python - <<'PY'
+  python3 - <<'PY'
 from pathlib import Path
-root = Path("${ADJUTORIX_CHECK_POLICY_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_CHECK_POLICY_DIR"])
 required = [
     "mutation_policy.yaml",
     "governed_targets.yaml",
@@ -433,10 +448,11 @@ PY
 }
 
 phase_runtime_config() {
-  python - <<'PY'
+  python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path("${ADJUTORIX_CHECK_RUNTIME_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_CHECK_RUNTIME_DIR"])
 json_files = ["feature_flags.json", "logging.json", "limits.json", "timeouts.json", "scheduling.json"]
 for name in json_files:
     with (root / name).open("r", encoding="utf-8") as fh:
@@ -450,9 +466,10 @@ PY
 }
 
 phase_observability() {
-  python - <<'PY'
+  python3 - <<'PY'
 from pathlib import Path
-root = Path("${ADJUTORIX_CHECK_OBSERVABILITY_DIR}")
+import os
+root = Path(os.environ["ADJUTORIX_CHECK_OBSERVABILITY_DIR"])
 required = [
     "metrics.yaml",
     "event_catalog.yaml",
@@ -490,20 +507,33 @@ phase_app_typecheck() {
 }
 
 phase_agent_import() {
-  run_cmd_logged agent_import bash -lc "cd '$ADJUTORIX_CHECK_AGENT_DIR' && python - <<'PY'
+  run_cmd_logged agent_import env \
+    PYTHONPATH="${ADJUTORIX_CHECK_AGENT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+    "$ADJUTORIX_CHECK_PYTHON_BIN" - <<'PY'
 import importlib
-importlib.import_module('adjutorix_agent')
-print('agent-import-ok')
-PY"
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python>=3.11 required for adjutorix_agent import, got {sys.version.split()[0]}")
+importlib.import_module("adjutorix_agent")
+print("agent-import-ok")
+PY
 }
 
+
 phase_cli_import() {
-  run_cmd_logged cli_import bash -lc "cd '$ADJUTORIX_CHECK_CLI_DIR' && python - <<'PY'
+  run_cmd_logged cli_import env \
+    PYTHONPATH="${ADJUTORIX_CHECK_CLI_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+    "$ADJUTORIX_CHECK_PYTHON_BIN" - <<'PY'
 import importlib
-importlib.import_module('adjutorix_cli')
-print('cli-import-ok')
-PY"
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python>=3.11 required for adjutorix_cli import, got {sys.version.split()[0]}")
+importlib.import_module("adjutorix_cli")
+print("cli-import-ok")
+PY
 }
+
+
 
 ###############################################################################
 # SUMMARY
