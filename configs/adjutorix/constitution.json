@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "name": "ADJUTORIX Repository Constitution",
+  "purpose": "Canonical machine-readable classification of authored, derived, ephemeral, release, and forbidden repository surfaces.",
+  "classificationPriority": [
+    "forbidden",
+    "release/distributable",
+    "ephemeral/runtime",
+    "derived/build",
+    "authority/tests",
+    "authority/source",
+    "authority/config"
+  ],
+  "globalRules": {
+    "sourceIsAuthoritative": true,
+    "derivedOutputsArePeerTruth": false,
+    "ephemeralStateIsReviewTruth": false,
+    "releaseArtifactsArePromotionOnly": true,
+    "mixedSourceDerivedMutation": "deny_by_default",
+    "handEditedDerivedArtifacts": "deny",
+    "consequentialWritesRequireIntent": true,
+    "consequentialWritesRequireMutationClass": true
+  },
+  "strata": [
+    {
+      "id": "forbidden",
+      "purpose": "Paths never writable under ordinary governed mutation.",
+      "patterns": [
+        ".git/**",
+        "**/.DS_Store",
+        ".DS_Store"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci"
+      ],
+      "allowedWriters": [],
+      "repairEligibility": "none",
+      "promotionSource": "none",
+      "verificationProfile": "constitutional-deny",
+      "rollbackProfile": "not-applicable",
+      "retentionRule": "external",
+      "indexingRule": "never",
+      "reviewVisibilityRule": "hidden",
+      "mutationDenialRule": "always"
+    },
+    {
+      "id": "release/distributable",
+      "purpose": "Promotion outputs and distributable release artifacts.",
+      "patterns": [
+        ".adjutorix-release/**",
+        "packages/*/release/**",
+        "packages/adjutorix-app/release/**",
+        "*.dmg",
+        "*.blockmap",
+        "*.app/**",
+        "**/*.dmg",
+        "**/*.blockmap",
+        "**/*.app/**"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "release"
+      ],
+      "allowedWriters": [
+        "promotion-flow"
+      ],
+      "repairEligibility": "promotion_only",
+      "promotionSource": "authority/source + authority/config + verified derived/build",
+      "verificationProfile": "release-promotion",
+      "rollbackProfile": "release-metadata",
+      "retentionRule": "release-policy",
+      "indexingRule": "excluded_by_default",
+      "reviewVisibilityRule": "promotion-evidence-only",
+      "mutationDenialRule": "deny_unless_promotion"
+    },
+    {
+      "id": "ephemeral/runtime",
+      "purpose": "Machine-local runtime residue, caches, logs, temporary outputs, and dependency installs.",
+      "patterns": [
+        ".tmp/**",
+        "tmp/**",
+        "logs/**",
+        "coverage/**",
+        ".cache/**",
+        "node_modules/**",
+        "packages/*/node_modules/**",
+        "**/__pycache__/**"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "diagnostics"
+      ],
+      "allowedWriters": [
+        "runtime",
+        "toolchain",
+        "diagnostics"
+      ],
+      "repairEligibility": "none",
+      "promotionSource": "none",
+      "verificationProfile": "ignored-runtime",
+      "rollbackProfile": "delete-regenerate",
+      "retentionRule": "local-disposable",
+      "indexingRule": "never",
+      "reviewVisibilityRule": "hidden",
+      "mutationDenialRule": "deny_as_source"
+    },
+    {
+      "id": "derived/build",
+      "purpose": "Generated build outputs and reproducible manifests.",
+      "patterns": [
+        "dist/**",
+        "build/**",
+        "packages/*/dist/**",
+        "packages/*/build/**",
+        "packages/*/.adjutorix.*",
+        "packages/*/assets/asset-manifest.json",
+        "**/*.js.map",
+        "packages/*/.adjutorix*/**"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "promotion-flow"
+      ],
+      "allowedWriters": [
+        "build-flow",
+        "promotion-flow"
+      ],
+      "repairEligibility": "promotion_only",
+      "promotionSource": "authority/source + authority/config",
+      "verificationProfile": "build-reproducibility",
+      "rollbackProfile": "clean-rebuild",
+      "retentionRule": "disposable",
+      "indexingRule": "excluded_by_default",
+      "reviewVisibilityRule": "manifest-or-promotion-only",
+      "mutationDenialRule": "deny_unless_build_or_promotion"
+    },
+    {
+      "id": "authority/source",
+      "purpose": "Authored product source and source assets.",
+      "patterns": [
+        "src/**",
+        "apps/*/src/**",
+        "packages/*/src/**",
+        "packages/*/assets/**",
+        "packages/*/public/**",
+        "contracts/**",
+        "schemas/**",
+        "policies/**",
+        "packages/*/adjutorix_agent/**",
+        "packages/*/adjutorix_cli/**",
+        "packages/*/quarantine/**"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "app",
+        "agent",
+        "orchestrator"
+      ],
+      "allowedWriters": [
+        "operator",
+        "governed-transaction",
+        "class-bounded-repair"
+      ],
+      "repairEligibility": "class_bounded",
+      "promotionSource": "self",
+      "verificationProfile": "source-contract-build-test",
+      "rollbackProfile": "git-revert-or-transaction-rollback",
+      "retentionRule": "source-history",
+      "indexingRule": "default",
+      "reviewVisibilityRule": "full",
+      "mutationDenialRule": "deny_without_transaction"
+    },
+    {
+      "id": "authority/tests",
+      "purpose": "Authored test truth and verification harnesses.",
+      "patterns": [
+        "test/**",
+        "tests/**",
+        "e2e/**",
+        "__tests__/**",
+        "packages/*/test/**",
+        "packages/*/tests/**",
+        "packages/*/__tests__/**"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "agent",
+        "orchestrator"
+      ],
+      "allowedWriters": [
+        "operator",
+        "governed-transaction",
+        "test-repair"
+      ],
+      "repairEligibility": "test_repair_only",
+      "promotionSource": "self",
+      "verificationProfile": "targeted-test-and-harness",
+      "rollbackProfile": "git-revert-or-transaction-rollback",
+      "retentionRule": "source-history",
+      "indexingRule": "default",
+      "reviewVisibilityRule": "full",
+      "mutationDenialRule": "deny_without_transaction"
+    },
+    {
+      "id": "authority/config",
+      "purpose": "Authored configuration, scripts, governance files, documentation, package metadata, and CI declarations.",
+      "patterns": [
+        ".github/**",
+        ".gitignore",
+        ".npmrc",
+        ".nvmrc",
+        ".node-version",
+        "README*",
+        "LICENSE*",
+        "CHANGELOG*",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "eslint.config.*",
+        "vite.config.*",
+        "vitest.config.*",
+        "playwright.config.*",
+        "configs/**",
+        "scripts/**",
+        "docs/**",
+        "manuals/**",
+        "packages/*/package.json",
+        "packages/*/tsconfig.json",
+        "packages/*/tsconfig.*.json",
+        "packages/*/scripts/**",
+        ".editorconfig",
+        "FINALITY.md",
+        "tsc",
+        "tsconfig.base.json",
+        "*.config.*",
+        "packages/*/README*",
+        "packages/*/LICENSE*",
+        "packages/*/pyproject.toml",
+        "packages/*/electron-builder.yml",
+        "packages/*/electron-builder.*",
+        "packages/*/*.config.*",
+        "packages/*/eslint.config.*",
+        "packages/*/vite.config.*",
+        "packages/*/vitest.config.*",
+        "packages/*/postcss.config.*",
+        "packages/*/tailwind.config.*"
+      ],
+      "allowedReaders": [
+        "operator",
+        "ci",
+        "app",
+        "agent",
+        "orchestrator"
+      ],
+      "allowedWriters": [
+        "operator",
+        "governed-transaction",
+        "config-root-path-repair"
+      ],
+      "repairEligibility": "config_repair_only",
+      "promotionSource": "self",
+      "verificationProfile": "config-parse-contract-ci",
+      "rollbackProfile": "git-revert-or-transaction-rollback",
+      "retentionRule": "source-history",
+      "indexingRule": "default",
+      "reviewVisibilityRule": "full",
+      "mutationDenialRule": "deny_without_transaction"
+    }
+  ]
+}
