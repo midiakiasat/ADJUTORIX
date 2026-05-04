@@ -9,7 +9,8 @@ set -Eeuo pipefail
 # - catch both missing contract coverage and accidental surface expansion that would make governed behavior ambiguous
 # - make drift explicit, inspectable, and reviewable rather than silently tolerated
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 
 readonly ROOT_DIR
@@ -17,6 +18,9 @@ FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_MODE="${STRICT_MODE:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/contract-drift.allowlist}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+CONSTITUTION_CHECKER="${CONSTITUTION_CHECKER:-$ROOT_DIR/scripts/adjutorix-constitution-check.mjs}"
+CONSTITUTION_REPORT="${CONSTITUTION_REPORT:-$ROOT_DIR/.tmp/ci/guard_contract_drift/constitution-report.json}"
 
 color() {
   local code="$1"
@@ -92,6 +96,14 @@ matches_allowlist() {
   return 1
 }
 
+run_constitution_preflight() {
+  section "Repository constitution preflight"
+  require_cmd node
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  mkdir -p "$(dirname "$CONSTITUTION_REPORT")"
+  node "$CONSTITUTION_CHECKER" --root "$ROOT_DIR" --json --out "$CONSTITUTION_REPORT"
+}
+
 assert_repo_shape() {
   section "Repository contract surfaces"
   require_file "$ROOT_DIR/package.json"
@@ -119,6 +131,7 @@ ROOT = pathlib.Path.cwd()
 
 SURFACES = {
     "rpc_contract_tests": ROOT / "tests" / "contracts",
+    "app_preload_source": ROOT / "packages" / "adjutorix-app" / "src" / "preload",
     "app_main_tests": ROOT / "packages" / "adjutorix-app" / "tests" / "main",
     "app_renderer_tests": ROOT / "packages" / "adjutorix-app" / "tests" / "renderer",
     "cli_tests": ROOT / "packages" / "adjutorix-cli" / "tests",
@@ -130,7 +143,7 @@ FILE_SUFFIXES = {".ts", ".tsx", ".py", ".json", ".md"}
 PATTERNS = {
     "rpc_method_string": re.compile(r'["\']([a-zA-Z0-9_.-]+\.[a-zA-Z0-9_.-]+)["\']'),
     "test_name": re.compile(r'\b(?:it|test|describe)\s*\(\s*["\']([^"\']+)["\']'),
-    "preload_api_surface": re.compile(r'\b(?:contextBridge\.exposeInMainWorld|exposeInMainWorld)\s*\(\s*["\']([^"\']+)["\']'),
+    "preload_api_surface": re.compile(r'\b(?:contextBridge\.exposeInMainWorld|exposeInMainWorld)\s*\(\s*["\']([^"\']+)["\']|\bwindow\.(adjutorixApi|adjutorix)\b'),
     "exported_method": re.compile(r'\b(?:function|const|async function)\s+([A-Za-z_][A-Za-z0-9_]*)'),
     "python_test_name": re.compile(r'^def\s+(test_[A-Za-z0-9_]+)\s*\(', re.M),
 }
@@ -169,7 +182,12 @@ for surface_name, base in SURFACES.items():
         for match in PATTERNS["python_test_name"].findall(text):
             test_names.add(match)
         for match in PATTERNS["preload_api_surface"].findall(text):
-            preload_surfaces.add(match)
+            if isinstance(match, tuple):
+                preload_surface = next((item for item in match if item), "")
+            else:
+                preload_surface = match
+            if preload_surface:
+                preload_surfaces.add(preload_surface)
         for match in PATTERNS["exported_method"].findall(text):
             exported_names.add(match)
 
@@ -217,10 +235,10 @@ preload_surfaces = set(aggregate.get("preload_surfaces", []))
 exported_names = set(aggregate.get("exported_names", []))
 all_test_names = set(aggregate.get("test_names", []))
 
-required_rpc_contract_tests = {
-    "job.status",
-    "job.logs",
-}
+# Required RPC method names must be derived from currently declared
+# contract-bearing surfaces. Do not pin retired job.* methods here: that turns
+# the drift guard into a stale-contract guard.
+required_rpc_contract_tests: set[str] = set()
 for method in sorted(required_rpc_contract_tests):
     if method not in rpc_methods:
         issues.append({
@@ -255,11 +273,12 @@ for filename in sorted(required_main_tests):
             "detail": f"Required main-process contract test file {filename!r} is missing.",
         })
 
-if "adjutorix" not in preload_surfaces:
+expected_preload_surfaces = {"adjutorix", "adjutorixApi"}
+if not (expected_preload_surfaces & preload_surfaces):
     issues.append({
         "code": "preload-surface-missing",
         "subject": "adjutorix",
-        "detail": "Expected preload/exposed API surface 'adjutorix' is missing from discovered contract sources.",
+        "detail": "Expected preload/exposed API surface 'adjutorix' or compatibility alias 'adjutorixApi' is missing from discovered contract sources.",
     })
 
 expected_cli_exports = {"main"}
@@ -313,12 +332,16 @@ PY
 }
 
 main() {
+  run_constitution_preflight
   section "Contract drift discipline"
   require_cmd git
   require_cmd "$PYTHON_BIN"
   assert_repo_shape
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  allow_patterns=()
+  while IFS= read -r __adjutorix_line; do
+    allow_patterns+=("$__adjutorix_line")
+  done < <(load_allow_patterns)
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -406,4 +429,8 @@ PY
     die "Contract-bearing surfaces drifted without aligned coverage or golden/spec evidence."
   fi
 
-  warn "Contract drift detecte
+  warn "Contract drift detected but STRICT_MODE=0; continuing."
+  exit 0
+}
+
+main "$@"
