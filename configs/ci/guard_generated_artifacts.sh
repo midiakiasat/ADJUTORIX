@@ -28,64 +28,7 @@ constitution_stratum_for_path() {
   local rel_path="${1#./}"
   local root_dir="${ROOT_DIR:-${ROOT:-$(git rev-parse --show-toplevel)}}"
 
-  node - "$root_dir" "$rel_path" <<'NODE'
-const fs = require("node:fs");
-const path = require("node:path");
-
-const root = process.argv[2];
-const input = String(process.argv[3] || "").replace(/\\/g, "/").replace(/^\.\//, "");
-const constitutionPath = path.join(root, "configs", "adjutorix", "constitution.json");
-const constitution = JSON.parse(fs.readFileSync(constitutionPath, "utf8"));
-
-function escapeRegex(value) {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-}
-
-function globToRegex(glob) {
-  let out = "^";
-  for (let i = 0; i < glob.length; i += 1) {
-    const ch = glob[i];
-    const next = glob[i + 1];
-
-    if (ch === "*" && next === "*") {
-      const after = glob[i + 2];
-      if (after === "/") {
-        out += "(?:.*/)?";
-        i += 2;
-      } else {
-        out += ".*";
-        i += 1;
-      }
-      continue;
-    }
-
-    if (ch === "*") {
-      out += "[^/]*";
-      continue;
-    }
-
-    if (ch === "?") {
-      out += "[^/]";
-      continue;
-    }
-
-    out += escapeRegex(ch);
-  }
-  out += "$";
-  return new RegExp(out);
-}
-
-for (const stratum of constitution.strata || []) {
-  for (const pattern of stratum.patterns || []) {
-    if (globToRegex(String(pattern)).test(input)) {
-      process.stdout.write(String(stratum.id));
-      process.exit(0);
-    }
-  }
-}
-
-process.stdout.write("unclassified");
-NODE
+  node "$root_dir/scripts/lib/constitution-classifier.mjs" "$root_dir" "$rel_path"
 }
 
 classify_generated_artifact_from_constitution() {
