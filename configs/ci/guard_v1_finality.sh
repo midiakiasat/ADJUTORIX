@@ -106,9 +106,66 @@ BAD="$(
 printf '%s\n' "$BAD"
 test -z "$BAD"
 
+constitution_stratum_for_path() {
+  local rel_path="${1#./}"
+  node "$ROOT_DIR/scripts/lib/constitution-classifier.mjs" "$ROOT_DIR" "$rel_path"
+}
+
+classify_v1_tracked_artifact() {
+  local rel_path="${1#./}"
+  local stratum
+
+  stratum="$(constitution_stratum_for_path "$rel_path" || printf 'unclassified')"
+
+  case "$stratum" in
+    "forbidden")
+      printf 'forbidden-surface'
+      return 0
+      ;;
+    "release/distributable")
+      printf 'release-distributable'
+      return 0
+      ;;
+    "ephemeral/runtime")
+      printf 'runtime-ephemeral'
+      return 0
+      ;;
+    "derived/build")
+      case "$rel_path" in
+        packages/*/assets/asset-manifest.json)
+          # Current constitution baseline promotes this manifest as tracked derived/build proof.
+          return 1
+          ;;
+        *)
+          printf 'derived-build'
+          return 0
+          ;;
+      esac
+      ;;
+  esac
+
+  case "$rel_path" in
+    *.pyc|*.pyo|*.dmg|*.asar|*.tar.gz|*.zip|*.sqlite|*.db|*.pem|*.key|*.p12|*.pfx|*.crt|*.cer)
+      printf 'file-artifact'
+      return 0
+      ;;
+    .turbo/*|*/.turbo/*|.adjutorix-baseline/*|*/.adjutorix-baseline/*|.adjutorix-verify-venv/*|*/.adjutorix-verify-venv/*|.venv/*|*/.venv/*|.pytest_cache/*|*/.pytest_cache/*)
+      printf 'legacy-runtime-artifact'
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 echo "[guard:v1_finality] no tracked generated artifacts"
 BAD_ARTIFACTS="$(
-  git ls-files | grep -E '(^|/)(node_modules|dist|release|\.turbo|\.tmp|__pycache__|\.pytest_cache|\.venv|\.adjutorix-baseline|\.adjutorix-verify-venv)(/|$)|\.(pyc|pyo|dmg|asar|tar\.gz|zip|sqlite|db|pem|key|p12|pfx|crt|cer)$' || true
+  while IFS= read -r rel_path; do
+    [[ -z "$rel_path" ]] && continue
+    artifact_class="$(classify_v1_tracked_artifact "$rel_path" || true)"
+    [[ -z "$artifact_class" ]] && continue
+    printf '%s\t%s\n' "$artifact_class" "$rel_path"
+  done < <(git ls-files)
 )"
 printf '%s\n' "$BAD_ARTIFACTS"
 test -z "$BAD_ARTIFACTS"
