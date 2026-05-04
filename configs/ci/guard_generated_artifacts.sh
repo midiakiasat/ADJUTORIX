@@ -23,6 +23,113 @@ STRICT_TRACKED_CHECK="${STRICT_TRACKED_CHECK:-1}"
 STRICT_UNTRACKED_CHECK="${STRICT_UNTRACKED_CHECK:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/generated-artifacts.allowlist}"
 
+
+constitution_stratum_for_path() {
+  local rel_path="${1#./}"
+  local root_dir="${ROOT_DIR:-${ROOT:-$(git rev-parse --show-toplevel)}}"
+
+  node - "$root_dir" "$rel_path" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = process.argv[2];
+const input = String(process.argv[3] || "").replace(/\\/g, "/").replace(/^\.\//, "");
+const constitutionPath = path.join(root, "configs", "adjutorix", "constitution.json");
+const constitution = JSON.parse(fs.readFileSync(constitutionPath, "utf8"));
+
+function escapeRegex(value) {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function globToRegex(glob) {
+  let out = "^";
+  for (let i = 0; i < glob.length; i += 1) {
+    const ch = glob[i];
+    const next = glob[i + 1];
+
+    if (ch === "*" && next === "*") {
+      const after = glob[i + 2];
+      if (after === "/") {
+        out += "(?:.*/)?";
+        i += 2;
+      } else {
+        out += ".*";
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === "*") {
+      out += "[^/]*";
+      continue;
+    }
+
+    if (ch === "?") {
+      out += "[^/]";
+      continue;
+    }
+
+    out += escapeRegex(ch);
+  }
+  out += "$";
+  return new RegExp(out);
+}
+
+for (const stratum of constitution.strata || []) {
+  for (const pattern of stratum.patterns || []) {
+    if (globToRegex(String(pattern)).test(input)) {
+      process.stdout.write(String(stratum.id));
+      process.exit(0);
+    }
+  }
+}
+
+process.stdout.write("unclassified");
+NODE
+}
+
+classify_generated_artifact_from_constitution() {
+  local rel_path="${1#./}"
+  local stratum
+
+  stratum="$(constitution_stratum_for_path "$rel_path")"
+
+  case "$stratum" in
+    "ephemeral/runtime")
+      printf '%s
+' "runtime-ephemeral"
+      ;;
+    "release/distributable")
+      printf '%s
+' "release-distributable"
+      ;;
+    "forbidden")
+      printf '%s
+' "forbidden-surface"
+      ;;
+    "derived/build")
+      case "$rel_path" in
+        packages/*/assets/asset-manifest.json)
+          # Tracked promoted manifest already exists in the current constitution baseline.
+          # This preserves pre-patch guard behavior while routing build-surface identity
+          # through the constitution classifier.
+          return 0
+          ;;
+        *)
+          printf '%s
+' "derived-build"
+          ;;
+      esac
+      ;;
+    "authority/source"|"authority/tests"|"authority/config"|"unclassified"|"")
+      return 0
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
 color() {
   local code="$1"
   shift
@@ -96,42 +203,9 @@ matches_allowlist() {
 classify_generated_path() {
   local path="$1"
 
-  case "$path" in
-    *.pyc|*.pyo|*.pyd)
-      printf 'python-bytecode'
-      return 0
-      ;;
-    *__pycache__*|*.pytest_cache*|*.mypy_cache*|*.ruff_cache*|*.coverage|.coverage*|htmlcov/*)
-      printf 'python-cache'
-      return 0
-      ;;
-    node_modules/*|*/node_modules/*)
-      printf 'node-modules'
-      return 0
-      ;;
-    dist/*|*/dist/*|build/*|*/build/*|out/*|*/out/*|release/*|*/release/*)
-      printf 'packaged-output'
-      return 0
-      ;;
-    *.egg-info/*|*.egg-info|*.whl|*.tar.gz)
-      printf 'python-package-output'
-      return 0
-      ;;
-    *.tsbuildinfo)
-      printf 'typescript-build-cache'
-      return 0
-      ;;
-    coverage/*|.nyc_output/*)
-      printf 'coverage-output'
-      return 0
-      ;;
-    *.log|logs/*|tmp/*|.tmp/*|*.tmp|*.swp|*.swo|*.DS_Store)
-      printf 'local-machine-residue'
-      return 0
-      ;;
-    *.dmg|*.pkg|*.app|*.zip)
-      printf 'packaging-artifact'
-      return 0
+  case "$(classify_generated_artifact_from_constitution "${path}")" in
+    runtime-ephemeral|release-distributable|forbidden-surface|derived-build)
+      classify_generated_artifact_from_constitution "${path}"
       ;;
     *)
       return 1
@@ -243,7 +317,8 @@ main() {
     [[ -z "$line" ]] && continue
     class="${line%%$'\t'*}"
     path="${line#*$'\t'}"
-    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+    [[ -z "$class" ]] && continue
+    if ! matches_allowlist "$path" ${allow_patterns[@]+"${allow_patterns[@]}"}; then
       tracked_blocked+=("$class"$'\t'"$path")
     fi
   done < <(printf '%s\n' "${tracked_raw[@]:-}")
@@ -257,7 +332,8 @@ main() {
     [[ -z "$line" ]] && continue
     class="${line%%$'\t'*}"
     path="${line#*$'\t'}"
-    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+    [[ -z "$class" ]] && continue
+    if ! matches_allowlist "$path" ${allow_patterns[@]+"${allow_patterns[@]}"}; then
       untracked_blocked+=("$class"$'\t'"$path")
     fi
   done < <(printf '%s\n' "${untracked_raw[@]:-}")
@@ -273,7 +349,8 @@ main() {
     rest="${line#*$'\t'}"
     meta="${rest%%$'\t'*}"
     path="${rest#*$'\t'}"
-    if ! matches_allowlist "$path" "${allow_patterns[@]}"; then
+    [[ -z "$class" ]] && continue
+    if ! matches_allowlist "$path" ${allow_patterns[@]+"${allow_patterns[@]}"}; then
       dirty_blocked+=("$class"$'\t'"$meta"$'\t'"$path")
     fi
   done < <(printf '%s\n' "${dirty_raw[@]:-}")
