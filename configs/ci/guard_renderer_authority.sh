@@ -9,10 +9,15 @@ set -Eeuo pipefail
 # - enforce the trust boundary: renderer may present state and request actions, but must not hold mutation authority itself
 # - keep exceptions explicit and auditable through a narrow allowlist rather than convention
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT_DIR}/.tmp/ci/guard_renderer_authority/constitution-report.json"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_MODE="${STRICT_MODE:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/renderer-authority.allowlist}"
@@ -172,6 +177,11 @@ for path in RENDERER.rglob("*"):
     rel = path.relative_to(ROOT).as_posix()
     text = path.read_text(encoding="utf-8", errors="ignore")
     for idx, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("//", "/*", "*", "*/")):
+            continue
         if any(p.search(line) for p in SAFE_LINE_PATTERNS):
             continue
         for rule_name, pattern in RULES:
@@ -183,10 +193,22 @@ PY
 main() {
   section "Renderer authority discipline"
   require_cmd git
+  require_cmd node
   require_cmd "$PYTHON_BIN"
   require_repo_root
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  section "Repository constitution preflight"
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  run_constitution_output="$(node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT")"
+  printf '%s\n' "$run_constitution_output"
+
+  local allow_patterns=()
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -211,14 +233,16 @@ main() {
     lineno="${candidate%%$'\t'*}"
     code="${candidate#*$'\t'}"
 
-    if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
 
     blocked+=("$rule"$'\t'"$path"$'\t'"$lineno"$'\t'"$code")
