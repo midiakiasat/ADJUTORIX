@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { contextBridge, ipcRenderer } from "electron";
+import { BRIDGE_CHANNELS } from "./bridge.js";
 import { createExposedApi } from "./exposed_api.js";
 
 /**
@@ -72,49 +73,7 @@ type Envelope<T extends JsonValue = JsonValue> = InvokeEnvelope<T> | ErrorEnvelo
 // IPC CHANNELS
 // -----------------------------------------------------------------------------
 
-const CHANNELS = {
-  runtimeSnapshot: "adjutorix:runtime:snapshot",
-
-  workspaceOpen: "adjutorix:workspace:open",
-  workspaceClose: "adjutorix:workspace:close",
-  workspaceReveal: "adjutorix:workspace:reveal",
-  workspaceHealth: "adjutorix:workspace:health",
-  workspaceTrustRead: "adjutorix:workspace:trust:read",
-  workspaceTrustSet: "adjutorix:workspace:trust:set",
-
-  patchPreview: "adjutorix:patch:preview",
-  patchApprove: "adjutorix:patch:approve",
-  patchApply: "adjutorix:patch:apply",
-  patchClear: "adjutorix:patch:clear",
-
-  verifyRun: "adjutorix:verify:run",
-  verifyStatus: "adjutorix:verify:status",
-  verifyBind: "adjutorix:verify:bindResult",
-
-  ledgerCurrent: "adjutorix:ledger:current",
-  ledgerTimeline: "adjutorix:ledger:timeline",
-  ledgerEntry: "adjutorix:ledger:entry",
-  ledgerHeads: "adjutorix:ledger:heads",
-  ledgerStats: "adjutorix:ledger:stats",
-
-  diagnosticsRuntime: "adjutorix:diagnostics:runtimeSnapshot",
-  diagnosticsStartup: "adjutorix:diagnostics:startupReport",
-  diagnosticsObservability: "adjutorix:diagnostics:observabilityBundle",
-  diagnosticsLogTail: "adjutorix:diagnostics:logTail",
-  diagnosticsCrash: "adjutorix:diagnostics:crashContext",
-  diagnosticsExport: "adjutorix:diagnostics:exportBundle",
-
-  agentHealth: "adjutorix:agent:health",
-  agentStatus: "adjutorix:agent:status",
-  agentStart: "adjutorix:agent:start",
-  agentStop: "adjutorix:agent:stop",
-
-  uiWorkspaceEvent: "adjutorix:event:workspace",
-  uiAgentEvent: "adjutorix:event:agent",
-  uiDiagnosticsEvent: "adjutorix:event:diagnostics",
-  uiPatchEvent: "adjutorix:event:patch",
-  uiVerifyEvent: "adjutorix:event:verify",
-} as const;
+const CHANNELS = BRIDGE_CHANNELS;
 
 const INVOKE_CHANNEL_ALLOWLIST = new Set<string>([
   CHANNELS.runtimeSnapshot,
