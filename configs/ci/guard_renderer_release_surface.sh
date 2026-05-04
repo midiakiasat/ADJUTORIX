@@ -8,7 +8,9 @@ cd "$ROOT"
 CONSTITUTION_CHECKER="${ROOT}/scripts/adjutorix-constitution-check.mjs"
 CONSTITUTION_REPORT="${ROOT}/.tmp/ci/guard_renderer_release_surface/constitution-report.json"
 
-echo "[guard:renderer_release_surface] constitution"
+printf '
+== Repository constitution preflight ==
+'
 test -x "$CONSTITUTION_CHECKER"
 node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT"
 
