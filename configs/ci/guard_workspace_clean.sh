@@ -9,10 +9,15 @@ set -Eeuo pipefail
 # - make workspace ambiguity explicit before any verify/replay/build step claims authoritative results
 # - provide one canonical cleanliness judgment for local and CI entrypoints
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT_DIR}/.tmp/ci/guard_workspace_clean/constitution-report.json"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_UNTRACKED="${STRICT_UNTRACKED:-1}"
 STRICT_IGNORED="${STRICT_IGNORED:-0}"
@@ -173,9 +178,21 @@ print_simple_table() {
 main() {
   section "Workspace cleanliness discipline"
   require_cmd git
+  require_cmd node
   require_repo_root
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  section "Repository constitution preflight"
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  run_constitution_output="$(node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT")"
+  printf '%s\n' "$run_constitution_output"
+
+  local allow_patterns=()
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -210,26 +227,33 @@ main() {
   done < <(collect_ignored_rows)
 
   for candidate in "${raw_status[@]:-}"; do
+    [[ -z "$candidate" ]] && continue
     meta="${candidate%%$'\t'*}"
     path="${candidate#*$'\t'}"
-    if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "$meta:$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "$meta:$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
     blocked_status+=("$candidate")
   done
 
   for path in "${raw_untracked[@]:-}"; do
     [[ -z "$path" ]] && continue
-    if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "untracked:$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "untracked:$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
     blocked_untracked+=("$path")
   done
 
   for path in "${raw_ignored[@]:-}"; do
     [[ -z "$path" ]] && continue
-    if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "ignored:$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path" "${allow_patterns[@]}" || matches_allowlist "ignored:$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
     blocked_ignored+=("$path")
   done
