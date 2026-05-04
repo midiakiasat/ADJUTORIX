@@ -9,10 +9,15 @@ set -Eeuo pipefail
 # - detect hidden time/order/randomness leakage in golden outputs, JSON payloads, and CLI/app replay surfaces
 # - provide explicit diff artifacts for every determinism failure rather than vague flaky-test claims
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${CONSTITUTION_REPORT:-$ROOT_DIR/.tmp/ci/guard_replay_determinism/constitution-report.json}"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 NPM_BIN="${NPM_BIN:-npm}"
@@ -74,6 +79,7 @@ require_dir() {
   [[ -d "$path" ]] || die "Required directory missing: $path"
 }
 
+
 load_allow_patterns() {
   local patterns=()
   if [[ -f "$ALLOWLIST_FILE" ]]; then
@@ -108,9 +114,57 @@ cleanup() {
 }
 trap cleanup EXIT
 
+require_repo_root() {
+  [[ -f "$ROOT_DIR/package.json" ]] || die "Missing package.json at repo root"
+  [[ -d "$ROOT_DIR/packages" ]] || die "Missing packages/ directory"
+}
+
+
+
+run_constitution_preflight() {
+  section "Repository constitution preflight"
+  require_file "$CONSTITUTION_CHECKER"
+  mkdir -p "$(dirname "$CONSTITUTION_REPORT")"
+  node "$CONSTITUTION_CHECKER" --root "$ROOT_DIR" --json --out "$CONSTITUTION_REPORT"
+}
+
+require_pytest_runner() {
+  if command -v "$PYTEST_BIN" >/dev/null 2>&1; then
+    PYTEST_RUNNER_KIND="bin"
+    return 0
+  fi
+  if "$PYTHON_BIN" -m pytest --version >/dev/null 2>&1; then
+    PYTEST_RUNNER_KIND="module"
+    return 0
+  fi
+  die "Required pytest runner not found: $PYTEST_BIN or $PYTHON_BIN -m pytest"
+}
+
+run_pytest() {
+  if [[ "${PYTEST_RUNNER_KIND:-}" == "module" ]]; then
+    "$PYTHON_BIN" -m pytest "$@"
+  else
+    "$PYTEST_BIN" "$@"
+  fi
+}
+
+detect_cli_pythonpath() {
+  local candidate
+  for candidate in \
+    "$ROOT_DIR/packages/adjutorix-cli/src" \
+    "$ROOT_DIR/packages/adjutorix-cli"
+  do
+    if [[ -d "$candidate/adjutorix_cli" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  die "Could not locate adjutorix_cli package import root"
+}
+
 assert_repo_shape() {
   section "Repository replay surfaces"
-  require_file "$ROOT_DIR/package.json"
+  require_repo_root
   require_dir "$ROOT_DIR/tests/replay"
   require_dir "$ROOT_DIR/tests/golden"
   require_dir "$ROOT_DIR/packages/adjutorix-cli/tests"
@@ -153,6 +207,17 @@ patterns = [
 for pattern, repl in patterns:
     text = re.sub(pattern, repl, text)
 
+
+# Normalize Vitest timing-only output noise while preserving test identity/counts.
+vitest_timing_patterns = [
+    (r'\((\d+) tests?\)\s+[0-9.]+ms', r'(\1 tests) TIMING'),
+    (r'(?m)^\s*Start at\s+.*$', '   Start at TIMESTAMP'),
+    (r'(?m)^\s*Duration\s+.*$', '   Duration TIMING'),
+    (r'(?m)^\s*(Transform|Setup|Collect|Tests|Environment|Prepare)\s+[0-9.]+ms.*$', r'\1 TIMING'),
+]
+for pattern, repl in vitest_timing_patterns:
+    text = re.sub(pattern, repl, text)
+
 # Normalize whitespace and line endings.
 text = text.replace('\r\n', '\n').replace('\r', '\n')
 text = '\n'.join(line.rstrip() for line in text.split('\n'))
@@ -165,19 +230,44 @@ capture_cli_replay_run() {
   local out_dir="$TMP_DIR/cli-$run_id"
   mkdir -p "$out_dir"
 
-  section "CLI replay determinism run $run_id"
+  section "CLI command-surface determinism run $run_id"
   (
-    cd "$ROOT_DIR/packages/adjutorix-cli"
-    "$PYTEST_BIN" -q tests/test_cli_replay.py > "$out_dir/test_cli_replay.raw.txt" 2>&1
-    "$PYTEST_BIN" -q tests/test_cli_verify.py > "$out_dir/test_cli_verify.raw.txt" 2>&1
+    cd "$ROOT_DIR"
+    export NO_COLOR=1
+    export CLICOLOR=0
+    export FORCE_COLOR=0
+    export TERM=dumb
+    export COLUMNS=120
+    export TZ=UTC
+    export LC_ALL=C
+    export LANG=C
+    export PYTHONHASHSEED=0
+    export PYTHONPATH="$(detect_cli_pythonpath)${PYTHONPATH:+:$PYTHONPATH}"
+
+    {
+      printf '%s
+' '### adjutorix root help'
+      "$PYTHON_BIN" -m adjutorix_cli.main --help
+
+      printf '%s
+' '### adjutorix verify help'
+      "$PYTHON_BIN" -m adjutorix_cli.main verify --help
+
+      printf '%s
+' '### adjutorix ledger help'
+      "$PYTHON_BIN" -m adjutorix_cli.main ledger --help
+
+      printf '%s
+' '### adjutorix patch help'
+      "$PYTHON_BIN" -m adjutorix_cli.main patch --help
+    } > "$out_dir/cli_surface.raw.txt" 2>&1
   )
 
-  normalize_text_file "$out_dir/test_cli_replay.raw.txt" "$out_dir/test_cli_replay.norm.txt"
-  normalize_text_file "$out_dir/test_cli_verify.raw.txt" "$out_dir/test_cli_verify.norm.txt"
-
-  cat "$out_dir/test_cli_replay.norm.txt" "$out_dir/test_cli_verify.norm.txt" > "$out_dir/combined.norm.txt"
+  normalize_text_file "$out_dir/cli_surface.raw.txt" "$out_dir/cli_surface.norm.txt"
+  cp "$out_dir/cli_surface.norm.txt" "$out_dir/combined.norm.txt"
   shasum -a 256 "$out_dir/combined.norm.txt" | awk '{print $1}' > "$out_dir/combined.sha256"
 }
+
 
 capture_app_replay_run() {
   local run_id="$1"
@@ -241,10 +331,41 @@ compare_pair() {
   return 0
 }
 
+record_violation() {
+  local surface="$1"
+  local diff_artifact="$2"
+  violations+=("${surface}"$'\t'"${diff_artifact}")
+}
+
+violation_surface() {
+  local record="$1"
+  case "$record" in
+    *$'	'*) printf '%s
+' "${record%%$'	'*}" ;;
+    *\t*) printf '%s
+' "${record%%\t*}" ;;
+    *) printf '%s
+' "$record" ;;
+  esac
+}
+
+violation_diff_artifact() {
+  local record="$1"
+  case "$record" in
+    *$'	'*) printf '%s
+' "${record#*$'	'}" ;;
+    *\t*) printf '%s
+' "${record#*\t}" ;;
+    *) printf '%s
+' "" ;;
+  esac
+}
+
 main() {
+  run_constitution_preflight
+  section "Replay determinism discipline"
   require_cmd git
   require_cmd "$PYTHON_BIN"
-  require_cmd "$PYTEST_BIN"
   require_cmd "$NPM_BIN"
   require_cmd shasum
   require_cmd diff
@@ -252,7 +373,14 @@ main() {
   assert_repo_shape
   prepare_tmp
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  local allow_patterns=()
+  local allow_patterns_count=0
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -299,7 +427,8 @@ main() {
   local blocked=()
   for candidate in "${findings[@]:-}"; do
     [[ -z "$candidate" ]] && continue
-    if matches_allowlist "$candidate" "${allow_patterns[@]}"; then
+  allow_patterns_count=${#allow_patterns[@]}
+    if [[ "${allow_patterns_count:-0}" -gt 0 ]] && matches_allowlist "$candidate" "${allow_patterns[@]}"; then
       continue
     fi
     blocked+=("$candidate")
