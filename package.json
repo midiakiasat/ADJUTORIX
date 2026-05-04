@@ -15,14 +15,15 @@
     "build": "turbo run build",
     "check": "bash ./scripts/check.sh",
     "clean": "bash ./scripts/clean.sh",
+    "constitution": "node scripts/adjutorix-constitution-check.mjs",
     "dev": "bash ./scripts/dev.sh",
     "doctor": "bash ./scripts/doctor.sh",
     "lint": "turbo run lint",
+    "package:macos": "bash ./scripts/package-macos.sh",
     "smoke": "bash ./scripts/smoke.sh",
     "test": "turbo run test",
-    "verify": "bash ./scripts/verify.sh",
-    "package:macos": "bash ./scripts/package-macos.sh",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "verify": "bash ./scripts/verify.sh"
   },
   "devDependencies": {
     "turbo": "^2.4.4",

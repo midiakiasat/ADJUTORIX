@@ -44,6 +44,7 @@ readonly START_TS
 : "${ADJUTORIX_VERIFY_RUN_AGENT_CHECKS:=true}"
 : "${ADJUTORIX_VERIFY_RUN_CLI_CHECKS:=true}"
 : "${ADJUTORIX_VERIFY_RUN_CONTRACT_GUARDS:=true}"
+: "${ADJUTORIX_VERIFY_RUN_CONSTITUTION_GUARDS:=true}"
 : "${ADJUTORIX_VERIFY_RUN_POLICY_GUARDS:=true}"
 : "${ADJUTORIX_VERIFY_RUN_RUNTIME_CONFIG_GUARDS:=true}"
 : "${ADJUTORIX_VERIFY_RUN_OBSERVABILITY_GUARDS:=true}"
@@ -64,6 +65,12 @@ readonly START_TS
 : "${ADJUTORIX_VERIFY_CLI_DIR:=${REPO_ROOT}/packages/adjutorix-cli}"
 : "${ADJUTORIX_VERIFY_CONTRACTS_DIR:=${REPO_ROOT}/configs/contracts}"
 export ADJUTORIX_VERIFY_CONTRACTS_DIR
+: "${ADJUTORIX_VERIFY_CONSTITUTION_PATH:=${REPO_ROOT}/configs/adjutorix/constitution.json}"
+: "${ADJUTORIX_VERIFY_CONSTITUTION_CHECKER:=${REPO_ROOT}/scripts/adjutorix-constitution-check.mjs}"
+: "${ADJUTORIX_VERIFY_CONSTITUTION_REPORT:=${ADJUTORIX_VERIFY_REPORT_DIR}/constitution-report.json}"
+export ADJUTORIX_VERIFY_CONSTITUTION_PATH
+export ADJUTORIX_VERIFY_CONSTITUTION_CHECKER
+export ADJUTORIX_VERIFY_CONSTITUTION_REPORT
 : "${ADJUTORIX_VERIFY_POLICY_DIR:=${REPO_ROOT}/configs/policy}"
 export ADJUTORIX_VERIFY_POLICY_DIR
 : "${ADJUTORIX_VERIFY_RUNTIME_DIR:=${REPO_ROOT}/configs/runtime}"
@@ -170,6 +177,7 @@ Named phases:
   toolchain
   git_state
   install
+  constitution
   contracts
   policy
   runtime_config
@@ -355,6 +363,8 @@ phase_repo_layout() {
   require_dir "$ADJUTORIX_VERIFY_RUNTIME_DIR"
   require_dir "$ADJUTORIX_VERIFY_OBSERVABILITY_DIR"
   require_file "$REPO_ROOT/package.json"
+  require_file "$ADJUTORIX_VERIFY_CONSTITUTION_PATH"
+  require_file "$ADJUTORIX_VERIFY_CONSTITUTION_CHECKER"
   require_file "$ADJUTORIX_VERIFY_CONTRACTS_DIR/rpc_capabilities.json"
   require_file "$ADJUTORIX_VERIFY_CONTRACTS_DIR/protocol_versions.json"
   require_file "$ADJUTORIX_VERIFY_CONTRACTS_DIR/patch_artifact.schema.json"
@@ -398,6 +408,10 @@ phase_git_state() {
 
 phase_install() {
   run_cmd_logged install bash -lc "cd '$REPO_ROOT' && ${INSTALL_CMD[*]}"
+}
+
+phase_constitution() {
+  run_cmd_logged constitution node "$ADJUTORIX_VERIFY_CONSTITUTION_CHECKER" --report "$ADJUTORIX_VERIFY_CONSTITUTION_REPORT"
 }
 
 phase_contracts() {
@@ -578,6 +592,9 @@ main() {
 
   if [[ "$ADJUTORIX_VERIFY_RUN_INSTALL" == "true" ]]; then
     run_phase install phase_install
+  fi
+  if [[ "$ADJUTORIX_VERIFY_RUN_CONSTITUTION_GUARDS" == "true" ]]; then
+    run_phase constitution phase_constitution
   fi
   if [[ "$ADJUTORIX_VERIFY_RUN_CONTRACT_GUARDS" == "true" ]]; then
     run_phase contracts phase_contracts
