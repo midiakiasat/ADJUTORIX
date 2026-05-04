@@ -121,10 +121,39 @@ collect_submodule_rows() {
   fi
 }
 
+constitution_stratum_for_path() {
+  local rel_path="${1#./}"
+  node "$ROOT_DIR/scripts/lib/constitution-classifier.mjs" "$ROOT_DIR" "$rel_path"
+}
+
 classify_path_risk() {
   local path="$1"
-  case "$path" in
-    dist/*|build/*|out/*|coverage/*|.tmp/*|tmp/*|node_modules/*|*.pyc|__pycache__/*|*.tsbuildinfo)
+  local rel_path="${path#./}"
+  local stratum
+
+  stratum="$(constitution_stratum_for_path "$rel_path" || printf 'unclassified')"
+
+  case "$stratum" in
+    "ephemeral/runtime"|"derived/build")
+      printf 'generated'
+      return 0
+      ;;
+    "release/distributable")
+      printf 'packaging'
+      return 0
+      ;;
+    "forbidden")
+      printf 'forbidden'
+      return 0
+      ;;
+    "authority/source"|"authority/tests"|"authority/config")
+      printf 'source'
+      return 0
+      ;;
+  esac
+
+  case "$rel_path" in
+    *.pyc|*.pyo|*.pyd|*.tsbuildinfo|*.swp|*.swo)
       printf 'generated'
       ;;
     *.dmg|*.pkg|*.app|*.zip|*.whl|*.tar.gz)
