@@ -1,8 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+ROOT_DIR="$ROOT"
 cd "$ROOT"
+
+readonly ROOT ROOT_DIR
+CONSTITUTION_CHECKER="${CONSTITUTION_CHECKER:-$ROOT_DIR/scripts/adjutorix-constitution-check.mjs}"
+CONSTITUTION_REPORT="${CONSTITUTION_REPORT:-$ROOT_DIR/.tmp/ci/guard_interaction_contract/constitution-report.json}"
+
+run_constitution_preflight() {
+  printf '\n== Repository constitution preflight ==\n'
+  if ! command -v node >/dev/null 2>&1; then
+    printf '%s\n' "[error] Required command not found: node" >&2
+    return 1
+  fi
+  if [[ ! -x "$CONSTITUTION_CHECKER" ]]; then
+    printf '%s\n' "[error] Missing executable constitution checker: $CONSTITUTION_CHECKER" >&2
+    return 1
+  fi
+  mkdir -p "$(dirname "$CONSTITUTION_REPORT")"
+  node "$CONSTITUTION_CHECKER" --root "$ROOT_DIR" --json --out "$CONSTITUTION_REPORT"
+}
+
+run_constitution_preflight
 
 echo "[guard:interaction_contract] no capture overlay"
 ./configs/ci/guard_renderer_release_surface.sh
