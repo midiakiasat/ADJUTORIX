@@ -9,10 +9,15 @@ set -Eeuo pipefail
 # - catch both tracked and untracked artifact residue that would make verification, diffs, and replay claims ambiguous
 # - provide deterministic, auditable reasons for every blocked artifact class
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT_DIR}/.tmp/ci/guard_generated_artifacts/constitution-report.json"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_TRACKED_CHECK="${STRICT_TRACKED_CHECK:-1}"
 STRICT_UNTRACKED_CHECK="${STRICT_UNTRACKED_CHECK:-1}"
@@ -200,9 +205,21 @@ print_dirty_blocked_table() {
 main() {
   section "Generated artifact discipline"
   require_cmd git
+  require_cmd node
   require_repo_root
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  section "Repository constitution preflight"
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  run_constitution_output="$(node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT")"
+  printf '%s\n' "$run_constitution_output"
+
+  local allow_patterns=()
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
