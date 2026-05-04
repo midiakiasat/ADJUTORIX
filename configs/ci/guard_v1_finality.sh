@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+cd "$REPO_ROOT"
+
+CONSTITUTION_CHECKER="${REPO_ROOT}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${REPO_ROOT}/.tmp/ci/guard_v1_finality/constitution-report.json"
+
+echo "[guard:v1_finality] constitution"
+test -x "$CONSTITUTION_CHECKER"
+node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT"
+
 echo "[guard:v1_finality] files"
 test -f FINALITY.md
 test -f configs/contracts/v1_finality_manifest.json
