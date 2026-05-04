@@ -48,6 +48,7 @@ export REPO_ROOT
 : "${ADJUTORIX_CHECK_RUN_APP_TYPECHECK:=true}"
 : "${ADJUTORIX_CHECK_RUN_AGENT_IMPORT_CHECK:=true}"
 : "${ADJUTORIX_CHECK_RUN_CLI_IMPORT_CHECK:=true}"
+: "${ADJUTORIX_CHECK_RUN_CONSTITUTION_GUARDS:=true}"
 : "${ADJUTORIX_CHECK_RUN_CONTRACT_GUARDS:=true}"
 : "${ADJUTORIX_CHECK_RUN_POLICY_GUARDS:=true}"
 : "${ADJUTORIX_CHECK_RUN_RUNTIME_CONFIG_GUARDS:=true}"
@@ -62,6 +63,12 @@ export REPO_ROOT
 : "${ADJUTORIX_CHECK_NODE_PACKAGE_MANAGER:=npm}"
 : "${ADJUTORIX_CHECK_PYTHON_BIN:=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3 || command -v python)}"
 export ADJUTORIX_CHECK_PYTHON_BIN
+: "${ADJUTORIX_CHECK_CONSTITUTION_PATH:=${REPO_ROOT}/configs/adjutorix/constitution.json}"
+: "${ADJUTORIX_CHECK_CONSTITUTION_CHECKER:=${REPO_ROOT}/scripts/adjutorix-constitution-check.mjs}"
+: "${ADJUTORIX_CHECK_CONSTITUTION_REPORT:=${ADJUTORIX_CHECK_REPORT_DIR}/constitution-report.json}"
+export ADJUTORIX_CHECK_CONSTITUTION_PATH
+export ADJUTORIX_CHECK_CONSTITUTION_CHECKER
+export ADJUTORIX_CHECK_CONSTITUTION_REPORT
 : "${ADJUTORIX_CHECK_APP_DIR:=${REPO_ROOT}/packages/adjutorix-app}"
 : "${ADJUTORIX_CHECK_AGENT_DIR:=${REPO_ROOT}/packages/adjutorix-agent}"
 : "${ADJUTORIX_CHECK_CLI_DIR:=${REPO_ROOT}/packages/adjutorix-cli}"
@@ -171,6 +178,7 @@ Named phases:
   toolchain
   git_state
   install
+  constitution
   manifests
   contracts
   policy
@@ -347,6 +355,8 @@ phase_repo_layout() {
   require_dir "$ADJUTORIX_CHECK_RUNTIME_DIR"
   require_dir "$ADJUTORIX_CHECK_OBSERVABILITY_DIR"
   require_file "$REPO_ROOT/package.json"
+  require_file "$ADJUTORIX_CHECK_CONSTITUTION_PATH"
+  require_file "$ADJUTORIX_CHECK_CONSTITUTION_CHECKER"
   require_file "$ADJUTORIX_CHECK_APP_DIR/package.json"
   require_file "$ADJUTORIX_CHECK_AGENT_DIR/pyproject.toml"
   require_file "$ADJUTORIX_CHECK_CLI_DIR/pyproject.toml"
@@ -371,6 +381,10 @@ phase_git_state() {
 
 phase_install() {
   run_cmd_logged install bash -lc "cd '$REPO_ROOT' && ${INSTALL_CMD[*]}"
+}
+
+phase_constitution() {
+  run_cmd_logged constitution node "$ADJUTORIX_CHECK_CONSTITUTION_CHECKER" --report "$ADJUTORIX_CHECK_CONSTITUTION_REPORT"
 }
 
 phase_manifests() {
@@ -591,6 +605,9 @@ main() {
 
   if [[ "$ADJUTORIX_CHECK_RUN_INSTALL" == "true" ]]; then
     run_phase install phase_install
+  fi
+  if [[ "$ADJUTORIX_CHECK_RUN_CONSTITUTION_GUARDS" == "true" ]]; then
+    run_phase constitution phase_constitution
   fi
   if [[ "$ADJUTORIX_CHECK_RUN_PACKAGE_MANIFEST_GUARDS" == "true" ]]; then
     run_phase manifests phase_manifests
