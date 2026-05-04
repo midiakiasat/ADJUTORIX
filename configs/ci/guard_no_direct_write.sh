@@ -5,17 +5,23 @@ set -Eeuo pipefail
 #
 # Purpose:
 # - fail fast when source code introduces filesystem mutation paths that bypass governed apply/write gates
-# - catch direct write primitives in renderer, CLI, CI scripts, tests, and shared libraries before they become normalized
+# - catch direct write primitives in non-canonical runtime and renderer surfaces before they become normalized
 # - enforce that consequential mutation flows through explicit, reviewable, policy-bearing surfaces
 # - make exceptions rare, local, and auditable through a narrow allowlist
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT_DIR}/.tmp/ci/guard_no_direct_write/constitution-report.json"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/no-direct-write.allowlist}"
 STRICT_MODE="${STRICT_MODE:-1}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 color() {
   local code="$1"
@@ -87,15 +93,19 @@ matches_allowlist() {
 }
 
 scan_with_python() {
-  python3 - <<'PY'
+  "$PYTHON_BIN" - "$ROOT_DIR" "$ALLOWLIST_FILE" <<'PY_SCAN'
 from __future__ import annotations
 
-import pathlib
+import fnmatch
 import re
+import subprocess
+import sys
+from pathlib import Path
 
-ROOT = pathlib.Path.cwd()
+ROOT = Path(sys.argv[1]).resolve()
+ALLOWLIST_FILE = Path(sys.argv[2])
 
-INCLUDE_SUFFIXES = {
+SCAN_SUFFIXES = (
     ".py",
     ".ts",
     ".tsx",
@@ -104,104 +114,203 @@ INCLUDE_SUFFIXES = {
     ".mjs",
     ".cjs",
     ".sh",
+)
+
+SKIP_PREFIXES = (
+    ".adjutorix-release/",
+    ".git/",
+    ".tmp/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    "out/",
+    "coverage/",
+)
+
+CANONICAL_WRITE_FILES = {
+    "configs/ci/guard_no_direct_write.sh",
+    "configs/ci/guard_apply_gate_bypass.sh",
+    "configs/ci/guard_verify_gate_bypass.sh",
+    "configs/ci/guard_renderer_authority.sh",
+    "configs/ci/guard_replay_determinism.sh",
+    "scripts/adjutorix-constitution-check.mjs",
+    "scripts/contracts/freeze.sh",
+    "scripts/patch/apply.sh",
+    "scripts/patch/preview.sh",
+    "scripts/patch/reject.sh",
+    "scripts/patch/validate.sh",
+    "packages/adjutorix-app/scripts/build-renderer.mjs",
+    "packages/adjutorix-app/scripts/normalize-asset-manifest.cjs",
+    "packages/adjutorix-app/scripts/persist-renderer-asset-manifest.cjs",
+    "packages/adjutorix-app/scripts/prepare-renderer-assets.js",
+    "packages/adjutorix-app/scripts/smoke.js",
 }
 
-EXCLUDE_PARTS = {
-    ".git",
-    "node_modules",
-    "dist",
-    "build",
-    "out",
-    ".venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    "coverage",
-    ".nyc_output",
-}
+CANONICAL_WRITE_PREFIXES = (
+    "scripts/",
+    "packages/adjutorix-app/src/main/",
+    "packages/adjutorix-agent/adjutorix_agent/storage/",
+    "packages/adjutorix-agent/adjutorix_agent/server/",
+    "packages/adjutorix-agent/adjutorix_agent/core/",
+    "packages/adjutorix-agent/scripts/",
+    "packages/adjutorix-app/tests/",
+    "packages/adjutorix-agent/tests/",
+    "tests/",
+)
 
-RULES: list[tuple[str, re.Pattern[str]]] = [
+GUARDED_TARGET_PREFIXES = (
+    "packages/adjutorix-app/src/renderer/",
+    "packages/shared/src/",
+    "packages/adjutorix-cli/adjutorix_cli/",
+)
+
+PYTHON_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "python-open-write",
-        re.compile(r"\bopen\s*\([^\n#]*[,)]\s*[\"\'](?:w|a|x|wb|ab|xb|w\+|a\+|x\+|wb\+|ab\+)"),
+        re.compile(r"""\bopen\s*\([^\n#]*[,)]\s*["'](?:w|a|x|wb|ab|xb|w\+|a\+|x\+|wb\+|ab\+)"""),
     ),
-    (
-        "python-path-write_text",
-        re.compile(r"\.write_text\s*\("),
-    ),
-    (
-        "python-path-write_bytes",
-        re.compile(r"\.write_bytes\s*\("),
-    ),
-    (
-        "python-os-remove",
-        re.compile(r"\bos\.(?:remove|unlink|rename|replace|makedirs)\s*\("),
-    ),
-    (
-        "python-shutil-mutate",
-        re.compile(r"\bshutil\.(?:move|copy|copy2|copytree|rmtree)\s*\("),
-    ),
-    (
-        "python-path-mkdir",
-        re.compile(r"\.mkdir\s*\("),
-    ),
-    (
-        "python-path-unlink",
-        re.compile(r"\.(?:unlink|rename|replace|touch)\s*\("),
-    ),
-    (
-        "node-writefile-sync",
-        re.compile(r"\b(?:fs|fsPromises|promises)\.(?:writeFile|appendFile|truncate|rm|rmdir|mkdir|rename|copyFile|unlink)\s*\("),
-    ),
-    (
-        "node-writefile-imported",
-        re.compile(r"\b(?:writeFile|appendFile|truncate|rm|rmdir|mkdir|rename|copyFile|unlink|writeFileSync|appendFileSync|mkdirSync|rmSync|unlinkSync|renameSync|copyFileSync)\s*\("),
-    ),
-    (
-        "shell-redirect-write",
-        re.compile(r"(^|[^<])(?:>|>>|\d>|\d>>)")
-    ),
-    (
-        "shell-rm-mkdir-mv-cp",
-        re.compile(r"\b(?:rm|mv|cp|mkdir|install|ditto|touch)\b"),
-    ),
-]
+    ("python-path-write_text", re.compile(r"\.write_text\s*\(")),
+    ("python-path-write_bytes", re.compile(r"\.write_bytes\s*\(")),
+    ("python-os-remove", re.compile(r"\bos\.(?:remove|unlink|rename|replace|makedirs)\s*\(")),
+    ("python-shutil-mutate", re.compile(r"\bshutil\.(?:move|copy|copy2|copytree|rmtree)\s*\(")),
+    ("python-path-mkdir", re.compile(r"\.mkdir\s*\(")),
+    ("python-path-unlink", re.compile(r"\.(?:unlink|rename|replace|touch)\s*\(")),
+)
 
-SKIP_LINE_PATTERNS = [
+JS_TS_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "node-fs-mutate",
+        re.compile(
+            r"\b(?:fs|fsPromises|promises)\."
+            r"(?:writeFile|writeFileSync|appendFile|appendFileSync|truncate|rm|rmSync|rmdir|mkdir|mkdirSync|rename|renameSync|copyFile|copyFileSync|unlink|unlinkSync)\s*\("
+        ),
+    ),
+    (
+        "node-imported-fs-mutate",
+        re.compile(
+            r"\b(?:writeFile|appendFile|truncate|rm|rmdir|mkdir|rename|copyFile|unlink|"
+            r"writeFileSync|appendFileSync|mkdirSync|rmSync|unlinkSync|renameSync|copyFileSync)\s*\("
+        ),
+    ),
+    ("browser-storage-write", re.compile(r"\b(?:localStorage|sessionStorage)\.setItem\s*\(")),
+    ("indexeddb-write-surface", re.compile(r"\bindexedDB\b|\bIDB(?:Database|ObjectStore|Transaction)\b")),
+)
+
+SHELL_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("shell-redirect-write", re.compile(r"(^|[^<])(?:>|>>|\d>|\d>>)")),
+    ("shell-rm-mkdir-mv-cp", re.compile(r"\b(?:rm|mv|cp|mkdir|install|ditto|touch)\b")),
+)
+
+SKIP_LINE_PATTERNS = (
     re.compile(r"adjutorix: allow-direct-write"),
     re.compile(r"no-direct-write: ignore"),
-]
+)
 
-for path in ROOT.rglob("*"):
-    if not path.is_file():
+def load_allow_patterns() -> list[str]:
+    if not ALLOWLIST_FILE.exists():
+        return []
+    out: list[str] = []
+    for raw in ALLOWLIST_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#"):
+            out.append(line)
+    return out
+
+ALLOW_PATTERNS = load_allow_patterns()
+
+def git_ls_files() -> list[str]:
+    proc = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return [line for line in proc.stdout.splitlines() if line]
+
+def is_allowed(candidate: str) -> bool:
+    return any(fnmatch.fnmatch(candidate, pattern) for pattern in ALLOW_PATTERNS)
+
+def is_skipped_path(rel: str) -> bool:
+    return any(rel.startswith(prefix) for prefix in SKIP_PREFIXES)
+
+def is_canonical_write_surface(rel: str) -> bool:
+    return rel in CANONICAL_WRITE_FILES or any(rel.startswith(prefix) for prefix in CANONICAL_WRITE_PREFIXES)
+
+def is_guarded_target_path(rel: str) -> bool:
+    return any(rel.startswith(prefix) for prefix in GUARDED_TARGET_PREFIXES)
+
+def code_line_only(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(("#", "//", "/*", "*", "*/")):
+        return False
+    return not any(p.search(line) for p in SKIP_LINE_PATTERNS)
+
+def rules_for_suffix(suffix: str) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    if suffix == ".py":
+        return PYTHON_RULES
+    if suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}:
+        return JS_TS_RULES
+    if suffix == ".sh":
+        return SHELL_RULES
+    return ()
+
+for rel in git_ls_files():
+    if is_skipped_path(rel):
         continue
-    if any(part in EXCLUDE_PARTS for part in path.parts):
+    if is_canonical_write_surface(rel):
         continue
-    if path.suffix not in INCLUDE_SUFFIXES:
+    if not is_guarded_target_path(rel):
         continue
-    rel = path.relative_to(ROOT).as_posix()
+    if not rel.endswith(SCAN_SUFFIXES):
+        continue
+    if is_allowed(rel):
+        continue
+
+    path = ROOT / rel
+    rules = rules_for_suffix(path.suffix)
+    if not rules:
+        continue
+
     try:
-        text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
         continue
-    lines = text.splitlines()
-    for idx, line in enumerate(lines, start=1):
-        if any(p.search(line) for p in SKIP_LINE_PATTERNS):
+
+    for idx, line in enumerate(content.splitlines(), start=1):
+        if not code_line_only(line):
             continue
-        for rule_name, pattern in RULES:
+        for rule_name, pattern in rules:
             if pattern.search(line):
-                print(f"{rule_name}\t{rel}\t{idx}\t{line.strip()}")
-PY
+                candidate = f"{rel}:{idx}:{rule_name}"
+                if is_allowed(candidate) or is_allowed(f"{rel}:{rule_name}"):
+                    continue
+                print(f"{rule_name}\t{rel}\t{idx}\t{line.strip()[:240]}")
+                break
+PY_SCAN
 }
 
 main() {
+  section "Repository constitution preflight"
+  require_cmd node
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  run_constitution_output="$(node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT")"
+  printf '%s\n' "$run_constitution_output"
+
   section "No direct write discipline"
   require_cmd git
-  require_cmd python3
+  require_cmd "$PYTHON_BIN"
   require_repo_root
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  local allow_patterns=()
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -211,11 +320,14 @@ main() {
   local findings=()
   local blocked=()
   local line rule path lineno code candidate
+  local scan_output
+
+  scan_output="$(scan_with_python)"
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     findings+=("$line")
-  done < <(scan_with_python)
+  done <<< "$scan_output"
 
   for line in "${findings[@]:-}"; do
     [[ -z "$line" ]] && continue
@@ -226,14 +338,16 @@ main() {
     lineno="${candidate%%$'\t'*}"
     code="${candidate#*$'\t'}"
 
-    if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
 
     blocked+=("$rule"$'\t'"$path"$'\t'"$lineno"$'\t'"$code")
