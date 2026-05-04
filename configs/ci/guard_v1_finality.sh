@@ -2,11 +2,39 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+ROOT="$ROOT_DIR"
+cd "$ROOT_DIR"
+
+readonly SCRIPT_DIR
+readonly ROOT_DIR
+readonly ROOT
+
+CONSTITUTION_CHECKER="${CONSTITUTION_CHECKER:-$ROOT_DIR/scripts/adjutorix-constitution-check.mjs}"
+CONSTITUTION_REPORT="${CONSTITUTION_REPORT:-$ROOT_DIR/.tmp/ci/guard_v1_finality/constitution-report.json}"
+
+run_constitution_preflight() {
+  printf '\n== Repository constitution preflight ==\n'
+  if ! command -v node >/dev/null 2>&1; then
+    printf '%s\n' "[error] Required command not found: node" >&2
+    return 1
+  fi
+  if [[ ! -x "$CONSTITUTION_CHECKER" ]]; then
+    printf '%s\n' "[error] Missing executable constitution checker: $CONSTITUTION_CHECKER" >&2
+    return 1
+  fi
+  mkdir -p "$(dirname "$CONSTITUTION_REPORT")"
+  node "$CONSTITUTION_CHECKER" --root "$ROOT_DIR" --json --out "$CONSTITUTION_REPORT"
+}
+
+
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$REPO_ROOT"
 
 CONSTITUTION_CHECKER="${REPO_ROOT}/scripts/adjutorix-constitution-check.mjs"
 CONSTITUTION_REPORT="${REPO_ROOT}/.tmp/ci/guard_v1_finality/constitution-report.json"
+
+run_constitution_preflight
 
 echo "[guard:v1_finality] constitution"
 test -x "$CONSTITUTION_CHECKER"
