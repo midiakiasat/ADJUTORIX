@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT"
+
+CONSTITUTION_CHECKER="${ROOT}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT}/.tmp/ci/guard_renderer_release_surface/constitution-report.json"
+
+echo "[guard:renderer_release_surface] constitution"
+test -x "$CONSTITUTION_CHECKER"
+node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT"
 
 echo "[guard:renderer_release_surface] no runtime sanitizer import"
 IMPORT_BAD="$(
