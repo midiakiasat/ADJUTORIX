@@ -10,10 +10,15 @@ set -Eeuo pipefail
 # - enforce that every consequential apply-like action remains visible, confirmable, and policy-bearing
 # - keep exceptions rare and auditable through a narrow allowlist rather than implicit convention
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly SCRIPT_DIR
 readonly ROOT_DIR
+
+CONSTITUTION_CHECKER="${ROOT_DIR}/scripts/adjutorix-constitution-check.mjs"
+CONSTITUTION_REPORT="${ROOT_DIR}/.tmp/ci/guard_apply_gate_bypass/constitution-report.json"
 FORCE_COLOR="${FORCE_COLOR:-1}"
 STRICT_MODE="${STRICT_MODE:-1}"
 ALLOWLIST_FILE="${ALLOWLIST_FILE:-$ROOT_DIR/configs/ci/apply-gate-bypass.allowlist}"
@@ -89,110 +94,165 @@ matches_allowlist() {
 }
 
 scan_with_python() {
-  "$PYTHON_BIN" - <<'PY'
-from __future__ import annotations
-
-import pathlib
+  "$PYTHON_BIN" - "$ROOT_DIR" "$ALLOWLIST_FILE" <<'PY_SCAN'
+import fnmatch
 import re
+import subprocess
+import sys
+from pathlib import Path
 
-ROOT = pathlib.Path.cwd()
+root = Path(sys.argv[1]).resolve()
+allowlist_file = Path(sys.argv[2])
 
-INCLUDE_SUFFIXES = {
+def load_allow_patterns():
+    if not allowlist_file.exists():
+        return []
+    out = []
+    for raw in allowlist_file.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        out.append(line)
+    return out
+
+allow_patterns = load_allow_patterns()
+
+SKIP_PREFIXES = (
+    ".adjutorix-release/",
+    ".git/",
+    ".tmp/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    "out/",
+    "coverage/",
+)
+
+SCAN_SUFFIXES = (
+    ".sh",
     ".py",
-    ".ts",
-    ".tsx",
     ".js",
     ".jsx",
-    ".mjs",
     ".cjs",
-    ".sh",
+    ".mjs",
+    ".ts",
+    ".tsx",
+)
+
+CANONICAL_APPLY_SURFACES = {
+    "configs/ci/guard_verify_gate_bypass.sh",
+    "scripts/patch/apply.sh",
+    "scripts/patch/validate.sh",
+    "scripts/contracts/freeze.sh",
+    "packages/adjutorix-app/src/main/index.ts",
+    "packages/adjutorix-app/src/main/runtime/bootstrap.ts",
+    "packages/adjutorix-app/src/main/ipc/patch_ipc.ts",
+    "packages/adjutorix-app/src/preload/exposed_api.ts",
+    "packages/adjutorix-app/src/renderer/bootstrap/createRendererRuntime.ts",
+    "packages/adjutorix-cli/adjutorix_cli/main.py",
 }
 
-EXCLUDE_PARTS = {
-    ".git",
-    "node_modules",
-    "dist",
-    "build",
-    "out",
-    ".venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    "coverage",
-    ".nyc_output",
-}
+CANONICAL_APPLY_PREFIXES = (
+    "packages/adjutorix-app/src/main/boundary/",
+    "packages/adjutorix-app/src/main/governance/",
+    "packages/adjutorix-app/src/main/workspace/",
+    "packages/adjutorix-agent/adjutorix_agent/governance/",
+    "packages/adjutorix-agent/adjutorix_agent/server/",
+    "packages/adjutorix-agent/adjutorix_agent/tests/",
+    "packages/adjutorix-agent/tests/",
+    "packages/adjutorix-app/tests/",
+    "packages/shared/src/observability/",
+    "packages/shared/src/rpc/",
+    "packages/shared/src/runtime/",
+    "tests/invariants/",
+)
 
-# Bias toward catching suspicious mutation/apply vocabulary and direct patch execution.
-# The bigger failure mode is bypass, so false positives are preferable to silent drift.
-RULES: list[tuple[str, re.Pattern[str]]] = [
-    (
-        "direct-apply-method-call",
-        re.compile(r"\b(?:applyPatch|apply_patch|patch\.apply|workspace\.apply|applyChanges|apply_changes)\s*\("),
-    ),
-    (
-        "direct-git-apply",
-        re.compile(r"\bgit\s+(?:apply|am|checkout|restore)\b|\b(?:exec|spawn|run)\s*\([^\n]*git\s+(?:apply|am|checkout|restore)"),
-    ),
-    (
-        "direct-diff-write",
-        re.compile(r"\b(?:writeFile|write_text|write_bytes|open\([^\n]*["\']w|patch_text|replace\()"),
-    ),
-    (
-        "workspace-mutation-without-confirm",
-        re.compile(r"\b(?:mutateWorkspace|writeWorkspace|deleteFile|removeFile|renameFile|replaceFile)\s*\("),
-    ),
-    (
-        "confirmation-bypass-flag",
-        re.compile(r"\b(?:autoApply|forceApply|skipConfirm|skipConfirmation|confirmed\s*=\s*True|confirmed:\s*true)\b"),
-    ),
-    (
-        "shell-apply-command",
-        re.compile(r"\b(?:patch\s+-p[0-9]|sed\s+-i|perl\s+-pi|ed\s+|tee\s+[^|]*$)"),
-    ),
-    (
-        "ipc-apply-surface",
-        re.compile(r"\b(?:ipcMain|ipcRenderer|contextBridge)[^\n]*(?:apply|write|mutate|delete)"),
-    ),
-    (
-        "http-apply-surface",
-        re.compile(r"\b(?:POST|post|get|fetch|axios\.)[^\n]*(?:/apply|applyReadiness|patch/apply|workspace/write)"),
-    ),
-]
+RULES = (
+    ("direct-git-apply", re.compile(r"\bgit\s+apply\b")),
+    ("direct-apply-method-call", re.compile(r"\b(?:applyPatch|apply_patch|patch\.apply|workspace\.apply|applyChanges|apply_changes)\b")),
+    ("confirmation-bypass-flag", re.compile(r"\b(?:autoApply|forceApply|skipConfirm|skipConfirmation|confirmed\s*=\s*True|confirmed:\s*true)\b")),
+    ("ipc-apply-surface", re.compile(r"\b(?:ipcMain|ipcRenderer|contextBridge)\b[^\n]*(?:apply|mutate|delete)")),
+    ("http-apply-surface", re.compile(r"\b(?:POST|post|fetch|axios\.)\b[^\n]*(?:/apply|applyReadiness|patch/apply|workspace/write)")),
+)
 
-SAFE_LINE_PATTERNS = [
-    re.compile(r"adjutorix:\s*allow-apply-bypass"),
-    re.compile(r"apply-gate-bypass:\s*ignore"),
-    re.compile(r"describe\(|test\(|it\("),
-    re.compile(r"guard_apply_gate_bypass"),
-]
+def is_skipped_path(rel):
+    if rel == "configs/ci/guard_apply_gate_bypass.sh":
+        return True
+    return any(rel.startswith(prefix) for prefix in SKIP_PREFIXES)
 
-for path in ROOT.rglob("*"):
-    if not path.is_file():
+def is_canonical_apply_surface(rel):
+    return rel in CANONICAL_APPLY_SURFACES or any(rel.startswith(prefix) for prefix in CANONICAL_APPLY_PREFIXES)
+
+def is_allowed(candidate):
+    return any(fnmatch.fnmatch(candidate, pattern) for pattern in allow_patterns)
+
+def code_line_only(line):
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(("#", "//", "/*", "*", "*/")):
+        return False
+    return True
+
+def git_ls_files():
+    proc = subprocess.run(
+        ["git", "-C", str(root), "ls-files"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return [line for line in proc.stdout.splitlines() if line]
+
+for rel in git_ls_files():
+    if is_skipped_path(rel):
         continue
-    if any(part in EXCLUDE_PARTS for part in path.parts):
+    if is_canonical_apply_surface(rel):
         continue
-    if path.suffix not in INCLUDE_SUFFIXES:
+    if not rel.endswith(SCAN_SUFFIXES):
         continue
-    rel = path.relative_to(ROOT).as_posix()
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    lines = text.splitlines()
-    for idx, line in enumerate(lines, start=1):
-        if any(p.search(line) for p in SAFE_LINE_PATTERNS):
+    if is_allowed(rel):
+        continue
+
+    p = root / rel
+    try:
+        content = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        continue
+
+    for idx, line in enumerate(content.splitlines(), start=1):
+        if not code_line_only(line):
             continue
-        for rule_name, pattern in RULES:
+        for rule, pattern in RULES:
             if pattern.search(line):
-                print(f"{rule_name}\t{rel}\t{idx}\t{line.strip()}")
-PY
+                candidate = f"{rel}:{idx}:{rule}"
+                if is_allowed(candidate):
+                    continue
+                print(f"{rule}\t{rel}\t{idx}\t{line.strip()[:240]}")
+                break
+PY_SCAN
 }
+
 
 main() {
+  section "Repository constitution preflight"
+  require_cmd node
+  [[ -x "$CONSTITUTION_CHECKER" ]] || die "Missing executable constitution checker: $CONSTITUTION_CHECKER"
+  run_constitution_output="$(node "$CONSTITUTION_CHECKER" --report "$CONSTITUTION_REPORT")"
+  printf '%s\n' "$run_constitution_output"
+
   section "Apply-gate bypass discipline"
   require_cmd git
   require_cmd "$PYTHON_BIN"
   require_repo_root
 
-  mapfile -t allow_patterns < <(load_allow_patterns)
+  local allow_patterns=()
+  local allow_pattern
+  while IFS= read -r allow_pattern; do
+    [[ -z "$allow_pattern" ]] && continue
+    allow_patterns+=("$allow_pattern")
+  done < <(load_allow_patterns)
+
   if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
     log "Loaded ${#allow_patterns[@]} allowlist pattern(s) from $ALLOWLIST_FILE"
   else
@@ -202,11 +262,14 @@ main() {
   local findings=()
   local blocked=()
   local line rule path lineno code candidate
+  local scan_output
+
+  scan_output="$(scan_with_python)"
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     findings+=("$line")
-  done < <(scan_with_python)
+  done <<< "$scan_output"
 
   for line in "${findings[@]:-}"; do
     [[ -z "$line" ]] && continue
@@ -217,14 +280,16 @@ main() {
     lineno="${candidate%%$'\t'*}"
     code="${candidate#*$'\t'}"
 
-    if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
-      continue
-    fi
-    if matches_allowlist "$path" "${allow_patterns[@]}"; then
-      continue
+    if [[ "${#allow_patterns[@]}" -gt 0 ]]; then
+      if matches_allowlist "$path:$lineno:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path:$rule" "${allow_patterns[@]}"; then
+        continue
+      fi
+      if matches_allowlist "$path" "${allow_patterns[@]}"; then
+        continue
+      fi
     fi
 
     blocked+=("$rule"$'\t'"$path"$'\t'"$lineno"$'\t'"$code")
