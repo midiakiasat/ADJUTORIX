@@ -36,6 +36,7 @@ git -C "$ROOT_DIR" worktree add --detach "$WT" HEAD >/dev/null
 GUARD="./configs/ci/guard_ipc_channel_registry.sh"
 case_count=0
 refresh_case_count=0
+report_artifact_case_count=0
 
 reset_wt() {
   git -C "$WT" reset --hard HEAD >/dev/null
@@ -112,6 +113,85 @@ PY_REFRESH_ASSERT
   grep -F '"contractHashUpdateMode": true' "$log" >/dev/null
   printf '[guard:ipc_channel_registry_selftest] refresh pass: %s\n' "$name"
 }
+
+expect_report_artifacts() {
+  local name="$1"
+  local case_root="$SELFTEST_ROOT/$name"
+  local default_report="$WT/.tmp/ci/ipc_channel_registry/report.json"
+  local relative_report="relative-ipc-channel-registry-report.json"
+  local absolute_report="$case_root/absolute-ipc-channel-registry-report.json"
+
+  report_artifact_case_count=$((report_artifact_case_count + 1))
+
+  reset_wt
+  rm -rf "$case_root"
+  mkdir -p "$case_root"
+  rm -f "$default_report" "$WT/$relative_report" "$absolute_report"
+
+  (
+    cd "$WT"
+    bash configs/ci/guard_ipc_channel_registry.sh >"$LOG_DIR/${name}-default.log" 2>&1
+  )
+
+  (
+    cd "$WT"
+    ADJUTORIX_IPC_CHANNEL_REGISTRY_REPORT="$relative_report" \
+      bash configs/ci/guard_ipc_channel_registry.sh >"$LOG_DIR/${name}-relative.log" 2>&1
+  )
+
+  (
+    cd "$WT"
+    ADJUTORIX_IPC_CHANNEL_REGISTRY_REPORT="$absolute_report" \
+      bash configs/ci/guard_ipc_channel_registry.sh >"$LOG_DIR/${name}-absolute.log" 2>&1
+  )
+
+  python3 - "$default_report" "$WT/$relative_report" "$absolute_report" <<'PY_REPORT_ASSERT'
+import json
+import re
+import sys
+from pathlib import Path
+
+paths = [Path(value) for value in sys.argv[1:]]
+reports = []
+
+for path in paths:
+    if not path.is_file():
+        raise SystemExit(f"missing report artifact: {path}")
+    data = json.loads(path.read_text())
+    reports.append(data)
+
+hashes = {data.get("contractHash") for data in reports}
+if len(hashes) != 1:
+    raise SystemExit("report artifact contract hashes differ")
+
+required = {
+    "taxonomyManifest",
+    "contractHashManifest",
+    "contractHash",
+    "contractHashAlgorithm",
+    "contractHashUpdateMode",
+    "mainRegistryChannelCount",
+    "bridgeRegistryChannelCount",
+    "domainRegistryChannelCount",
+    "ipcGuardChannelCount",
+}
+
+for data in reports:
+    missing = sorted(required - set(data))
+    if missing:
+        raise SystemExit(f"report artifact missing keys: {missing}")
+    if data["contractHashAlgorithm"] != "sha256:ipc-channel-registry-v1":
+        raise SystemExit("unexpected contract hash algorithm")
+    if data["contractHashUpdateMode"] is not False:
+        raise SystemExit("report artifact should record normal update mode as false")
+    if not isinstance(data["contractHash"], str) or not re.fullmatch(r"[0-9a-f]{64}", data["contractHash"]):
+        raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
+PY_REPORT_ASSERT
+
+  printf '[guard:ipc_channel_registry_selftest] report artifact pass: %s
+' "$name"
+}
+
 
 mutate_bridge_unknown() {
   cat >>"$WT/packages/adjutorix-app/src/preload/bridge.ts" <<'EOF'
@@ -201,6 +281,7 @@ PY
 }
 
 run_baseline
+expect_report_artifacts "machine_report_artifacts"
 expect_fail "bridge_unknown" "unsanctioned bridge-only channels" mutate_bridge_unknown
 expect_fail "bridge_manifest_stale" "sanctioned bridge-only compatibility set is stale" mutate_bridge_manifest_stale
 expect_fail "domain_unknown" "unsanctioned domain-only IPC channels" mutate_domain_unknown
@@ -213,25 +294,27 @@ expect_refresh "contract_hash_manifest_refresh" mutate_contract_hash_manifest_st
 
 reset_wt
 
-python3 - "$case_count" "$refresh_case_count" "$LOG_DIR" "$SUMMARY" <<'PY'
+python3 - "$case_count" "$refresh_case_count" "$report_artifact_case_count" "$LOG_DIR" "$SUMMARY" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 negative_case_count = int(sys.argv[1])
 refresh_case_count = int(sys.argv[2])
-summary_path = Path(sys.argv[4])
+report_artifact_case_count = int(sys.argv[3])
+summary_path = Path(sys.argv[5])
 summary = {
     "ok": True,
     "negativeCaseCount": negative_case_count,
     "refreshCaseCount": refresh_case_count,
-    "totalCaseCount": negative_case_count + refresh_case_count,
-    "logDir": sys.argv[3],
+    "reportArtifactCaseCount": report_artifact_case_count,
+    "totalCaseCount": negative_case_count + refresh_case_count + report_artifact_case_count,
+    "logDir": sys.argv[4],
     "summaryPath": str(summary_path),
 }
 summary_text = json.dumps(summary, indent=2, sort_keys=True)
 summary_path.parent.mkdir(parents=True, exist_ok=True)
-summary_path.write_text(summary_text + "\\n", encoding="utf-8")
+summary_path.write_text(summary_text + "\n", encoding="utf-8")
 print(summary_text)
 PY
 

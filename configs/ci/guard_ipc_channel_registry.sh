@@ -382,7 +382,7 @@ report_path = Path(report_path_value) if report_path_value else root / ".tmp/ci/
 if not report_path.is_absolute():
     report_path = root / report_path
 report_path.parent.mkdir(parents=True, exist_ok=True)
-report_path.write_text(report_text + "\\n", encoding="utf-8")
+report_path.write_text(report_text + "\n", encoding="utf-8")
 print(report_text)
 print("preload boundary raw Electron authority confined")
 PY
