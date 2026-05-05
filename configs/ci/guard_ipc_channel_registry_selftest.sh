@@ -169,6 +169,7 @@ required = {
     "contractHashManifest",
     "contractHash",
     "contractHashAlgorithm",
+    "reportSchemaVersion",
     "contractHashUpdateMode",
     "mainRegistryChannelCount",
     "bridgeRegistryChannelCount",
@@ -182,14 +183,15 @@ for data in reports:
         raise SystemExit(f"report artifact missing keys: {missing}")
     if data["contractHashAlgorithm"] != "sha256:ipc-channel-registry-v1":
         raise SystemExit("unexpected contract hash algorithm")
+    if data["reportSchemaVersion"] != "ipc-channel-registry-report-v1":
+        raise SystemExit("unexpected report schema version")
     if data["contractHashUpdateMode"] is not False:
         raise SystemExit("report artifact should record normal update mode as false")
     if not isinstance(data["contractHash"], str) or not re.fullmatch(r"[0-9a-f]{64}", data["contractHash"]):
         raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
 PY_REPORT_ASSERT
 
-  printf '[guard:ipc_channel_registry_selftest] report artifact pass: %s
-' "$name"
+  printf '[guard:ipc_channel_registry_selftest] report artifact pass: %s\n' "$name"
 }
 
 
