@@ -118,6 +118,7 @@ ipc_guard = channels_in("packages/adjutorix-app/src/main/boundary/ipc_guard.ts")
 runtime_bootstrap = channels_in("packages/adjutorix-app/src/main/runtime/bootstrap.ts")
 domain_registries = {rel: channels_in(rel) for rel in domain_registry_rels}
 domain_registry = set().union(*domain_registries.values())
+
 main_index_text = read("packages/adjutorix-app/src/main/index.ts")
 main_index_handlers = set(
     re.findall(r'(?:safeHandle|registerLegacyCompatHandler)\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', main_index_text)
@@ -125,6 +126,49 @@ main_index_handlers = set(
 main_index_safe_handlers = set(
     re.findall(r'safeHandle\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', main_index_text)
 )
+main_index_legacy_handlers = main_index_handlers - main_index_safe_handlers
+
+sanctioned_legacy_main_index_handlers = {
+    "adjutorix:runtime:snapshot",
+    "adjutorix:workspace:health",
+    "adjutorix:agent:health",
+    "adjutorix:diagnostics:runtimeSnapshot",
+}
+
+sanctioned_domain_only_by_file = {
+    "packages/adjutorix-app/src/main/ipc/agent_ipc.ts": {
+        "adjutorix:agent:health",
+        "adjutorix:agent:status",
+        "adjutorix:agent:start",
+        "adjutorix:agent:stop",
+    },
+    "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts": {
+        "adjutorix:diagnostics:runtimeSnapshot",
+        "adjutorix:diagnostics:startupReport",
+        "adjutorix:diagnostics:observabilityBundle",
+        "adjutorix:diagnostics:logTail",
+        "adjutorix:diagnostics:crashContext",
+        "adjutorix:diagnostics:exportBundle",
+    },
+    "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts": {
+        "adjutorix:ledger:timeline",
+        "adjutorix:ledger:entry",
+        "adjutorix:ledger:heads",
+        "adjutorix:ledger:stats",
+    },
+    "packages/adjutorix-app/src/main/ipc/patch_ipc.ts": {
+        "adjutorix:patch:bindVerify",
+        "adjutorix:patch:approvePreview",
+        "adjutorix:patch:clearPreviewState",
+    },
+    "packages/adjutorix-app/src/main/ipc/verify_ipc.ts": {
+        "adjutorix:verify:bindResult",
+        "adjutorix:verify:clearState",
+    },
+    "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts": {
+        "adjutorix:workspace:close",
+    },
+}
 
 sanctioned_bridge_compat_only = {
     "adjutorix:workspace:reveal",
@@ -170,6 +214,45 @@ if unknown_safe_handle_channels:
         + json.dumps(unknown_safe_handle_channels, sort_keys=True)
     )
 
+unknown_legacy_handlers = sorted(main_index_legacy_handlers - sanctioned_legacy_main_index_handlers)
+missing_legacy_handlers = sorted(sanctioned_legacy_main_index_handlers - main_index_legacy_handlers)
+if unknown_legacy_handlers:
+    raise SystemExit(
+        "main/index.ts has unsanctioned legacy compatibility handlers: "
+        + json.dumps(unknown_legacy_handlers, sort_keys=True)
+    )
+if missing_legacy_handlers:
+    raise SystemExit(
+        "main/index.ts legacy compatibility handler taxonomy is stale; missing active handlers: "
+        + json.dumps(missing_legacy_handlers, sort_keys=True)
+    )
+
+domain_only_by_file = {
+    rel: values - main_registry
+    for rel, values in domain_registries.items()
+}
+for rel, expected in sanctioned_domain_only_by_file.items():
+    actual = domain_only_by_file.get(rel, set())
+    unknown = sorted(actual - expected)
+    missing = sorted(expected - actual)
+    if unknown:
+        raise SystemExit(
+            f"{rel} has unsanctioned domain-only IPC channels: "
+            + json.dumps(unknown, sort_keys=True)
+        )
+    if missing:
+        raise SystemExit(
+            f"{rel} domain-only IPC taxonomy is stale; missing active channels: "
+            + json.dumps(missing, sort_keys=True)
+        )
+
+untracked_domain_files = sorted(set(domain_only_by_file) - set(sanctioned_domain_only_by_file))
+if untracked_domain_files:
+    raise SystemExit(
+        "domain IPC registry file missing from domain-only taxonomy: "
+        + json.dumps(untracked_domain_files, sort_keys=True)
+    )
+
 authoritative_bridge_carriers = main_registry | domain_registry | main_index_handlers
 bridge_compat_only = bridge_registry - authoritative_bridge_carriers
 unknown_bridge_channels = sorted(bridge_compat_only - sanctioned_bridge_compat_only)
@@ -193,8 +276,12 @@ print(json.dumps(
         "domainRegistryChannelCount": len(domain_registry),
         "mainIndexHandlerChannelCount": len(main_index_handlers),
         "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
+        "mainIndexLegacyHandlerCount": len(main_index_legacy_handlers),
+        "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
         "ipcGuardChannelCount": len(ipc_guard),
         "runtimeBootstrapChannelCount": len(runtime_bootstrap),
+        "domainOnlyChannelCount": sum(len(v) for v in domain_only_by_file.values()),
+        "domainOnlyChannelsByFile": {rel: sorted(values) for rel, values in sorted(domain_only_by_file.items())},
         "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
         "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
         "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
