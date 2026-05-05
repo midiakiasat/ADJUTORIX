@@ -378,10 +378,11 @@ report = {
 }
 report_text = json.dumps(report, indent=2, sort_keys=True)
 report_path_value = os.environ.get("ADJUTORIX_IPC_CHANNEL_REGISTRY_REPORT")
-if report_path_value:
-    report_path = Path(report_path_value)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(report_text + "\\n", encoding="utf-8")
+report_path = Path(report_path_value) if report_path_value else root / ".tmp/ci/ipc_channel_registry/report.json"
+if not report_path.is_absolute():
+    report_path = root / report_path
+report_path.parent.mkdir(parents=True, exist_ok=True)
+report_path.write_text(report_text + "\\n", encoding="utf-8")
 print(report_text)
 print("preload boundary raw Electron authority confined")
 PY
