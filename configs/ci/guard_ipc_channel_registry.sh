@@ -53,6 +53,13 @@ section "IPC channel registry sovereignty"
 require_file "packages/adjutorix-app/src/main/ipc/channels.ts"
 require_file "packages/adjutorix-app/src/main/boundary/ipc_guard.ts"
 require_file "packages/adjutorix-app/src/main/runtime/bootstrap.ts"
+require_file "packages/adjutorix-app/src/main/index.ts"
+require_file "packages/adjutorix-app/src/main/ipc/agent_ipc.ts"
+require_file "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts"
+require_file "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts"
+require_file "packages/adjutorix-app/src/main/ipc/patch_ipc.ts"
+require_file "packages/adjutorix-app/src/main/ipc/verify_ipc.ts"
+require_file "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts"
 require_file "packages/adjutorix-app/src/preload/bridge.ts"
 require_file "packages/adjutorix-app/src/preload/preload.ts"
 require_file "packages/adjutorix-app/tests/main/channels.test.ts"
@@ -61,6 +68,13 @@ require_file "packages/adjutorix-app/tests/main/preload_bridge.test.ts"
 assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/channels.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/boundary/ipc_guard.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/runtime/bootstrap.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/index.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/agent_ipc.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/patch_ipc.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/verify_ipc.ts" "authority/source"
+assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/preload/bridge.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/preload/preload.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/tests/main/channels.test.ts" "authority/tests"
@@ -87,20 +101,50 @@ def duplicate_literals(rel: str) -> dict[str, int]:
     values = channel_re.findall(read(rel))
     return {value: values.count(value) for value in sorted(set(values)) if values.count(value) > 1}
 
-main_registry = channels_in("packages/adjutorix-app/src/main/ipc/channels.ts")
-bridge_registry = channels_in("packages/adjutorix-app/src/preload/bridge.ts")
+main_registry_rel = "packages/adjutorix-app/src/main/ipc/channels.ts"
+bridge_registry_rel = "packages/adjutorix-app/src/preload/bridge.ts"
+domain_registry_rels = [
+    "packages/adjutorix-app/src/main/ipc/agent_ipc.ts",
+    "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts",
+    "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts",
+    "packages/adjutorix-app/src/main/ipc/patch_ipc.ts",
+    "packages/adjutorix-app/src/main/ipc/verify_ipc.ts",
+    "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts",
+]
+
+main_registry = channels_in(main_registry_rel)
+bridge_registry = channels_in(bridge_registry_rel)
 ipc_guard = channels_in("packages/adjutorix-app/src/main/boundary/ipc_guard.ts")
 runtime_bootstrap = channels_in("packages/adjutorix-app/src/main/runtime/bootstrap.ts")
+domain_registries = {rel: channels_in(rel) for rel in domain_registry_rels}
+domain_registry = set().union(*domain_registries.values())
+main_index_text = read("packages/adjutorix-app/src/main/index.ts")
+main_index_handlers = set(
+    re.findall(r'(?:safeHandle|registerLegacyCompatHandler)\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', main_index_text)
+)
+main_index_safe_handlers = set(
+    re.findall(r'safeHandle\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', main_index_text)
+)
+
+sanctioned_bridge_compat_only = {
+    "adjutorix:workspace:reveal",
+    "adjutorix:workspace:trust:read",
+    "adjutorix:workspace:trust:set",
+    "adjutorix:patch:approve",
+    "adjutorix:patch:clear",
+    "adjutorix:event:workspace",
+    "adjutorix:event:agent",
+    "adjutorix:event:diagnostics",
+    "adjutorix:event:patch",
+    "adjutorix:event:verify",
+}
 
 if not main_registry:
     raise SystemExit("main IPC registry has no adjutorix:* channel literals")
 if not bridge_registry:
     raise SystemExit("preload bridge registry has no adjutorix:* channel literals")
 
-for rel in [
-    "packages/adjutorix-app/src/main/ipc/channels.ts",
-    "packages/adjutorix-app/src/preload/bridge.ts",
-]:
+for rel in [main_registry_rel, bridge_registry_rel]:
     dup = duplicate_literals(rel)
     if dup:
         raise SystemExit(f"duplicate channel literal inside sovereign registry {rel}: {json.dumps(dup, sort_keys=True)}")
@@ -119,24 +163,41 @@ if unknown_bootstrap_channels:
         + json.dumps(unknown_bootstrap_channels, sort_keys=True)
     )
 
-# main/index.ts still carries legacy compatibility handlers. Only raw safeHandle registrations are
-# required to resolve through the canonical main IPC registry at this stage.
-index_text = read("packages/adjutorix-app/src/main/index.ts")
-safe_handle_channels = set(re.findall(r'safeHandle\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', index_text))
-unknown_safe_handle_channels = sorted(safe_handle_channels - main_registry)
+unknown_safe_handle_channels = sorted(main_index_safe_handlers - main_registry)
 if unknown_safe_handle_channels:
     raise SystemExit(
         "main/index.ts safeHandle channel absent from main IPC registry: "
         + json.dumps(unknown_safe_handle_channels, sort_keys=True)
     )
 
+authoritative_bridge_carriers = main_registry | domain_registry | main_index_handlers
+bridge_compat_only = bridge_registry - authoritative_bridge_carriers
+unknown_bridge_channels = sorted(bridge_compat_only - sanctioned_bridge_compat_only)
+missing_sanctioned_bridge_compat = sorted(sanctioned_bridge_compat_only - bridge_compat_only)
+
+if unknown_bridge_channels:
+    raise SystemExit(
+        "preload bridge has unsanctioned bridge-only channels: "
+        + json.dumps(unknown_bridge_channels, sort_keys=True)
+    )
+if missing_sanctioned_bridge_compat:
+    raise SystemExit(
+        "sanctioned bridge-only compatibility set is stale; missing active bridge channels: "
+        + json.dumps(missing_sanctioned_bridge_compat, sort_keys=True)
+    )
+
 print(json.dumps(
     {
         "mainRegistryChannelCount": len(main_registry),
         "bridgeRegistryChannelCount": len(bridge_registry),
+        "domainRegistryChannelCount": len(domain_registry),
+        "mainIndexHandlerChannelCount": len(main_index_handlers),
+        "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
         "ipcGuardChannelCount": len(ipc_guard),
         "runtimeBootstrapChannelCount": len(runtime_bootstrap),
-        "mainIndexSafeHandleChannelCount": len(safe_handle_channels),
+        "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
+        "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
+        "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
     },
     indent=2,
     sort_keys=True,
