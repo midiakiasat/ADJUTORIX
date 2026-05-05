@@ -376,18 +376,61 @@ def validate_machine_report_schema(report_data, schema_data):
     invariants = schema_data["invariants"]
     if report_data["reportSchema"] != invariants["reportSchema"]:
         raise SystemExit("unexpected report schema path")
+    if report_data["reportSchemaHashManifest"] != invariants["reportSchemaHashManifest"]:
+        raise SystemExit("unexpected report schema hash manifest path")
+    if report_data["reportSchemaHashAlgorithm"] != invariants["reportSchemaHashAlgorithm"]:
+        raise SystemExit("unexpected report schema hash algorithm")
     if report_data["reportSchemaVersion"] != schema_data["schemaVersion"]:
         raise SystemExit("unexpected report schema version")
     if report_data["contractHashAlgorithm"] != invariants["contractHashAlgorithm"]:
         raise SystemExit("unexpected contract hash algorithm")
     if not re.fullmatch(invariants["contractHashPattern"], report_data["contractHash"]):
         raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
+    if not re.fullmatch(invariants["schemaHashPattern"], report_data["reportSchemaHash"]):
+        raise SystemExit("report artifact schema hash is not lowercase sha256 hex")
 
 report_schema_rel = "configs/ci/ipc_channel_registry_report_schema.json"
-report_schema = json.loads((root / report_schema_rel).read_text(encoding="utf-8"))
+report_schema_hash_manifest_rel = "configs/ci/ipc_channel_registry_report_schema_hash.json"
+report_schema_hash_algorithm = "sha256:ipc-channel-registry-report-schema-v1"
+report_schema_text = (root / report_schema_rel).read_text(encoding="utf-8")
+report_schema_hash = hashlib.sha256(report_schema_text.encode("utf-8")).hexdigest()
+report_schema_hash_manifest_path = root / report_schema_hash_manifest_rel
+report_schema_hash_manifest = json.loads(report_schema_hash_manifest_path.read_text(encoding="utf-8"))
+report_schema_hash_update_mode = os.environ.get("ADJUTORIX_UPDATE_IPC_REPORT_SCHEMA_HASH") == "1"
+
+if report_schema_hash_manifest.get("schemaPath") != report_schema_rel:
+    raise SystemExit("unexpected IPC report schema hash manifest path")
+if report_schema_hash_manifest.get("schemaHashAlgorithm") != report_schema_hash_algorithm:
+    raise SystemExit("unexpected IPC report schema hash algorithm")
+
+if report_schema_hash_update_mode:
+    report_schema_hash_manifest = {
+        "schemaHash": report_schema_hash,
+        "schemaHashAlgorithm": report_schema_hash_algorithm,
+        "schemaPath": report_schema_rel,
+    }
+    report_schema_hash_manifest_path.write_text(
+        json.dumps(report_schema_hash_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+expected_report_schema_hash = report_schema_hash_manifest.get("schemaHash")
+if report_schema_hash != expected_report_schema_hash:
+    raise SystemExit(
+        "IPC report schema hash manifest is stale: "
+        f"expected {expected_report_schema_hash}, got {report_schema_hash}. "
+        "Run ADJUTORIX_UPDATE_IPC_REPORT_SCHEMA_HASH=1 configs/ci/guard_ipc_channel_registry.sh "
+        "after intentional schema changes."
+    )
+
+report_schema = json.loads(report_schema_text)
 
 report = {
     "reportSchema": report_schema_rel,
+    "reportSchemaHashManifest": report_schema_hash_manifest_rel,
+    "reportSchemaHash": report_schema_hash,
+    "reportSchemaHashAlgorithm": report_schema_hash_algorithm,
+    "reportSchemaHashUpdateMode": report_schema_hash_update_mode,
     "reportSchemaVersion": "ipc-channel-registry-report-v1",
     "taxonomyManifest": taxonomy_rel,
     "contractHashManifest": contract_hash_rel,
