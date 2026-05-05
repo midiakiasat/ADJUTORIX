@@ -598,6 +598,8 @@ main() {
   fi
   if [[ "$ADJUTORIX_VERIFY_RUN_CONTRACT_GUARDS" == "true" ]]; then
     run_phase contracts phase_contracts
+    run_phase "ipc_channel_registry" check_ipc_channel_registry
+
   fi
   if [[ "$ADJUTORIX_VERIFY_RUN_POLICY_GUARDS" == "true" ]]; then
     run_phase policy phase_policy
@@ -647,6 +649,11 @@ main() {
   fi
 
   log_info "Verification succeeded"
+}
+
+
+check_ipc_channel_registry() {
+  bash "$REPO_ROOT/configs/ci/guard_ipc_channel_registry.sh"
 }
 
 main "$@"
