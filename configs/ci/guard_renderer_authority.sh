@@ -97,22 +97,52 @@ scan_with_python() {
   "$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+import subprocess
 
 ROOT = pathlib.Path.cwd()
 RENDERER = ROOT / "packages" / "adjutorix-app" / "src" / "renderer"
 
 INCLUDE_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css", ".html"}
-EXCLUDE_PARTS = {
-    ".git",
-    "node_modules",
-    "dist",
-    "build",
-    "out",
-    "coverage",
-    ".nyc_output",
-}
+
+
+CONSTITUTION_SCAN_SKIP_STRATA = {"authority/tests", "ephemeral/runtime", "derived/build", "release/distributable", "forbidden"}
+CONSTITUTION_STRATUM_CACHE: dict[str, str] = {}
+RENDERER_AUTHORITY_GUARD_SELF = "configs/ci/guard_renderer_authority.sh"
+
+def constitution_root() -> str:
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel: str) -> str:
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(pathlib.Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
+def is_constitution_scan_skipped(rel: str) -> bool:
+    if rel == RENDERER_AUTHORITY_GUARD_SELF:
+        return True
+    stratum = constitution_stratum_for_path(rel)
+    return stratum in CONSTITUTION_SCAN_SKIP_STRATA
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
     (
@@ -170,11 +200,11 @@ SAFE_LINE_PATTERNS = [
 for path in RENDERER.rglob("*"):
     if not path.is_file():
         continue
-    if any(part in EXCLUDE_PARTS for part in path.parts):
+    rel = path.relative_to(ROOT).as_posix()
+    if is_constitution_scan_skipped(rel):
         continue
     if path.suffix not in INCLUDE_SUFFIXES:
         continue
-    rel = path.relative_to(ROOT).as_posix()
     text = path.read_text(encoding="utf-8", errors="ignore")
     for idx, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
