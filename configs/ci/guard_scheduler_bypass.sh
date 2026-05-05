@@ -130,17 +130,6 @@ SCAN_SUFFIXES = {
     ".zsh",
 }
 
-DERIVED_OR_TOOLCHAIN_PREFIXES = (
-    ".adjutorix-release/",
-    ".git/",
-    ".tmp/",
-    "coverage/",
-    "dist/",
-    "node_modules/",
-    "packages/adjutorix-app/dist/",
-    "packages/adjutorix-app/out/",
-    "packages/adjutorix-app/release/",
-)
 
 TEST_PREFIX_PARTS = (
     "/tests/",
@@ -167,6 +156,42 @@ AUTHORIZED_SCHEDULER_SURFACES = (
     "packages/adjutorix-agent/adjutorix_agent/runtime/bootstrap.py",
     "packages/adjutorix-agent/adjutorix_agent/observability/",
 )
+
+CONSTITUTION_SCAN_SKIP_STRATA = {"authority/tests", "ephemeral/runtime", "derived/build", "release/distributable", "forbidden"}
+CONSTITUTION_STRATUM_CACHE: dict[str, str] = {}
+SCHEDULER_BYPASS_GUARD_SELF = "configs/ci/guard_scheduler_bypass.sh"
+
+def constitution_root() -> str:
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel: str) -> str:
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(pathlib.Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
+def is_constitution_scan_skipped(path: str) -> bool:
+    if path == SCHEDULER_BYPASS_GUARD_SELF:
+        return True
+    stratum = constitution_stratum_for_path(path)
+    return stratum in CONSTITUTION_SCAN_SKIP_STRATA
 
 PATTERNS_BY_FAMILY: list[tuple[str, tuple[str, ...], re.Pattern[str]]] = [
     (
@@ -232,7 +257,7 @@ def rel(path: pathlib.Path) -> str:
 
 
 def is_derived_or_toolchain(path: str) -> bool:
-    return path.startswith(DERIVED_OR_TOOLCHAIN_PREFIXES)
+    return is_constitution_scan_skipped(path)
 
 
 def is_test_surface(path: str) -> bool:
