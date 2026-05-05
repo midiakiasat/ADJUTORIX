@@ -202,6 +202,23 @@ PY_REPORT_ASSERT
 }
 
 
+mutate_report_schema_requires_unknown_key() {
+  python3 - "$WT/configs/ci/ipc_channel_registry_report_schema.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+required = list(data["required"])
+if "schemaContractSentinelMissingKey" not in required:
+    required.append("schemaContractSentinelMissingKey")
+data["required"] = required
+data["fieldTypes"]["schemaContractSentinelMissingKey"] = "string"
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 mutate_bridge_unknown() {
   cat >>"$WT/packages/adjutorix-app/src/preload/bridge.ts" <<'EOF'
 
@@ -291,6 +308,7 @@ PY
 
 run_baseline
 expect_report_artifacts "machine_report_artifacts"
+expect_fail "report_schema_contract_stale" "report artifact missing keys" mutate_report_schema_requires_unknown_key
 expect_fail "bridge_unknown" "unsanctioned bridge-only channels" mutate_bridge_unknown
 expect_fail "bridge_manifest_stale" "sanctioned bridge-only compatibility set is stale" mutate_bridge_manifest_stale
 expect_fail "domain_unknown" "unsanctioned domain-only IPC channels" mutate_domain_unknown
