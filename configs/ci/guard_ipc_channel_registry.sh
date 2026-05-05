@@ -85,6 +85,7 @@ assert_constitution_stratum "packages/adjutorix-app/tests/main/preload_bridge.te
 python3 - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -295,9 +296,29 @@ if bad_ipc_renderer:
 if bad_context_bridge:
     raise SystemExit("contextBridge exposure outside preload boundary:\n" + "\n".join(bad_context_bridge))
 
+contract_snapshot = {
+    "schema": "ipc-channel-registry-v1",
+    "taxonomy": taxonomy,
+    "mainRegistry": sorted(main_registry),
+    "bridgeRegistry": sorted(bridge_registry),
+    "domainRegistries": {rel: sorted(values) for rel, values in sorted(domain_registries.items())},
+    "mainIndexHandlers": sorted(main_index_handlers),
+    "mainIndexSafeHandlers": sorted(main_index_safe_handlers),
+    "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
+    "ipcGuardChannels": sorted(ipc_guard),
+    "runtimeBootstrapChannels": sorted(runtime_bootstrap),
+    "preloadBoundaryAllowedRawIpcRenderer": sorted(allowed_raw_ipc_renderer),
+    "preloadBoundaryAllowedContextBridge": sorted(allowed_context_bridge),
+}
+contract_hash = hashlib.sha256(
+    json.dumps(contract_snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
+).hexdigest()
+
 print(json.dumps(
     {
         "taxonomyManifest": taxonomy_rel,
+        "contractHash": contract_hash,
+        "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
         "mainRegistryChannelCount": len(main_registry),
         "bridgeRegistryChannelCount": len(bridge_registry),
         "domainRegistryChannelCount": len(domain_registry),
