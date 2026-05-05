@@ -148,6 +148,19 @@ path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 PY
 }
 
+mutate_contract_hash_manifest_stale() {
+  python3 - "$WT/configs/ci/ipc_channel_contract_hash.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["hash"] = "0" * 64
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+PY
+}
+
 run_baseline
 expect_fail "bridge_unknown" "unsanctioned bridge-only channels" mutate_bridge_unknown
 expect_fail "bridge_manifest_stale" "sanctioned bridge-only compatibility set is stale" mutate_bridge_manifest_stale
@@ -156,6 +169,7 @@ expect_fail "domain_manifest_stale" "domain-only IPC taxonomy is stale" mutate_d
 expect_fail "legacy_manifest_stale" "legacy compatibility handler taxonomy is stale" mutate_legacy_manifest_stale
 expect_fail "preload_boundary_escape" "raw ipcRenderer outside preload boundary" mutate_preload_boundary_escape
 expect_fail "unsorted_manifest" "must be sorted lexicographically" mutate_unsorted_manifest
+expect_fail "contract_hash_manifest_stale" "IPC contract hash mismatch" mutate_contract_hash_manifest_stale
 
 reset_wt
 

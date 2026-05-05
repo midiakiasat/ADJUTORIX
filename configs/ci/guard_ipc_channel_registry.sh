@@ -51,6 +51,7 @@ run_constitution_preflight
 section "IPC channel registry sovereignty"
 
 require_file "configs/ci/ipc_channel_taxonomy.json"
+require_file "configs/ci/ipc_channel_contract_hash.json"
 require_file "packages/adjutorix-app/src/main/ipc/channels.ts"
 require_file "packages/adjutorix-app/src/main/boundary/ipc_guard.ts"
 require_file "packages/adjutorix-app/src/main/runtime/bootstrap.ts"
@@ -67,6 +68,7 @@ require_file "packages/adjutorix-app/tests/main/channels.test.ts"
 require_file "packages/adjutorix-app/tests/main/preload_bridge.test.ts"
 
 assert_constitution_stratum "configs/ci/ipc_channel_taxonomy.json" "authority/config"
+assert_constitution_stratum "configs/ci/ipc_channel_contract_hash.json" "authority/config"
 assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/channels.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/boundary/ipc_guard.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/runtime/bootstrap.ts" "authority/source"
@@ -95,6 +97,7 @@ from typing import Any
 root = Path(sys.argv[1])
 channel_re = re.compile(r'["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']')
 taxonomy_rel = "configs/ci/ipc_channel_taxonomy.json"
+contract_hash_rel = "configs/ci/ipc_channel_contract_hash.json"
 
 def read(rel: str) -> str:
     return (root / rel).read_text(encoding="utf-8", errors="ignore")
@@ -132,6 +135,16 @@ def duplicate_literals(rel: str) -> dict[str, int]:
 taxonomy = load_json(taxonomy_rel)
 if taxonomy.get("schema") != 1:
     raise SystemExit("IPC taxonomy manifest schema must be 1")
+
+contract_hash_manifest = load_json(contract_hash_rel)
+if contract_hash_manifest.get("schema") != 1:
+    raise SystemExit("IPC contract hash manifest schema must be 1")
+expected_contract_hash_algorithm = contract_hash_manifest.get("algorithm")
+if expected_contract_hash_algorithm != "sha256:ipc-channel-registry-v1":
+    raise SystemExit("IPC contract hash manifest algorithm must be sha256:ipc-channel-registry-v1")
+expected_contract_hash = contract_hash_manifest.get("hash")
+if not isinstance(expected_contract_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_contract_hash):
+    raise SystemExit("IPC contract hash manifest hash must be a lowercase 64-character sha256 hex digest")
 
 main_registry_rel = "packages/adjutorix-app/src/main/ipc/channels.ts"
 bridge_registry_rel = "packages/adjutorix-app/src/preload/bridge.ts"
@@ -314,9 +327,23 @@ contract_hash = hashlib.sha256(
     json.dumps(contract_snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
 ).hexdigest()
 
+if contract_hash != expected_contract_hash:
+    raise SystemExit(
+        "IPC contract hash mismatch: "
+        + json.dumps(
+            {
+                "actual": contract_hash,
+                "expected": expected_contract_hash,
+                "manifest": contract_hash_rel,
+            },
+            sort_keys=True,
+        )
+    )
+
 print(json.dumps(
     {
         "taxonomyManifest": taxonomy_rel,
+        "contractHashManifest": contract_hash_rel,
         "contractHash": contract_hash,
         "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
         "mainRegistryChannelCount": len(main_registry),
