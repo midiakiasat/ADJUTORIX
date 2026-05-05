@@ -145,13 +145,15 @@ expect_report_artifacts() {
       bash configs/ci/guard_ipc_channel_registry.sh >"$LOG_DIR/${name}-absolute.log" 2>&1
   )
 
-  python3 - "$default_report" "$WT/$relative_report" "$absolute_report" <<'PY_REPORT_ASSERT'
+  python3 - "$WT/configs/ci/ipc_channel_registry_report_schema.json" "$default_report" "$WT/$relative_report" "$absolute_report" <<'PY_REPORT_ASSERT'
 import json
 import re
 import sys
 from pathlib import Path
 
-paths = [Path(value) for value in sys.argv[1:]]
+schema_path = Path(sys.argv[1])
+paths = [Path(value) for value in sys.argv[2:]]
+schema = json.loads(schema_path.read_text())
 reports = []
 
 for path in paths:
@@ -164,30 +166,35 @@ hashes = {data.get("contractHash") for data in reports}
 if len(hashes) != 1:
     raise SystemExit("report artifact contract hashes differ")
 
-required = {
-    "taxonomyManifest",
-    "contractHashManifest",
-    "contractHash",
-    "contractHashAlgorithm",
-    "reportSchemaVersion",
-    "contractHashUpdateMode",
-    "mainRegistryChannelCount",
-    "bridgeRegistryChannelCount",
-    "domainRegistryChannelCount",
-    "ipcGuardChannelCount",
-}
+required = set(schema["required"])
+field_types = schema["fieldTypes"]
+invariants = schema["invariants"]
 
 for data in reports:
     missing = sorted(required - set(data))
     if missing:
         raise SystemExit(f"report artifact missing keys: {missing}")
-    if data["contractHashAlgorithm"] != "sha256:ipc-channel-registry-v1":
+    for key, expected_type in sorted(field_types.items()):
+        value = data.get(key)
+        if expected_type == "string" and not isinstance(value, str):
+            raise SystemExit(f"report artifact field {key} is not a string")
+        if expected_type == "boolean" and not isinstance(value, bool):
+            raise SystemExit(f"report artifact field {key} is not a boolean")
+        if expected_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+            raise SystemExit(f"report artifact field {key} is not an integer")
+        if expected_type == "array" and not isinstance(value, list):
+            raise SystemExit(f"report artifact field {key} is not an array")
+        if expected_type == "object" and not isinstance(value, dict):
+            raise SystemExit(f"report artifact field {key} is not an object")
+    if data["contractHashAlgorithm"] != invariants["contractHashAlgorithm"]:
         raise SystemExit("unexpected contract hash algorithm")
-    if data["reportSchemaVersion"] != "ipc-channel-registry-report-v1":
+    if data["reportSchema"] != invariants["reportSchema"]:
+        raise SystemExit("unexpected report schema path")
+    if data["reportSchemaVersion"] != schema["schemaVersion"]:
         raise SystemExit("unexpected report schema version")
     if data["contractHashUpdateMode"] is not False:
         raise SystemExit("report artifact should record normal update mode as false")
-    if not isinstance(data["contractHash"], str) or not re.fullmatch(r"[0-9a-f]{64}", data["contractHash"]):
+    if not isinstance(data["contractHash"], str) or not re.fullmatch(invariants["contractHashPattern"], data["contractHash"]):
         raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
 PY_REPORT_ASSERT
 
