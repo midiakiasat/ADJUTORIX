@@ -88,6 +88,7 @@ python3 - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import re
 import sys
@@ -145,6 +146,8 @@ if expected_contract_hash_algorithm != "sha256:ipc-channel-registry-v1":
 expected_contract_hash = contract_hash_manifest.get("hash")
 if not isinstance(expected_contract_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_contract_hash):
     raise SystemExit("IPC contract hash manifest hash must be a lowercase 64-character sha256 hex digest")
+
+update_contract_hash_manifest = os.environ.get("ADJUTORIX_IPC_CONTRACT_HASH_UPDATE") == "true"
 
 main_registry_rel = "packages/adjutorix-app/src/main/ipc/channels.ts"
 bridge_registry_rel = "packages/adjutorix-app/src/preload/bridge.ts"
@@ -327,6 +330,16 @@ contract_hash = hashlib.sha256(
     json.dumps(contract_snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
 ).hexdigest()
 
+if update_contract_hash_manifest:
+    contract_hash_manifest["schema"] = 1
+    contract_hash_manifest["algorithm"] = "sha256:ipc-channel-registry-v1"
+    contract_hash_manifest["hash"] = contract_hash
+    (root / contract_hash_rel).write_text(
+        json.dumps(contract_hash_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    expected_contract_hash = contract_hash
+
 if contract_hash != expected_contract_hash:
     raise SystemExit(
         "IPC contract hash mismatch: "
@@ -346,6 +359,7 @@ print(json.dumps(
         "contractHashManifest": contract_hash_rel,
         "contractHash": contract_hash,
         "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
+        "contractHashUpdateMode": update_contract_hash_manifest,
         "mainRegistryChannelCount": len(main_registry),
         "bridgeRegistryChannelCount": len(bridge_registry),
         "domainRegistryChannelCount": len(domain_registry),

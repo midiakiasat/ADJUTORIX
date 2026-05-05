@@ -74,6 +74,38 @@ expect_fail() {
   printf '[guard:ipc_channel_registry_selftest] negative pass: %s\n' "$name"
 }
 
+expect_refresh() {
+  local name="$1"
+  local mutator="$2"
+  local log="$LOG_DIR/${name}.log"
+
+  reset_wt
+  "$mutator"
+
+  (
+    export ADJUTORIX_IPC_CONTRACT_HASH_UPDATE=true
+    cd "$WT"
+    bash configs/ci/guard_ipc_channel_registry.sh >"$log" 2>&1
+  )
+
+  python3 - "$WT/configs/ci/ipc_channel_contract_hash.json" <<'PY_REFRESH_ASSERT'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+hash_value = data.get("hash")
+if hash_value == "0" * 64:
+    raise SystemExit("refreshed hash still contains stale sentinel")
+if not isinstance(hash_value, str) or len(hash_value) != 64:
+    raise SystemExit("refreshed hash is not a 64-character digest")
+PY_REFRESH_ASSERT
+
+  grep -F '"contractHashUpdateMode": true' "$log" >/dev/null
+  printf '[guard:ipc_channel_registry_selftest] refresh pass: %s\n' "$name"
+}
+
 mutate_bridge_unknown() {
   cat >>"$WT/packages/adjutorix-app/src/preload/bridge.ts" <<'EOF'
 
@@ -170,6 +202,7 @@ expect_fail "legacy_manifest_stale" "legacy compatibility handler taxonomy is st
 expect_fail "preload_boundary_escape" "raw ipcRenderer outside preload boundary" mutate_preload_boundary_escape
 expect_fail "unsorted_manifest" "must be sorted lexicographically" mutate_unsorted_manifest
 expect_fail "contract_hash_manifest_stale" "IPC contract hash mismatch" mutate_contract_hash_manifest_stale
+expect_refresh "contract_hash_manifest_refresh" mutate_contract_hash_manifest_stale
 
 reset_wt
 
