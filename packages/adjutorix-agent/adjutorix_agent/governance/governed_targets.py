@@ -34,6 +34,7 @@ import stat
 import fnmatch
 
 from adjutorix_agent.governance.policy_engine import PolicyEngine, PolicyContext, Decision
+from adjutorix_agent.governance.constitution import classify_constitution_path
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +142,22 @@ def _match_ignore(rel_path: str, patterns: Tuple[str, ...]) -> bool:
 
 class TargetClassifier:
     """
-    Heuristic but deterministic classification.
+    Constitution-first deterministic classification.
+
+    Heuristics remain only as a fallback inside authoritative source/config
+    strata. Derived, ephemeral, release, and forbidden surfaces are classified
+    from the repository constitution before extension-based inference.
     """
+
+    CONSTITUTION_GENERATED_STRATA = frozenset({
+        "ephemeral/runtime",
+        "derived/build",
+        "release/distributable",
+    })
+    CONSTITUTION_FORBIDDEN_STRATA = frozenset({"forbidden"})
+
+    def __init__(self, workspace_root: str) -> None:
+        self._workspace_root = _norm_abs(workspace_root)
 
     TEXT_EXT = {
         ".ts": ("source", "typescript"),
@@ -162,10 +177,14 @@ class TargetClassifier:
         name = os.path.basename(rel_path)
         _, ext = os.path.splitext(name.lower())
 
-        tags: List[str] = []
+        stratum = classify_constitution_path(self._workspace_root, rel_path)
+        tags: List[str] = [f"constitution:{stratum}"]
 
-        if "/node_modules/" in rel_path or rel_path.startswith("node_modules/"):
-            return TargetClassification("vendor", None, ("vendor",))
+        if stratum in self.CONSTITUTION_GENERATED_STRATA:
+            return TargetClassification("generated", None, tuple(tags + ["generated"]))
+
+        if stratum in self.CONSTITUTION_FORBIDDEN_STRATA:
+            return TargetClassification("unknown", None, tuple(tags + ["forbidden"]))
 
         if name.startswith(".") and name not in (".env.example",):
             tags.append("hidden")
@@ -268,7 +287,7 @@ class GovernedTargets:
         self._policy = policy_engine
         self._ignore = _read_gitignore(self._root)
         self._resolver = TargetResolver(self._root, self._ignore)
-        self._classifier = TargetClassifier()
+        self._classifier = TargetClassifier(self._root)
 
     # ------------------------------------------------------------------
 
