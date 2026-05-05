@@ -50,6 +50,7 @@ run_constitution_preflight
 
 section "IPC channel registry sovereignty"
 
+require_file "configs/ci/ipc_channel_taxonomy.json"
 require_file "packages/adjutorix-app/src/main/ipc/channels.ts"
 require_file "packages/adjutorix-app/src/main/boundary/ipc_guard.ts"
 require_file "packages/adjutorix-app/src/main/runtime/bootstrap.ts"
@@ -65,6 +66,7 @@ require_file "packages/adjutorix-app/src/preload/preload.ts"
 require_file "packages/adjutorix-app/tests/main/channels.test.ts"
 require_file "packages/adjutorix-app/tests/main/preload_bridge.test.ts"
 
+assert_constitution_stratum "configs/ci/ipc_channel_taxonomy.json" "authority/config"
 assert_constitution_stratum "packages/adjutorix-app/src/main/ipc/channels.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/boundary/ipc_guard.ts" "authority/source"
 assert_constitution_stratum "packages/adjutorix-app/src/main/runtime/bootstrap.ts" "authority/source"
@@ -87,12 +89,37 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 root = Path(sys.argv[1])
 channel_re = re.compile(r'["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']')
+taxonomy_rel = "configs/ci/ipc_channel_taxonomy.json"
 
 def read(rel: str) -> str:
     return (root / rel).read_text(encoding="utf-8", errors="ignore")
+
+def load_json(rel: str) -> dict[str, Any]:
+    value = json.loads(read(rel))
+    if not isinstance(value, dict):
+        raise SystemExit(f"{rel} must contain a JSON object")
+    return value
+
+def string_list(path: str, value: Any) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise SystemExit(f"{path} must be a JSON string array")
+    if len(value) != len(set(value)):
+        raise SystemExit(f"{path} contains duplicate values")
+    if value != sorted(value):
+        raise SystemExit(f"{path} must be sorted lexicographically")
+    return value
+
+def string_set(path: str, value: Any) -> set[str]:
+    return set(string_list(path, value))
+
+def object_value(path: str, value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise SystemExit(f"{path} must be a JSON object")
+    return value
 
 def channels_in(rel: str) -> set[str]:
     return set(channel_re.findall(read(rel)))
@@ -100,6 +127,10 @@ def channels_in(rel: str) -> set[str]:
 def duplicate_literals(rel: str) -> dict[str, int]:
     values = channel_re.findall(read(rel))
     return {value: values.count(value) for value in sorted(set(values)) if values.count(value) > 1}
+
+taxonomy = load_json(taxonomy_rel)
+if taxonomy.get("schema") != 1:
+    raise SystemExit("IPC taxonomy manifest schema must be 1")
 
 main_registry_rel = "packages/adjutorix-app/src/main/ipc/channels.ts"
 bridge_registry_rel = "packages/adjutorix-app/src/preload/bridge.ts"
@@ -111,6 +142,44 @@ domain_registry_rels = [
     "packages/adjutorix-app/src/main/ipc/verify_ipc.ts",
     "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts",
 ]
+
+sanctioned_legacy_main_index_handlers = string_set(
+    "legacy_main_index_handlers",
+    taxonomy.get("legacy_main_index_handlers"),
+)
+sanctioned_bridge_compat_only = string_set(
+    "bridge_compat_only",
+    taxonomy.get("bridge_compat_only"),
+)
+
+domain_only_raw = object_value("domain_only_by_file", taxonomy.get("domain_only_by_file"))
+sanctioned_domain_only_by_file = {
+    rel: set(string_list(f"domain_only_by_file.{rel}", values))
+    for rel, values in sorted(domain_only_raw.items())
+}
+domain_taxonomy_keys = set(sanctioned_domain_only_by_file)
+domain_registry_key_set = set(domain_registry_rels)
+if domain_taxonomy_keys != domain_registry_key_set:
+    raise SystemExit(
+        "domain-only taxonomy file keys must exactly match domain IPC registry files: "
+        + json.dumps(
+            {
+                "missing": sorted(domain_registry_key_set - domain_taxonomy_keys),
+                "extra": sorted(domain_taxonomy_keys - domain_registry_key_set),
+            },
+            sort_keys=True,
+        )
+    )
+
+preload_boundary = object_value("preload_boundary", taxonomy.get("preload_boundary"))
+allowed_raw_ipc_renderer = string_set(
+    "preload_boundary.allowed_raw_ipc_renderer",
+    preload_boundary.get("allowed_raw_ipc_renderer"),
+)
+allowed_context_bridge = string_set(
+    "preload_boundary.allowed_context_bridge",
+    preload_boundary.get("allowed_context_bridge"),
+)
 
 main_registry = channels_in(main_registry_rel)
 bridge_registry = channels_in(bridge_registry_rel)
@@ -127,61 +196,6 @@ main_index_safe_handlers = set(
     re.findall(r'safeHandle\(\s*["\'](adjutorix:[A-Za-z0-9_.:-]+)["\']', main_index_text)
 )
 main_index_legacy_handlers = main_index_handlers - main_index_safe_handlers
-
-sanctioned_legacy_main_index_handlers = {
-    "adjutorix:runtime:snapshot",
-    "adjutorix:workspace:health",
-    "adjutorix:agent:health",
-    "adjutorix:diagnostics:runtimeSnapshot",
-}
-
-sanctioned_domain_only_by_file = {
-    "packages/adjutorix-app/src/main/ipc/agent_ipc.ts": {
-        "adjutorix:agent:health",
-        "adjutorix:agent:status",
-        "adjutorix:agent:start",
-        "adjutorix:agent:stop",
-    },
-    "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts": {
-        "adjutorix:diagnostics:runtimeSnapshot",
-        "adjutorix:diagnostics:startupReport",
-        "adjutorix:diagnostics:observabilityBundle",
-        "adjutorix:diagnostics:logTail",
-        "adjutorix:diagnostics:crashContext",
-        "adjutorix:diagnostics:exportBundle",
-    },
-    "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts": {
-        "adjutorix:ledger:timeline",
-        "adjutorix:ledger:entry",
-        "adjutorix:ledger:heads",
-        "adjutorix:ledger:stats",
-    },
-    "packages/adjutorix-app/src/main/ipc/patch_ipc.ts": {
-        "adjutorix:patch:bindVerify",
-        "adjutorix:patch:approvePreview",
-        "adjutorix:patch:clearPreviewState",
-    },
-    "packages/adjutorix-app/src/main/ipc/verify_ipc.ts": {
-        "adjutorix:verify:bindResult",
-        "adjutorix:verify:clearState",
-    },
-    "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts": {
-        "adjutorix:workspace:close",
-    },
-}
-
-sanctioned_bridge_compat_only = {
-    "adjutorix:workspace:reveal",
-    "adjutorix:workspace:trust:read",
-    "adjutorix:workspace:trust:set",
-    "adjutorix:patch:approve",
-    "adjutorix:patch:clear",
-    "adjutorix:event:workspace",
-    "adjutorix:event:agent",
-    "adjutorix:event:diagnostics",
-    "adjutorix:event:patch",
-    "adjutorix:event:verify",
-}
 
 if not main_registry:
     raise SystemExit("main IPC registry has no adjutorix:* channel literals")
@@ -246,13 +260,6 @@ for rel, expected in sanctioned_domain_only_by_file.items():
             + json.dumps(missing, sort_keys=True)
         )
 
-untracked_domain_files = sorted(set(domain_only_by_file) - set(sanctioned_domain_only_by_file))
-if untracked_domain_files:
-    raise SystemExit(
-        "domain IPC registry file missing from domain-only taxonomy: "
-        + json.dumps(untracked_domain_files, sort_keys=True)
-    )
-
 authoritative_bridge_carriers = main_registry | domain_registry | main_index_handlers
 bridge_compat_only = bridge_registry - authoritative_bridge_carriers
 unknown_bridge_channels = sorted(bridge_compat_only - sanctioned_bridge_compat_only)
@@ -268,42 +275,6 @@ if missing_sanctioned_bridge_compat:
         "sanctioned bridge-only compatibility set is stale; missing active bridge channels: "
         + json.dumps(missing_sanctioned_bridge_compat, sort_keys=True)
     )
-
-print(json.dumps(
-    {
-        "mainRegistryChannelCount": len(main_registry),
-        "bridgeRegistryChannelCount": len(bridge_registry),
-        "domainRegistryChannelCount": len(domain_registry),
-        "mainIndexHandlerChannelCount": len(main_index_handlers),
-        "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
-        "mainIndexLegacyHandlerCount": len(main_index_legacy_handlers),
-        "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
-        "ipcGuardChannelCount": len(ipc_guard),
-        "runtimeBootstrapChannelCount": len(runtime_bootstrap),
-        "domainOnlyChannelCount": sum(len(v) for v in domain_only_by_file.values()),
-        "domainOnlyChannelsByFile": {rel: sorted(values) for rel, values in sorted(domain_only_by_file.items())},
-        "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
-        "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
-        "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
-    },
-    indent=2,
-    sort_keys=True,
-))
-PY
-
-python3 - "$ROOT_DIR" <<'PY'
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-allowed_raw_ipc_renderer = {
-    "packages/adjutorix-app/src/preload/preload.ts",
-}
-allowed_context_bridge = {
-    "packages/adjutorix-app/src/preload/preload.ts",
-}
 
 bad_ipc_renderer: list[str] = []
 bad_context_bridge: list[str] = []
@@ -324,6 +295,29 @@ if bad_ipc_renderer:
 if bad_context_bridge:
     raise SystemExit("contextBridge exposure outside preload boundary:\n" + "\n".join(bad_context_bridge))
 
+print(json.dumps(
+    {
+        "taxonomyManifest": taxonomy_rel,
+        "mainRegistryChannelCount": len(main_registry),
+        "bridgeRegistryChannelCount": len(bridge_registry),
+        "domainRegistryChannelCount": len(domain_registry),
+        "mainIndexHandlerChannelCount": len(main_index_handlers),
+        "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
+        "mainIndexLegacyHandlerCount": len(main_index_legacy_handlers),
+        "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
+        "ipcGuardChannelCount": len(ipc_guard),
+        "runtimeBootstrapChannelCount": len(runtime_bootstrap),
+        "domainOnlyChannelCount": sum(len(v) for v in domain_only_by_file.values()),
+        "domainOnlyChannelsByFile": {rel: sorted(values) for rel, values in sorted(domain_only_by_file.items())},
+        "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
+        "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
+        "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
+        "preloadBoundaryAllowedRawIpcRenderer": sorted(allowed_raw_ipc_renderer),
+        "preloadBoundaryAllowedContextBridge": sorted(allowed_context_bridge),
+    },
+    indent=2,
+    sort_keys=True,
+))
 print("preload boundary raw Electron authority confined")
 PY
 
