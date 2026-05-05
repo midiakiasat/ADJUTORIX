@@ -97,6 +97,7 @@ scan_with_python() {
   "$PYTHON_BIN" - "$ROOT_DIR" "$ALLOWLIST_FILE" <<'PY_SCAN'
 import fnmatch
 import re
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -117,16 +118,6 @@ def load_allow_patterns():
 
 allow_patterns = load_allow_patterns()
 
-SKIP_PREFIXES = (
-    ".adjutorix-release/",
-    ".git/",
-    ".tmp/",
-    "node_modules/",
-    "dist/",
-    "build/",
-    "out/",
-    "coverage/",
-)
 
 SCAN_SUFFIXES = (
     ".sh",
@@ -175,10 +166,43 @@ RULES = (
     ("http-apply-surface", re.compile(r"\b(?:POST|post|fetch|axios\.)\b[^\n]*(?:/apply|applyReadiness|patch/apply|workspace/write)")),
 )
 
+
+CONSTITUTION_SCAN_SKIP_STRATA = {"authority/tests", "ephemeral/runtime", "derived/build", "release/distributable", "forbidden"}
+CONSTITUTION_STRATUM_CACHE = {}
+APPLY_GATE_GUARD_SELF = "configs/ci/guard_apply_gate_bypass.sh"
+
+def constitution_root():
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel):
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
 def is_skipped_path(rel):
-    if rel == "configs/ci/guard_apply_gate_bypass.sh":
+    if rel == APPLY_GATE_GUARD_SELF:
         return True
-    return any(rel.startswith(prefix) for prefix in SKIP_PREFIXES)
+    stratum = constitution_stratum_for_path(rel)
+    return stratum in CONSTITUTION_SCAN_SKIP_STRATA
+
 
 def is_canonical_apply_surface(rel):
     return rel in CANONICAL_APPLY_SURFACES or any(rel.startswith(prefix) for prefix in CANONICAL_APPLY_PREFIXES)
