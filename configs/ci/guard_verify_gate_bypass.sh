@@ -103,6 +103,7 @@ scan_with_python() {
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 import subprocess
 import sys
@@ -189,22 +190,42 @@ def is_allowed(rule: str, rel: str, line_no: int, code: str) -> bool:
     ]
     return any(fnmatch.fnmatch(candidate, pattern) for pattern in allow_patterns for candidate in candidates)
 
+
+CONSTITUTION_AUTHORITY_STRATA = {"authority/source", "authority/tests", "authority/config"}
+CONSTITUTION_SCAN_SKIP_STRATA = {"authority/tests", "ephemeral/runtime", "derived/build", "release/distributable", "forbidden"}
+CONSTITUTION_STRATUM_CACHE = {}
+
+def constitution_root() -> str:
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel: str) -> str:
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
 def is_skipped_path(rel: str) -> bool:
     if rel == SELF:
         return True
-    if rel.startswith(DERIVED_PREFIXES):
-        return True
-    if any(seg in rel for seg in DERIVED_SEGMENTS):
-        return True
-    if any(seg in rel for seg in TEST_SEGMENTS):
-        return True
-    if rel.startswith("tests/"):
-        return True
-    if ".test." in rel or ".spec." in rel or ".pending." in rel:
-        return True
-    if rel.startswith(CANONICAL_PREFIXES):
-        return True
-    return False
+    stratum = constitution_stratum_for_path(rel)
+    return stratum in CONSTITUTION_SCAN_SKIP_STRATA
 
 def is_probably_text(rel: str) -> bool:
     return Path(rel).suffix in TEXT_SUFFIXES
