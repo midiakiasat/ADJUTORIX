@@ -354,6 +354,7 @@ if contract_hash != expected_contract_hash:
     )
 
 report = {
+    "reportSchema": "configs/ci/ipc_channel_registry_report_schema.json",
     "reportSchemaVersion": "ipc-channel-registry-report-v1",
     "taxonomyManifest": taxonomy_rel,
     "contractHashManifest": contract_hash_rel,
