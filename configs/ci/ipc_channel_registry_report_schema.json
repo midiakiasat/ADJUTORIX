@@ -20,6 +20,10 @@
     "preloadBoundaryAllowedContextBridge": "array",
     "preloadBoundaryAllowedRawIpcRenderer": "array",
     "reportSchema": "string",
+    "reportSchemaHash": "string",
+    "reportSchemaHashAlgorithm": "string",
+    "reportSchemaHashManifest": "string",
+    "reportSchemaHashUpdateMode": "boolean",
     "reportSchemaVersion": "string",
     "runtimeBootstrapChannelCount": "integer",
     "taxonomyManifest": "string"
@@ -27,7 +31,10 @@
   "invariants": {
     "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
     "contractHashPattern": "^[0-9a-f]{64}$",
-    "reportSchema": "configs/ci/ipc_channel_registry_report_schema.json"
+    "reportSchema": "configs/ci/ipc_channel_registry_report_schema.json",
+    "reportSchemaHashAlgorithm": "sha256:ipc-channel-registry-report-schema-v1",
+    "reportSchemaHashManifest": "configs/ci/ipc_channel_registry_report_schema_hash.json",
+    "schemaHashPattern": "[0-9a-f]{64}"
   },
   "kind": "adjutorix-ipc-channel-registry-report-schema",
   "reportPathDefault": ".tmp/ci/ipc_channel_registry/report.json",
@@ -54,7 +61,11 @@
     "bridgeCompatOnlyChannels",
     "domainRegistryCounts",
     "preloadBoundaryAllowedRawIpcRenderer",
-    "preloadBoundaryAllowedContextBridge"
+    "preloadBoundaryAllowedContextBridge",
+    "reportSchemaHashManifest",
+    "reportSchemaHash",
+    "reportSchemaHashAlgorithm",
+    "reportSchemaHashUpdateMode"
   ],
   "schemaVersion": "ipc-channel-registry-report-v1"
 }

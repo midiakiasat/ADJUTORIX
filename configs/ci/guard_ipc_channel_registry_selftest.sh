@@ -190,20 +190,42 @@ for data in reports:
         raise SystemExit("unexpected contract hash algorithm")
     if data["reportSchema"] != invariants["reportSchema"]:
         raise SystemExit("unexpected report schema path")
+    if data["reportSchemaHashManifest"] != invariants["reportSchemaHashManifest"]:
+        raise SystemExit("unexpected report schema hash manifest path")
+    if data["reportSchemaHashAlgorithm"] != invariants["reportSchemaHashAlgorithm"]:
+        raise SystemExit("unexpected report schema hash algorithm")
     if data["reportSchemaVersion"] != schema["schemaVersion"]:
         raise SystemExit("unexpected report schema version")
     if data["contractHashUpdateMode"] is not False:
         raise SystemExit("report artifact should record normal update mode as false")
+    if data["reportSchemaHashUpdateMode"] is not False:
+        raise SystemExit("report artifact should record normal schema hash update mode as false")
     if not isinstance(data["contractHash"], str) or not re.fullmatch(invariants["contractHashPattern"], data["contractHash"]):
         raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
+    if not isinstance(data["reportSchemaHash"], str) or not re.fullmatch(invariants["schemaHashPattern"], data["reportSchemaHash"]):
+        raise SystemExit("report artifact schema hash is not lowercase sha256 hex")
 PY_REPORT_ASSERT
 
   printf '[guard:ipc_channel_registry_selftest] report artifact pass: %s\n' "$name"
 }
 
 
+mutate_report_schema_hash_manifest_stale() {
+  python3 - "$WT/configs/ci/ipc_channel_registry_report_schema.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+data.setdefault("invariants", {})["schemaHashStaleSentinel"] = "present"
+path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 mutate_report_schema_requires_unknown_key() {
   python3 - "$WT/configs/ci/ipc_channel_registry_report_schema.json" <<'PY'
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -216,6 +238,15 @@ if "schemaContractSentinelMissingKey" not in required:
 data["required"] = required
 data["fieldTypes"]["schemaContractSentinelMissingKey"] = "string"
 path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+manifest_path = path.with_name("ipc_channel_registry_report_schema_hash.json")
+schema_hash = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+manifest = {
+    "schemaHash": schema_hash,
+    "schemaHashAlgorithm": "sha256:ipc-channel-registry-report-schema-v1",
+    "schemaPath": "configs/ci/ipc_channel_registry_report_schema.json",
+}
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 }
 
@@ -308,6 +339,7 @@ PY
 
 run_baseline
 expect_report_artifacts "machine_report_artifacts"
+expect_fail "report_schema_hash_manifest_stale" "IPC report schema hash manifest is stale" mutate_report_schema_hash_manifest_stale
 expect_fail "report_schema_contract_stale" "report artifact missing keys" mutate_report_schema_requires_unknown_key
 expect_fail "bridge_unknown" "unsanctioned bridge-only channels" mutate_bridge_unknown
 expect_fail "bridge_manifest_stale" "sanctioned bridge-only compatibility set is stale" mutate_bridge_manifest_stale

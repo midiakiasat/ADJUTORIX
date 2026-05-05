@@ -1,0 +1,5 @@
+{
+  "schemaHash": "24b1b5278f6872a336c152229aa8394bd93d9796e64cafc8cd0ee7a1560c07eb",
+  "schemaHashAlgorithm": "sha256:ipc-channel-registry-report-schema-v1",
+  "schemaPath": "configs/ci/ipc_channel_registry_report_schema.json"
+}
