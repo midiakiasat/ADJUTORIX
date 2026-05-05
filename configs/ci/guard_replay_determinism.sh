@@ -128,6 +128,24 @@ run_constitution_preflight() {
   node "$CONSTITUTION_CHECKER" --root "$ROOT_DIR" --json --out "$CONSTITUTION_REPORT"
 }
 
+constitution_stratum_for_path() {
+  local rel_path="${1#./}"
+  node "$ROOT_DIR/scripts/lib/constitution-classifier.mjs" "$ROOT_DIR" "$rel_path"
+}
+
+assert_constitution_runtime_ephemeral_path() {
+  local path="$1"
+  local rel_path="${path#"$ROOT_DIR"/}"
+  rel_path="${rel_path#./}"
+  local stratum
+  stratum="$(constitution_stratum_for_path "$rel_path" || printf 'unclassified')"
+  if [[ "$stratum" != "ephemeral/runtime" ]]; then
+    printf '[guard:replay_determinism] expected ephemeral/runtime temp surface, got %s for %s\n' "$stratum" "$rel_path" >&2
+    return 1
+  fi
+}
+
+
 require_pytest_runner() {
   if command -v "$PYTEST_BIN" >/dev/null 2>&1; then
     PYTEST_RUNNER_KIND="bin"
@@ -174,6 +192,7 @@ assert_repo_shape() {
 
 prepare_tmp() {
   section "Prepare temp workspace"
+  assert_constitution_runtime_ephemeral_path "$TMP_DIR"
   rm -rf "$TMP_DIR"
   mkdir -p "$TMP_DIR"
   ok "Prepared temp workspace at $TMP_DIR"
