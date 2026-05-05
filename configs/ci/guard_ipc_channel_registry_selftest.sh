@@ -31,6 +31,7 @@ git -C "$ROOT_DIR" worktree add --detach "$WT" HEAD >/dev/null
 
 GUARD="./configs/ci/guard_ipc_channel_registry.sh"
 case_count=0
+refresh_case_count=0
 
 reset_wt() {
   git -C "$WT" reset --hard HEAD >/dev/null
@@ -78,6 +79,8 @@ expect_refresh() {
   local name="$1"
   local mutator="$2"
   local log="$LOG_DIR/${name}.log"
+
+  refresh_case_count=$((refresh_case_count + 1))
 
   reset_wt
   "$mutator"
@@ -206,15 +209,20 @@ expect_refresh "contract_hash_manifest_refresh" mutate_contract_hash_manifest_st
 
 reset_wt
 
-python3 - "$case_count" "$LOG_DIR" <<'PY'
+python3 - "$case_count" "$refresh_case_count" "$LOG_DIR" <<'PY'
 import json
 import sys
+
+negative_case_count = int(sys.argv[1])
+refresh_case_count = int(sys.argv[2])
 
 print(json.dumps(
     {
         "ok": True,
-        "negativeCaseCount": int(sys.argv[1]),
-        "logDir": sys.argv[2],
+        "negativeCaseCount": negative_case_count,
+        "refreshCaseCount": refresh_case_count,
+        "totalCaseCount": negative_case_count + refresh_case_count,
+        "logDir": sys.argv[3],
     },
     indent=2,
     sort_keys=True,
