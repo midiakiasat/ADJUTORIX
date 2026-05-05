@@ -353,8 +353,41 @@ if contract_hash != expected_contract_hash:
         )
     )
 
+def validate_machine_report_schema(report_data, schema_data):
+    required = set(schema_data["required"])
+    missing = sorted(required - set(report_data))
+    if missing:
+        raise SystemExit(f"report artifact missing keys: {missing}")
+
+    field_types = schema_data["fieldTypes"]
+    for key, expected_type in sorted(field_types.items()):
+        value = report_data.get(key)
+        if expected_type == "string" and not isinstance(value, str):
+            raise SystemExit(f"report artifact field {key} is not a string")
+        if expected_type == "boolean" and not isinstance(value, bool):
+            raise SystemExit(f"report artifact field {key} is not a boolean")
+        if expected_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+            raise SystemExit(f"report artifact field {key} is not an integer")
+        if expected_type == "array" and not isinstance(value, list):
+            raise SystemExit(f"report artifact field {key} is not an array")
+        if expected_type == "object" and not isinstance(value, dict):
+            raise SystemExit(f"report artifact field {key} is not an object")
+
+    invariants = schema_data["invariants"]
+    if report_data["reportSchema"] != invariants["reportSchema"]:
+        raise SystemExit("unexpected report schema path")
+    if report_data["reportSchemaVersion"] != schema_data["schemaVersion"]:
+        raise SystemExit("unexpected report schema version")
+    if report_data["contractHashAlgorithm"] != invariants["contractHashAlgorithm"]:
+        raise SystemExit("unexpected contract hash algorithm")
+    if not re.fullmatch(invariants["contractHashPattern"], report_data["contractHash"]):
+        raise SystemExit("report artifact contract hash is not lowercase sha256 hex")
+
+report_schema_rel = "configs/ci/ipc_channel_registry_report_schema.json"
+report_schema = json.loads((root / report_schema_rel).read_text(encoding="utf-8"))
+
 report = {
-    "reportSchema": "configs/ci/ipc_channel_registry_report_schema.json",
+    "reportSchema": report_schema_rel,
     "reportSchemaVersion": "ipc-channel-registry-report-v1",
     "taxonomyManifest": taxonomy_rel,
     "contractHashManifest": contract_hash_rel,
@@ -378,6 +411,7 @@ report = {
     "preloadBoundaryAllowedRawIpcRenderer": sorted(allowed_raw_ipc_renderer),
     "preloadBoundaryAllowedContextBridge": sorted(allowed_context_bridge),
 }
+validate_machine_report_schema(report, report_schema)
 report_text = json.dumps(report, indent=2, sort_keys=True)
 report_path_value = os.environ.get("ADJUTORIX_IPC_CHANNEL_REGISTRY_REPORT")
 report_path = Path(report_path_value) if report_path_value else root / ".tmp/ci/ipc_channel_registry/report.json"
