@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "bridge_compat_only": [
+    "adjutorix:event:agent",
+    "adjutorix:event:diagnostics",
+    "adjutorix:event:patch",
+    "adjutorix:event:verify",
+    "adjutorix:event:workspace",
+    "adjutorix:patch:approve",
+    "adjutorix:patch:clear",
+    "adjutorix:workspace:reveal",
+    "adjutorix:workspace:trust:read",
+    "adjutorix:workspace:trust:set"
+  ],
+  "domain_only_by_file": {
+    "packages/adjutorix-app/src/main/ipc/agent_ipc.ts": [
+      "adjutorix:agent:health",
+      "adjutorix:agent:start",
+      "adjutorix:agent:status",
+      "adjutorix:agent:stop"
+    ],
+    "packages/adjutorix-app/src/main/ipc/diagnostics_ipc.ts": [
+      "adjutorix:diagnostics:crashContext",
+      "adjutorix:diagnostics:exportBundle",
+      "adjutorix:diagnostics:logTail",
+      "adjutorix:diagnostics:observabilityBundle",
+      "adjutorix:diagnostics:runtimeSnapshot",
+      "adjutorix:diagnostics:startupReport"
+    ],
+    "packages/adjutorix-app/src/main/ipc/ledger_ipc.ts": [
+      "adjutorix:ledger:entry",
+      "adjutorix:ledger:heads",
+      "adjutorix:ledger:stats",
+      "adjutorix:ledger:timeline"
+    ],
+    "packages/adjutorix-app/src/main/ipc/patch_ipc.ts": [
+      "adjutorix:patch:approvePreview",
+      "adjutorix:patch:bindVerify",
+      "adjutorix:patch:clearPreviewState"
+    ],
+    "packages/adjutorix-app/src/main/ipc/verify_ipc.ts": [
+      "adjutorix:verify:bindResult",
+      "adjutorix:verify:clearState"
+    ],
+    "packages/adjutorix-app/src/main/ipc/workspace_ipc.ts": [
+      "adjutorix:workspace:close"
+    ]
+  },
+  "legacy_main_index_handlers": [
+    "adjutorix:agent:health",
+    "adjutorix:diagnostics:runtimeSnapshot",
+    "adjutorix:runtime:snapshot",
+    "adjutorix:workspace:health"
+  ],
+  "preload_boundary": {
+    "allowed_context_bridge": [
+      "packages/adjutorix-app/src/preload/preload.ts"
+    ],
+    "allowed_raw_ipc_renderer": [
+      "packages/adjutorix-app/src/preload/preload.ts"
+    ]
+  }
+}
