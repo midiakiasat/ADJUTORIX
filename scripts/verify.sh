@@ -599,6 +599,7 @@ main() {
   if [[ "$ADJUTORIX_VERIFY_RUN_CONTRACT_GUARDS" == "true" ]]; then
     run_phase contracts phase_contracts
     run_phase "ipc_channel_registry" check_ipc_channel_registry
+    run_phase "ipc_channel_registry_selftest" check_ipc_channel_registry_selftest
 
   fi
   if [[ "$ADJUTORIX_VERIFY_RUN_POLICY_GUARDS" == "true" ]]; then
@@ -654,6 +655,10 @@ main() {
 
 check_ipc_channel_registry() {
   bash "$REPO_ROOT/configs/ci/guard_ipc_channel_registry.sh"
+}
+
+check_ipc_channel_registry_selftest() {
+  bash "$REPO_ROOT/configs/ci/guard_ipc_channel_registry_selftest.sh"
 }
 
 main "$@"
