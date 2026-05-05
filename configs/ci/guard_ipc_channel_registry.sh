@@ -353,33 +353,36 @@ if contract_hash != expected_contract_hash:
         )
     )
 
-print(json.dumps(
-    {
-        "taxonomyManifest": taxonomy_rel,
-        "contractHashManifest": contract_hash_rel,
-        "contractHash": contract_hash,
-        "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
-        "contractHashUpdateMode": update_contract_hash_manifest,
-        "mainRegistryChannelCount": len(main_registry),
-        "bridgeRegistryChannelCount": len(bridge_registry),
-        "domainRegistryChannelCount": len(domain_registry),
-        "mainIndexHandlerChannelCount": len(main_index_handlers),
-        "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
-        "mainIndexLegacyHandlerCount": len(main_index_legacy_handlers),
-        "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
-        "ipcGuardChannelCount": len(ipc_guard),
-        "runtimeBootstrapChannelCount": len(runtime_bootstrap),
-        "domainOnlyChannelCount": sum(len(v) for v in domain_only_by_file.values()),
-        "domainOnlyChannelsByFile": {rel: sorted(values) for rel, values in sorted(domain_only_by_file.items())},
-        "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
-        "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
-        "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
-        "preloadBoundaryAllowedRawIpcRenderer": sorted(allowed_raw_ipc_renderer),
-        "preloadBoundaryAllowedContextBridge": sorted(allowed_context_bridge),
-    },
-    indent=2,
-    sort_keys=True,
-))
+report = {
+    "taxonomyManifest": taxonomy_rel,
+    "contractHashManifest": contract_hash_rel,
+    "contractHash": contract_hash,
+    "contractHashAlgorithm": "sha256:ipc-channel-registry-v1",
+    "contractHashUpdateMode": update_contract_hash_manifest,
+    "mainRegistryChannelCount": len(main_registry),
+    "bridgeRegistryChannelCount": len(bridge_registry),
+    "domainRegistryChannelCount": len(domain_registry),
+    "mainIndexHandlerChannelCount": len(main_index_handlers),
+    "mainIndexSafeHandleChannelCount": len(main_index_safe_handlers),
+    "mainIndexLegacyHandlerCount": len(main_index_legacy_handlers),
+    "mainIndexLegacyHandlers": sorted(main_index_legacy_handlers),
+    "ipcGuardChannelCount": len(ipc_guard),
+    "runtimeBootstrapChannelCount": len(runtime_bootstrap),
+    "domainOnlyChannelCount": sum(len(v) for v in domain_only_by_file.values()),
+    "domainOnlyChannelsByFile": {rel: sorted(values) for rel, values in sorted(domain_only_by_file.items())},
+    "bridgeCompatOnlyChannelCount": len(bridge_compat_only),
+    "bridgeCompatOnlyChannels": sorted(bridge_compat_only),
+    "domainRegistryCounts": {rel: len(values) for rel, values in sorted(domain_registries.items())},
+    "preloadBoundaryAllowedRawIpcRenderer": sorted(allowed_raw_ipc_renderer),
+    "preloadBoundaryAllowedContextBridge": sorted(allowed_context_bridge),
+}
+report_text = json.dumps(report, indent=2, sort_keys=True)
+report_path_value = os.environ.get("ADJUTORIX_IPC_CHANNEL_REGISTRY_REPORT")
+if report_path_value:
+    report_path = Path(report_path_value)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report_text + "\\n", encoding="utf-8")
+print(report_text)
 print("preload boundary raw Electron authority confined")
 PY
 

@@ -3,7 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(git rev-parse --show-toplevel)}"
 SELFTEST_ROOT="${SELFTEST_ROOT:-$ROOT_DIR/.tmp/ci/guard_ipc_channel_registry_selftest}"
+if [[ "$SELFTEST_ROOT" != /* ]]; then
+  SELFTEST_ROOT="$ROOT_DIR/$SELFTEST_ROOT"
+fi
 LOG_DIR="$SELFTEST_ROOT/logs"
+SUMMARY="$SELFTEST_ROOT/summary.json"
 TMP_PARENT=""
 
 mkdir -p "$LOG_DIR"
@@ -209,24 +213,26 @@ expect_refresh "contract_hash_manifest_refresh" mutate_contract_hash_manifest_st
 
 reset_wt
 
-python3 - "$case_count" "$refresh_case_count" "$LOG_DIR" <<'PY'
+python3 - "$case_count" "$refresh_case_count" "$LOG_DIR" "$SUMMARY" <<'PY'
 import json
 import sys
+from pathlib import Path
 
 negative_case_count = int(sys.argv[1])
 refresh_case_count = int(sys.argv[2])
-
-print(json.dumps(
-    {
-        "ok": True,
-        "negativeCaseCount": negative_case_count,
-        "refreshCaseCount": refresh_case_count,
-        "totalCaseCount": negative_case_count + refresh_case_count,
-        "logDir": sys.argv[3],
-    },
-    indent=2,
-    sort_keys=True,
-))
+summary_path = Path(sys.argv[4])
+summary = {
+    "ok": True,
+    "negativeCaseCount": negative_case_count,
+    "refreshCaseCount": refresh_case_count,
+    "totalCaseCount": negative_case_count + refresh_case_count,
+    "logDir": sys.argv[3],
+    "summaryPath": str(summary_path),
+}
+summary_text = json.dumps(summary, indent=2, sort_keys=True)
+summary_path.parent.mkdir(parents=True, exist_ok=True)
+summary_path.write_text(summary_text + "\\n", encoding="utf-8")
+print(summary_text)
 PY
 
 printf '[guard:ipc_channel_registry_selftest] negative IPC guard selftest holds\n'
