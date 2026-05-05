@@ -123,8 +123,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import pathlib
 import re
+import subprocess
 from collections import defaultdict
 
 ROOT = pathlib.Path.cwd()
@@ -138,7 +140,45 @@ SURFACES = {
     "golden": ROOT / "tests" / "golden",
 }
 
+
 FILE_SUFFIXES = {".ts", ".tsx", ".py", ".json", ".md"}
+
+CONSTITUTION_AUTHORITY_STRATA = {"authority/source", "authority/tests", "authority/config"}
+CONSTITUTION_STRATUM_CACHE: dict[str, str] = {}
+CONTRACT_DRIFT_GUARD_SELF = "configs/ci/guard_contract_drift.sh"
+
+def constitution_root() -> str:
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel: str) -> str:
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(pathlib.Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
+def should_scan_contract_file(rel: str, path: pathlib.Path) -> bool:
+    if rel == CONTRACT_DRIFT_GUARD_SELF:
+        return False
+    if path.suffix not in FILE_SUFFIXES:
+        return False
+    return constitution_stratum_for_path(rel) in CONSTITUTION_AUTHORITY_STRATA
 
 PATTERNS = {
     "rpc_method_string": re.compile(r'["\']([a-zA-Z0-9_.-]+\.[a-zA-Z0-9_.-]+)["\']'),
@@ -167,9 +207,9 @@ for surface_name, base in SURFACES.items():
     for path in sorted(base.rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix not in FILE_SUFFIXES:
-            continue
         rel = path.relative_to(ROOT).as_posix()
+        if not should_scan_contract_file(rel, path):
+            continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         files.append({"path": rel, "sha256": digest, "size": len(text.encode('utf-8'))})
