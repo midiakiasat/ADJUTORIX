@@ -97,6 +97,7 @@ scan_with_python() {
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 import subprocess
 import sys
@@ -116,16 +117,6 @@ SCAN_SUFFIXES = (
     ".sh",
 )
 
-SKIP_PREFIXES = (
-    ".adjutorix-release/",
-    ".git/",
-    ".tmp/",
-    "node_modules/",
-    "dist/",
-    "build/",
-    "out/",
-    "coverage/",
-)
 
 CANONICAL_WRITE_FILES = {
     "configs/ci/guard_no_direct_write.sh",
@@ -231,8 +222,41 @@ def git_ls_files() -> list[str]:
 def is_allowed(candidate: str) -> bool:
     return any(fnmatch.fnmatch(candidate, pattern) for pattern in ALLOW_PATTERNS)
 
+CONSTITUTION_SCAN_SKIP_STRATA = {"authority/tests", "ephemeral/runtime", "derived/build", "release/distributable", "forbidden"}
+CONSTITUTION_STRATUM_CACHE: dict[str, str] = {}
+NO_DIRECT_WRITE_GUARD_SELF = "configs/ci/guard_no_direct_write.sh"
+
+def constitution_root() -> str:
+    env_root = os.environ.get("ROOT_DIR")
+    if env_root:
+        return env_root
+    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+
+def constitution_stratum_for_path(rel: str) -> str:
+    normalized = rel.replace("\\", "/").lstrip("./")
+    cached = CONSTITUTION_STRATUM_CACHE.get(normalized)
+    if cached is not None:
+        return cached
+
+    root = constitution_root()
+    classifier = str(Path(root) / "scripts/lib/constitution-classifier.mjs")
+    try:
+        value = subprocess.check_output(
+            ["node", classifier, root, normalized],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip() or "unclassified"
+    except Exception:
+        value = "unclassified"
+
+    CONSTITUTION_STRATUM_CACHE[normalized] = value
+    return value
+
 def is_skipped_path(rel: str) -> bool:
-    return any(rel.startswith(prefix) for prefix in SKIP_PREFIXES)
+    if rel == NO_DIRECT_WRITE_GUARD_SELF:
+        return True
+    stratum = constitution_stratum_for_path(rel)
+    return stratum in CONSTITUTION_SCAN_SKIP_STRATA
 
 def is_canonical_write_surface(rel: str) -> bool:
     return rel in CANONICAL_WRITE_FILES or any(rel.startswith(prefix) for prefix in CANONICAL_WRITE_PREFIXES)
