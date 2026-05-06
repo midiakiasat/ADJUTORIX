@@ -310,7 +310,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -319,7 +319,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -328,7 +328,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -355,7 +355,7 @@ wait_for_job_state() {
       -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"job.status\",\"params\":{\"job_id\":\"${job_id}\"}}" \
       "$RPC_URL" > "$ADJUTORIX_TX_SUBMIT_STATUS_JSON"
 
-    FINAL_STATUS="$(python - <<'PY' "$ADJUTORIX_TX_SUBMIT_STATUS_JSON"
+    FINAL_STATUS="$(python3 - <<'PY' "$ADJUTORIX_TX_SUBMIT_STATUS_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -363,7 +363,7 @@ result = data.get('result', {})
 print(result.get('state', result.get('status', 'unknown')))
 PY
 )"
-    FINAL_STATE_REASON="$(python - <<'PY' "$ADJUTORIX_TX_SUBMIT_STATUS_JSON"
+    FINAL_STATE_REASON="$(python3 - <<'PY' "$ADJUTORIX_TX_SUBMIT_STATUS_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -401,7 +401,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command shasum
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -410,7 +410,7 @@ phase_repo_and_toolchain() {
 phase_resolve_payload() {
   if [[ -n "$PAYLOAD_FILE" ]]; then
     [[ -f "$PAYLOAD_FILE" ]] || die "Payload file not found: $PAYLOAD_FILE"
-    python - <<'PY' "$PAYLOAD_FILE" "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
+    python3 - <<'PY' "$PAYLOAD_FILE" "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -418,7 +418,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as fh:
     json.dump(data, fh, indent=2)
 PY
   else
-    python - <<'PY' "$PAYLOAD_JSON_INLINE" "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
+    python3 - <<'PY' "$PAYLOAD_JSON_INLINE" "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
 import json, sys
 payload = json.loads(sys.argv[1])
 with open(sys.argv[2], 'w', encoding='utf-8') as fh:
@@ -432,7 +432,7 @@ PY
 }
 
 phase_validate_payload_shape() {
-  python - <<'PY' "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
+  python3 - <<'PY' "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -452,7 +452,7 @@ phase_resolve_workspace_context() {
     return 0
   fi
 
-  WORKSPACE_CANONICAL="$(python - <<'PY' "$WORKSPACE_PATH"
+  WORKSPACE_CANONICAL="$(python3 - <<'PY' "$WORKSPACE_PATH"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -486,7 +486,7 @@ phase_verify_agent_health() {
 }
 
 phase_submit_transaction() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_SUBMIT_REQUEST_JSON" \
     "$ADJUTORIX_TX_SUBMIT_SUBMISSION_JSON" \
     "$TRANSACTION_METHOD" \
@@ -541,7 +541,7 @@ PY
     -d @"$ADJUTORIX_TX_SUBMIT_SUBMISSION_JSON" \
     "$RPC_URL" > "$ADJUTORIX_TX_SUBMIT_RESPONSE_JSON"
 
-  JOB_ID="$(python - <<'PY' "$ADJUTORIX_TX_SUBMIT_RESPONSE_JSON"
+  JOB_ID="$(python3 - <<'PY' "$ADJUTORIX_TX_SUBMIT_RESPONSE_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)

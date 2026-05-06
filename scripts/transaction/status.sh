@@ -268,7 +268,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -277,7 +277,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -286,7 +286,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -332,7 +332,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command shasum
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -341,7 +341,7 @@ phase_repo_and_toolchain() {
 phase_resolve_identity() {
   if [[ -n "$ADJUTORIX_TX_STATUS_SUBMISSION_JSON" ]]; then
     [[ -f "$ADJUTORIX_TX_STATUS_SUBMISSION_JSON" ]] || die "Submission artifact not found: $ADJUTORIX_TX_STATUS_SUBMISSION_JSON"
-    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID PAYLOAD_SHA256 < <(python - <<'PY' "$ADJUTORIX_TX_STATUS_SUBMISSION_JSON"
+    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID PAYLOAD_SHA256 < <(python3 - <<'PY' "$ADJUTORIX_TX_STATUS_SUBMISSION_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -425,7 +425,7 @@ phase_verify_agent_health() {
 }
 
 phase_fetch_status_once() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_STATUS_REQUEST_JSON" \
     "$METHOD_TO_CALL" \
     "$REQUEST_ID" \
@@ -456,7 +456,7 @@ PY
 }
 
 phase_normalize_status() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_STATUS_RESPONSE_JSON" \
     "$ADJUTORIX_TX_STATUS_NORMALIZED_JSON" \
     "$STATUS_ID" \
@@ -521,7 +521,7 @@ out_path.write_text(json.dumps(norm, indent=2), encoding='utf-8')
 print(json.dumps(norm))
 PY
 
-  read -r RAW_STATE NORMALIZED_STATE TERMINAL SUCCESS STATE_REASON RESULT_OBJECT_PRESENT < <(python - <<'PY' "$ADJUTORIX_TX_STATUS_NORMALIZED_JSON"
+  read -r RAW_STATE NORMALIZED_STATE TERMINAL SUCCESS STATE_REASON RESULT_OBJECT_PRESENT < <(python3 - <<'PY' "$ADJUTORIX_TX_STATUS_NORMALIZED_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)

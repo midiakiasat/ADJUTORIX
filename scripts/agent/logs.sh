@@ -261,7 +261,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -270,7 +270,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -279,7 +279,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -294,7 +294,7 @@ PY
 }
 
 redact_stream() {
-  python - <<'PY'
+  python3 - <<'PY'
 import re, sys
 patterns = [
     (re.compile(r'sk-[A-Za-z0-9]{20,}'), 'sk-****REDACTED****'),
@@ -327,7 +327,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command grep
   require_command tail
   require_command sed
@@ -392,7 +392,7 @@ phase_inspect_source() {
     die "Selected log source does not exist: $SELECTED_LOG_FILE"
   fi
 
-  DETECTED_FORMAT="$(python - <<'PY' "$SELECTED_LOG_FILE" "$ADJUTORIX_AGENT_LOGS_ASSUME_JSONL"
+  DETECTED_FORMAT="$(python3 - <<'PY' "$SELECTED_LOG_FILE" "$ADJUTORIX_AGENT_LOGS_ASSUME_JSONL"
 import json, sys
 path = sys.argv[1]
 mode = sys.argv[2]
@@ -423,7 +423,7 @@ PY
 }
 
 phase_render_output() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$SELECTED_LOG_FILE" \
     "$DETECTED_FORMAT" \
     "$ADJUTORIX_AGENT_LOGS_VIEW" \
@@ -510,7 +510,7 @@ phase_export_if_requested() {
     die "Filtered output exceeds export safety ceiling: ${current_lines} > ${ADJUTORIX_AGENT_LOGS_MAX_EXPORT_LINES}"
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_AGENT_LOGS_JSON_EXPORT" \
     "$SELECTED_SOURCE" \
     "$SELECTED_LOG_FILE" \

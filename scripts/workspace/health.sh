@@ -250,7 +250,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -259,7 +259,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -268,7 +268,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -299,7 +299,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command find
   require_command shasum
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -307,7 +307,7 @@ phase_repo_and_toolchain() {
 }
 
 phase_resolve_target() {
-  TARGET_CANONICAL="$(python - <<'PY' "$TARGET_INPUT"
+  TARGET_CANONICAL="$(python3 - <<'PY' "$TARGET_INPUT"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -345,7 +345,7 @@ phase_validate_git_if_required() {
 }
 
 phase_evaluate_health() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$TARGET_CANONICAL" \
     "$ADJUTORIX_WORKSPACE_HEALTH_INCLUDE_HIDDEN" \
     "$ADJUTORIX_WORKSPACE_HEALTH_EXCLUDE_DIRS" \
@@ -531,7 +531,7 @@ PY
 }
 
 phase_load_health_results() {
-  read -r HEALTH_STATUS FILE_COUNT DIR_COUNT TOTAL_BYTES LARGE_FILE_COUNT CACHE_BYTES BUILD_OUTPUT_BYTES RISK_MARKER_COUNT MANIFEST_COUNT ISSUE_COUNT SEVERITY_SCORE < <(python - <<'PY' "$ADJUTORIX_WORKSPACE_HEALTH_JSON_FILE"
+  read -r HEALTH_STATUS FILE_COUNT DIR_COUNT TOTAL_BYTES LARGE_FILE_COUNT CACHE_BYTES BUILD_OUTPUT_BYTES RISK_MARKER_COUNT MANIFEST_COUNT ISSUE_COUNT SEVERITY_SCORE < <(python3 - <<'PY' "$ADJUTORIX_WORKSPACE_HEALTH_JSON_FILE"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)

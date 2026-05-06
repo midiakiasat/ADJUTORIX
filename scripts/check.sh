@@ -61,7 +61,7 @@ export REPO_ROOT
 : "${ADJUTORIX_CHECK_SUMMARY_FILE:=${ADJUTORIX_CHECK_REPORT_DIR}/summary.txt}"
 : "${ADJUTORIX_CHECK_PHASE_FILE:=${ADJUTORIX_CHECK_REPORT_DIR}/phases.tsv}"
 : "${ADJUTORIX_CHECK_NODE_PACKAGE_MANAGER:=npm}"
-: "${ADJUTORIX_CHECK_PYTHON_BIN:=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3 || command -v python)}"
+: "${ADJUTORIX_CHECK_PYTHON_BIN:=$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3 || command -v python3)}"
 export ADJUTORIX_CHECK_PYTHON_BIN
 : "${ADJUTORIX_CHECK_CONSTITUTION_PATH:=${REPO_ROOT}/configs/adjutorix/constitution.json}"
 : "${ADJUTORIX_CHECK_CONSTITUTION_CHECKER:=${REPO_ROOT}/scripts/adjutorix-constitution-check.mjs}"
@@ -527,7 +527,7 @@ phase_agent_import() {
 import importlib
 import sys
 if sys.version_info < (3, 11):
-    raise SystemExit(f"python>=3.11 required for adjutorix_agent import, got {sys.version.split()[0]}")
+    raise SystemExit(f"python3>=3.11 required for adjutorix_agent import, got {sys.version.split()[0]}")
 importlib.import_module("adjutorix_agent")
 print("agent-import-ok")
 PY
@@ -541,7 +541,7 @@ phase_cli_import() {
 import importlib
 import sys
 if sys.version_info < (3, 11):
-    raise SystemExit(f"python>=3.11 required for adjutorix_cli import, got {sys.version.split()[0]}")
+    raise SystemExit(f"python3>=3.11 required for adjutorix_cli import, got {sys.version.split()[0]}")
 importlib.import_module("adjutorix_cli")
 print("cli-import-ok")
 PY

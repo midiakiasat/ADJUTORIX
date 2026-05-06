@@ -210,7 +210,7 @@ path_exists() {
 }
 
 json_escape() {
-  python - <<'PY' "$1"
+  python3 - <<'PY' "$1"
 import json, sys
 print(json.dumps(sys.argv[1]))
 PY
@@ -304,12 +304,12 @@ check_git_state() {
 check_toolchain() {
   section "Toolchain"
   local cmd version
-  for cmd in bash python node npm git curl lsof; do
+  for cmd in bash python3 node npm git curl lsof; do
     if require_command "$cmd"; then
       version="$($cmd --version 2>/dev/null | head -n 1 || true)"
-      record_finding "D_TOOL_${cmd^^}" PASS toolchain "Command available" "${cmd}: ${version:-version unavailable}"
+      record_finding "D_TOOL_$(printf "%s" "$cmd" | tr "[:lower:]" "[:upper:]" | tr -c "[:alnum:]_" "_")" PASS toolchain "Command available" "${cmd}: ${version:-version unavailable}"
     else
-      record_finding "D_TOOL_${cmd^^}" FAIL toolchain "Required command missing" "$cmd"
+      record_finding "D_TOOL_$(printf "%s" "$cmd" | tr "[:lower:]" "[:upper:]" | tr -c "[:alnum:]_" "_")" FAIL toolchain "Required command missing" "$cmd"
     fi
   done
 }
@@ -334,7 +334,7 @@ check_package_files() {
     "$ADJUTORIX_DOCTOR_RUNTIME_DIR/timeouts.json" \
     "$ADJUTORIX_DOCTOR_RUNTIME_DIR/scheduling.json"; do
     if path_exists "$file"; then
-      if python - <<'PY' "$file" >/dev/null 2>&1
+      if python3 - <<'PY' "$file" >/dev/null 2>&1
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     json.load(fh)
@@ -420,28 +420,36 @@ check_token_state() {
 check_python_imports() {
   section "Python package imports"
   if [[ -d "$ADJUTORIX_DOCTOR_AGENT_DIR" ]]; then
-    if (cd "$ADJUTORIX_DOCTOR_AGENT_DIR" && python - <<'PY' >/dev/null 2>&1
+    if (cd "$ADJUTORIX_DOCTOR_AGENT_DIR" && python3 - <<'PY' >/dev/null 2>&1
 import importlib
 importlib.import_module('adjutorix_agent')
 PY
     ); then
-      record_finding D_AGENT_IMPORT PASS python "adjutorix_agent import succeeded" "$ADJUTORIX_DOCTOR_AGENT_DIR"
+      record_finding D_AGENT_IMPORT PASS python3 "adjutorix_agent import succeeded" "$ADJUTORIX_DOCTOR_AGENT_DIR"
     else
-      record_finding D_AGENT_IMPORT FAIL python "adjutorix_agent import failed" "$ADJUTORIX_DOCTOR_AGENT_DIR"
+      record_finding D_AGENT_IMPORT FAIL python3 "adjutorix_agent import failed" "$ADJUTORIX_DOCTOR_AGENT_DIR"
     fi
   fi
 
   if [[ -d "$ADJUTORIX_DOCTOR_CLI_DIR" ]]; then
-    if (cd "$ADJUTORIX_DOCTOR_CLI_DIR" && python - <<'PY' >/dev/null 2>&1
+    if (cd "$ADJUTORIX_DOCTOR_CLI_DIR" && python3 - <<'PY' >/dev/null 2>&1
 import importlib
 importlib.import_module('adjutorix_cli')
 PY
     ); then
-      record_finding D_CLI_IMPORT PASS python "adjutorix_cli import succeeded" "$ADJUTORIX_DOCTOR_CLI_DIR"
+      record_finding D_CLI_IMPORT PASS python3 "adjutorix_cli import succeeded" "$ADJUTORIX_DOCTOR_CLI_DIR"
     else
-      record_finding D_CLI_IMPORT FAIL python "adjutorix_cli import failed" "$ADJUTORIX_DOCTOR_CLI_DIR"
+      record_finding D_CLI_IMPORT FAIL python3 "adjutorix_cli import failed" "$ADJUTORIX_DOCTOR_CLI_DIR"
     fi
   fi
+}
+
+
+is_true() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|y|Y|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 check_node_installation_state() {
@@ -582,7 +590,7 @@ write_summary() {
 }
 
 write_json_report() {
-  python - <<'PY' "$ADJUTORIX_DOCTOR_REPORT_JSON" "${PASS_COUNT}" "${WARN_COUNT}" "${FAIL_COUNT}" "${INFO_COUNT}" "${PROGRAM_NAME}" "${START_TS}" "${REPO_ROOT}" "${ADJUTORIX_DOCTOR_AGENT_URL}" "${FINDINGS_TSV[*]}"
+  python3 - <<'PY' "$ADJUTORIX_DOCTOR_REPORT_JSON" "${PASS_COUNT}" "${WARN_COUNT}" "${FAIL_COUNT}" "${INFO_COUNT}" "${PROGRAM_NAME}" "${START_TS}" "${REPO_ROOT}" "${ADJUTORIX_DOCTOR_AGENT_URL}" "${FINDINGS_TSV[*]}"
 import json, sys
 report_path = sys.argv[1]
 pass_count = int(sys.argv[2])
@@ -613,7 +621,7 @@ write_json_report_from_tsv() {
 ' "$line" >>"$tmp_tsv"
   done
 
-  python - <<'PY' "$tmp_tsv" "$ADJUTORIX_DOCTOR_REPORT_JSON" "$PROGRAM_NAME" "$START_TS" "$REPO_ROOT" "$ADJUTORIX_DOCTOR_AGENT_URL" "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" "$INFO_COUNT"
+  python3 - <<'PY' "$tmp_tsv" "$ADJUTORIX_DOCTOR_REPORT_JSON" "$PROGRAM_NAME" "$START_TS" "$REPO_ROOT" "$ADJUTORIX_DOCTOR_AGENT_URL" "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" "$INFO_COUNT"
 import csv
 import json
 import sys

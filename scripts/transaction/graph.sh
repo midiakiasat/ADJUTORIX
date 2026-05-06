@@ -306,7 +306,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -315,7 +315,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -324,7 +324,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -354,7 +354,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command shasum
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -363,7 +363,7 @@ phase_repo_and_toolchain() {
 phase_resolve_identity() {
   if [[ -n "$SUBMISSION_ARTIFACT" ]]; then
     [[ -f "$SUBMISSION_ARTIFACT" ]] || die "Submission artifact not found: $SUBMISSION_ARTIFACT"
-    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python - <<'PY' "$SUBMISSION_ARTIFACT"
+    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python3 - <<'PY' "$SUBMISSION_ARTIFACT"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -374,7 +374,7 @@ PY
     RESOLVED_FROM_ARTIFACT="yes"
   elif [[ -n "$STATUS_ARTIFACT" ]]; then
     [[ -f "$STATUS_ARTIFACT" ]] || die "Status artifact not found: $STATUS_ARTIFACT"
-    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID < <(python - <<'PY' "$STATUS_ARTIFACT"
+    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID < <(python3 - <<'PY' "$STATUS_ARTIFACT"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -429,7 +429,7 @@ phase_resolve_token_and_health() {
 }
 
 phase_fetch_graph() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_GRAPH_REQUEST_JSON" \
     "$METHOD_USED" \
     "$REQUEST_PARAM_KEY" \
@@ -458,7 +458,7 @@ PY
 }
 
 phase_normalize_graph() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_GRAPH_RESPONSE_JSON" \
     "$ADJUTORIX_TX_GRAPH_NORMALIZED_JSON" \
     "$ADJUTORIX_TX_GRAPH_NODES_TSV" \
@@ -628,7 +628,7 @@ out_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
 print(json.dumps(payload))
 PY
 
-  read -r NODE_COUNT EDGE_COUNT ROOT_NODE_COUNT LEAF_NODE_COUNT TERMINAL_NODE_COUNT CYCLE_SUSPECTED HAS_TERMINAL_PATH GRAPH_EMPTY < <(python - <<'PY' "$ADJUTORIX_TX_GRAPH_NORMALIZED_JSON"
+  read -r NODE_COUNT EDGE_COUNT ROOT_NODE_COUNT LEAF_NODE_COUNT TERMINAL_NODE_COUNT CYCLE_SUSPECTED HAS_TERMINAL_PATH GRAPH_EMPTY < <(python3 - <<'PY' "$ADJUTORIX_TX_GRAPH_NORMALIZED_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)

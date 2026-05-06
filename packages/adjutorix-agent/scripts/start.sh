@@ -6,7 +6,7 @@
 # Deterministic bootstrap + runtime entrypoint.
 #
 # Responsibilities:
-# - Validate environment (python, venv, deps)
+# - Validate environment (python3, venv, deps)
 # - Enforce invariants (no missing configs, token present)
 # - Prepare runtime dirs (logs, tmp, sockets)
 # - Start server (RPC) with strict flags
@@ -118,11 +118,11 @@ prepare_dirs() {
 ###############################################################################
 
 validate_python_env() {
-  info "validating python environment"
+  info "validating python3 environment"
 
   source "$VENV_DIR/bin/activate"
 
-  python - <<'PY'
+  python3 - <<'PY'
 import sys
 required = [
     "fastapi",

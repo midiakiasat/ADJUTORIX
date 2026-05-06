@@ -261,3 +261,5 @@ release/
 *.tar.gz
 *.tgz
 # <<< ADJUTORIX LOCAL PRIVACY / GENERATED ARTIFACT PERIMETER <<<
+
+.adjutorix/

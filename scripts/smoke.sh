@@ -72,7 +72,7 @@ readonly START_TS
 
 INSTALL_CMD=("${ADJUTORIX_SMOKE_NODE_PACKAGE_MANAGER}" install)
 APP_SMOKE_CMD_BASE=("${ADJUTORIX_SMOKE_NODE_PACKAGE_MANAGER}" test -- "$ADJUTORIX_SMOKE_TARGET")
-AGENT_CMD=(python -m adjutorix_agent.server.main)
+AGENT_CMD=(python3 -m adjutorix_agent.server.main)
 APP_DEV_CMD=("${ADJUTORIX_SMOKE_NODE_PACKAGE_MANAGER}" run dev)
 
 ###############################################################################
@@ -329,7 +329,7 @@ run_phase() {
 
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -338,7 +338,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -347,7 +347,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -437,7 +437,7 @@ phase_repo_and_toolchain() {
   require_file "$REPO_ROOT/package.json"
   require_file "$ADJUTORIX_SMOKE_APP_DIR/package.json"
   require_command git
-  require_command python
+  require_command python3
   require_command node
   require_command npm
   require_command curl
@@ -606,4 +606,4 @@ main() {
   fi
 }
 
-main "
+main "$@"

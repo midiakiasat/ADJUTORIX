@@ -235,7 +235,7 @@ path_exists() {
 
 canonicalize_parent() {
   local path="$1"
-  python - "$path" <<'PY'
+  python3 - "$path" <<'PY'
 import os, sys
 p = sys.argv[1]
 parent = os.path.dirname(os.path.abspath(p)) or os.getcwd()
@@ -245,7 +245,7 @@ PY
 
 canonicalize_path_if_exists() {
   local path="$1"
-  python - "$path" <<'PY'
+  python3 - "$path" <<'PY'
 import os, sys
 p = sys.argv[1]
 if os.path.lexists(p):
@@ -258,7 +258,7 @@ PY
 assert_repo_guardrails() {
   section "Validating repository and clean guardrails"
   require_command git
-  require_command python
+  require_command python3
   require_command find
   require_command rm
   require_command lsof

@@ -236,7 +236,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -245,7 +245,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -254,7 +254,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -269,7 +269,7 @@ PY
 }
 
 json_escape() {
-  python - <<'PY' "$1"
+  python3 - <<'PY' "$1"
 import json, sys
 print(json.dumps(sys.argv[1]))
 PY
@@ -290,7 +290,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command find
   require_command stat
   require_command shasum
@@ -299,7 +299,7 @@ phase_repo_and_toolchain() {
 }
 
 phase_resolve_target() {
-  TARGET_CANONICAL="$(python - <<'PY' "$TARGET_INPUT"
+  TARGET_CANONICAL="$(python3 - <<'PY' "$TARGET_INPUT"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -348,7 +348,7 @@ phase_evaluate_health() {
     return 0
   fi
 
-  read -r FILE_COUNT_HINT TOTAL_BYTES_HINT < <(python - <<'PY' "$TARGET_CANONICAL"
+  read -r FILE_COUNT_HINT TOTAL_BYTES_HINT < <(python3 - <<'PY' "$TARGET_CANONICAL"
 import os, sys
 root = sys.argv[1]
 count = 0
@@ -403,7 +403,7 @@ phase_register_recents() {
     return 0
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_WORKSPACE_OPEN_RECENTS_FILE" \
     "$WORKSPACE_ID" \
     "$TARGET_CANONICAL" \
@@ -458,7 +458,7 @@ phase_handoff_to_agent() {
   [[ -n "$token" ]] || die "Agent handoff requested but token file is empty: $ADJUTORIX_WORKSPACE_OPEN_TOKEN_FILE"
 
   local payload
-  payload="$(python - <<'PY' "$TARGET_CANONICAL" "$WORKSPACE_ID"
+  payload="$(python3 - <<'PY' "$TARGET_CANONICAL" "$WORKSPACE_ID"
 import json, sys
 print(json.dumps({
     "jsonrpc": "2.0",
@@ -557,4 +557,8 @@ main() {
   log_info "workspace_id=${WORKSPACE_ID}"
 
   if (( OVERALL_FAILURES > 0 )); then
-    die "Workspace open failed with ${OVERALL_FAILURES} failed phas
+    die "Workspace open failed with ${OVERALL_FAILURES} failed phase(s)"
+  fi
+}
+
+main "$@"

@@ -155,7 +155,7 @@ Options:
   --detach                      Start agent and exit after readiness
   --no-wait                     Alias for --detach
   --log-level <level>           Override runtime log level
-  --extra-arg <arg>             Append extra argument to python module command
+  --extra-arg <arg>             Append extra argument to python3 module command
   --no-color                    Disable ANSI colors
   --quiet                       Reduce non-error terminal output
   --verbose                     Emit debug logs
@@ -277,7 +277,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -286,7 +286,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -295,7 +295,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -411,7 +411,7 @@ forward_signal() {
 maybe_generate_token() {
   local path="$1"
   ensure_dir "$(dirname "$path")"
-  python - <<'PY' "$path"
+  python3 - <<'PY' "$path"
 import secrets, sys
 with open(sys.argv[1], 'w', encoding='utf-8') as fh:
     fh.write(secrets.token_hex(32))
@@ -440,7 +440,7 @@ phase_repo_and_toolchain() {
   require_file "$REPO_ROOT/package.json"
   require_file "$ADJUTORIX_AGENT_START_AGENT_DIR/pyproject.toml"
   require_file "$ADJUTORIX_AGENT_START_ENV_EXAMPLE"
-  require_command python
+  require_command python3
   require_command curl
   require_command lsof
 }
@@ -492,7 +492,7 @@ phase_prepare_port() {
 }
 
 phase_start_agent() {
-  local cmd=(python -m "$ADJUTORIX_AGENT_START_MODULE")
+  local cmd=(python3 -m "$ADJUTORIX_AGENT_START_MODULE")
   if [[ -n "$ADJUTORIX_AGENT_START_EXTRA_ARGS" ]]; then
     # shellcheck disable=SC2206
     local extra=( $ADJUTORIX_AGENT_START_EXTRA_ARGS )

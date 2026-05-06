@@ -68,8 +68,8 @@ readonly START_TS
 : "${ADJUTORIX_BUILD_ROOT_VERIFY_CMD:=bash scripts/verify.sh --no-color}"
 : "${ADJUTORIX_BUILD_APP_BUILD_CMD:=npm --prefix packages/adjutorix-app run build}"
 : "${ADJUTORIX_BUILD_APP_TYPECHECK_CMD:=npm --prefix packages/adjutorix-app run typecheck}"
-: "${ADJUTORIX_BUILD_AGENT_BUILD_CMD:=python -m build}"
-: "${ADJUTORIX_BUILD_CLI_BUILD_CMD:=python -m build}"
+: "${ADJUTORIX_BUILD_AGENT_BUILD_CMD:=python3 -m build}"
+: "${ADJUTORIX_BUILD_CLI_BUILD_CMD:=python3 -m build}"
 
 ###############################################################################
 # GLOBAL STATE
@@ -235,7 +235,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -244,7 +244,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -253,7 +253,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -306,7 +306,7 @@ phase_repo_and_toolchain() {
   require_file "$ADJUTORIX_BUILD_AGENT_DIR/pyproject.toml"
   require_file "$ADJUTORIX_BUILD_CLI_DIR/pyproject.toml"
   require_command git
-  require_command python
+  require_command python3
   require_command node
   require_command npm
   require_command find
@@ -323,7 +323,7 @@ phase_git_state() {
 }
 
 phase_detect_version() {
-  ROOT_VERSION="$(python - <<'PY' "$REPO_ROOT/package.json"
+  ROOT_VERSION="$(python3 - <<'PY' "$REPO_ROOT/package.json"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -425,7 +425,7 @@ phase_generate_manifest() {
   if [[ "$ADJUTORIX_BUILD_COLLECT_MANIFEST" != "true" ]]; then
     return 0
   fi
-  python - <<'PY' "$ADJUTORIX_BUILD_MANIFEST_FILE" "$ADJUTORIX_BUILD_METADATA_FILE" "$ROOT_VERSION" "$START_TS" "$REPO_ROOT" "$ADJUTORIX_BUILD_RUNTIME_MODE" "${ARTIFACT_PATHS[*]}"
+  python3 - <<'PY' "$ADJUTORIX_BUILD_MANIFEST_FILE" "$ADJUTORIX_BUILD_METADATA_FILE" "$ROOT_VERSION" "$START_TS" "$REPO_ROOT" "$ADJUTORIX_BUILD_RUNTIME_MODE" "${ARTIFACT_PATHS[*]}"
 import hashlib
 import json
 import sys

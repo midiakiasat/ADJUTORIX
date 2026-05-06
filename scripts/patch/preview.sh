@@ -250,7 +250,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -259,7 +259,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -268,7 +268,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -299,14 +299,14 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command shasum
   require_command diff
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
 }
 
 phase_resolve_workspace() {
-  WORKSPACE_CANONICAL="$(python - <<'PY' "$WORKSPACE_PATH"
+  WORKSPACE_CANONICAL="$(python3 - <<'PY' "$WORKSPACE_PATH"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -321,7 +321,7 @@ PY
 phase_resolve_patch_payload() {
   if [[ -n "$PATCH_FILE" ]]; then
     [[ -f "$PATCH_FILE" ]] || die "Patch file not found: $PATCH_FILE"
-    python - <<'PY' "$PATCH_FILE" "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
+    python3 - <<'PY' "$PATCH_FILE" "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -329,7 +329,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as fh:
     json.dump(data, fh, indent=2)
 PY
   else
-    python - <<'PY' "$PATCH_JSON_INLINE" "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
+    python3 - <<'PY' "$PATCH_JSON_INLINE" "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
 import json, sys
 payload = json.loads(sys.argv[1])
 with open(sys.argv[2], 'w', encoding='utf-8') as fh:
@@ -342,7 +342,7 @@ PY
 }
 
 phase_validate_patch_shape() {
-  python - <<'PY' "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
+  python3 - <<'PY' "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -356,7 +356,7 @@ PY
 }
 
 phase_normalize_preview() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON" \
     "$WORKSPACE_CANONICAL" \
     "$ADJUTORIX_PATCH_PREVIEW_NORMALIZED_JSON" \
@@ -518,7 +518,7 @@ out_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
 print(json.dumps(payload))
 PY
 
-  read -r PATCH_KIND TARGET_FILE_COUNT CREATED_COUNT UPDATED_COUNT DELETED_COUNT RENAMED_COUNT HUNK_COUNT CONFLICT_SUSPECT_COUNT POLICY_HINT_COUNT BINARY_TARGET_COUNT TOTAL_INSERTIONS TOTAL_DELETIONS < <(python - <<'PY' "$ADJUTORIX_PATCH_PREVIEW_NORMALIZED_JSON"
+  read -r PATCH_KIND TARGET_FILE_COUNT CREATED_COUNT UPDATED_COUNT DELETED_COUNT RENAMED_COUNT HUNK_COUNT CONFLICT_SUSPECT_COUNT POLICY_HINT_COUNT BINARY_TARGET_COUNT TOTAL_INSERTIONS TOTAL_DELETIONS < <(python3 - <<'PY' "$ADJUTORIX_PATCH_PREVIEW_NORMALIZED_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -546,7 +546,7 @@ phase_render_diff() {
     return 0
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_PATCH_PREVIEW_REQUEST_JSON" \
     "$WORKSPACE_CANONICAL" \
     "$ADJUTORIX_PATCH_PREVIEW_DIFF_FILE" \

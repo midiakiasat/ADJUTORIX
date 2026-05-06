@@ -164,7 +164,7 @@ Options:
   --detach                      Restart and exit after readiness
   --no-wait                     Alias for --detach
   --log-level <level>           Override runtime log level
-  --extra-arg <arg>             Append extra argument to python module command
+  --extra-arg <arg>             Append extra argument to python3 module command
   --no-color                    Disable ANSI colors
   --quiet                       Reduce non-error terminal output
   --verbose                     Emit debug logs
@@ -347,7 +347,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -356,7 +356,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -365,7 +365,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -393,7 +393,7 @@ load_env_file_if_present() {
 maybe_generate_token() {
   local path="$1"
   ensure_dir "$(dirname "$path")"
-  python - <<'PY' "$path"
+  python3 - <<'PY' "$path"
 import secrets, sys
 with open(sys.argv[1], 'w', encoding='utf-8') as fh:
     fh.write(secrets.token_hex(32))
@@ -436,7 +436,7 @@ phase_repo_and_toolchain() {
   require_file "$REPO_ROOT/package.json"
   require_file "$ADJUTORIX_AGENT_RESTART_AGENT_DIR/pyproject.toml"
   require_file "$ADJUTORIX_AGENT_RESTART_ENV_EXAMPLE"
-  require_command python
+  require_command python3
   require_command curl
   require_command lsof
   require_command ps
@@ -493,7 +493,7 @@ phase_resolve_token() {
 }
 
 phase_stop_old_agent() {
-  if [[ -n "$OLD_PID" && child_is_running "$OLD_PID" ]]; then
+  if [[ -n "$OLD_PID" ]] && child_is_running "$OLD_PID"; then
     if [[ -n "$OLD_CMDLINE" && "$OLD_CMDLINE" != *"${ADJUTORIX_AGENT_RESTART_EXPECTED_MODULE_HINT}"* ]]; then
       die "Refusing to restart over non-agent pid=${OLD_PID}: ${OLD_CMDLINE}"
     fi
@@ -517,7 +517,7 @@ phase_prepare_port() {
 }
 
 phase_start_new_agent() {
-  local cmd=(python -m "$ADJUTORIX_AGENT_RESTART_MODULE")
+  local cmd=(python3 -m "$ADJUTORIX_AGENT_RESTART_MODULE")
   if [[ -n "$ADJUTORIX_AGENT_RESTART_EXTRA_ARGS" ]]; then
     # shellcheck disable=SC2206
     local extra=( $ADJUTORIX_AGENT_RESTART_EXTRA_ARGS )

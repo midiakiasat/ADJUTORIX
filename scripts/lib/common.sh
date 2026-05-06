@@ -63,16 +63,16 @@ ensure_workspace_clean() {
 }
 
 default_python() {
-  if [[ -x "$ADJ_ROOT/.venv/bin/python" ]]; then
-    printf "%s\n" "$ADJ_ROOT/.venv/bin/python"
+  if [[ -x "$ADJ_ROOT/.venv/bin/python3" ]]; then
+    printf "%s\n" "$ADJ_ROOT/.venv/bin/python3"
     return
   fi
   if maybe_cmd python3; then
     command -v python3
     return
   fi
-  require_cmd python
-  command -v python
+  require_cmd python3
+  command -v python3
 }
 
 node_package_manager() {
@@ -154,4 +154,12 @@ safe_rg() {
   else
     grep -R "$@"
   fi
+}
+
+
+is_true() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|y|Y|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
 }

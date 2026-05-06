@@ -241,7 +241,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -250,7 +250,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -259,7 +259,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -291,7 +291,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command find
   require_command shasum
   require_command file
@@ -300,7 +300,7 @@ phase_repo_and_toolchain() {
 }
 
 phase_resolve_target() {
-  TARGET_CANONICAL="$(python - <<'PY' "$TARGET_INPUT"
+  TARGET_CANONICAL="$(python3 - <<'PY' "$TARGET_INPUT"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -326,7 +326,7 @@ phase_validate_git_if_required() {
 }
 
 phase_scan_workspace() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$TARGET_CANONICAL" \
     "$ADJUTORIX_WORKSPACE_SCAN_INCLUDE_HIDDEN" \
     "$ADJUTORIX_WORKSPACE_SCAN_EXCLUDE_DIRS" \
@@ -489,7 +489,7 @@ PY
 }
 
 phase_load_scan_results() {
-  read -r FILE_COUNT DIR_COUNT TOTAL_BYTES LARGE_FILE_COUNT HASHED_FILE_COUNT TRUST_HINT HEALTH_HINT GIT_HINT MANIFEST_COUNT RISK_COUNT < <(python - <<'PY' "$ADJUTORIX_WORKSPACE_SCAN_JSON_FILE"
+  read -r FILE_COUNT DIR_COUNT TOTAL_BYTES LARGE_FILE_COUNT HASHED_FILE_COUNT TRUST_HINT HEALTH_HINT GIT_HINT MANIFEST_COUNT RISK_COUNT < <(python3 - <<'PY' "$ADJUTORIX_WORKSPACE_SCAN_JSON_FILE"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -587,4 +587,8 @@ main() {
   log_info "workspace_id=${WORKSPACE_ID} scan_id=${SCAN_ID}"
 
   if (( OVERALL_FAILURES > 0 )); then
-    die "Workspace scan fail
+    die "Workspace scan failed with ${OVERALL_FAILURES} failed phase(s)"
+  fi
+}
+
+main "$@"

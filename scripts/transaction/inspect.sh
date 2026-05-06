@@ -331,7 +331,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -340,7 +340,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -349,7 +349,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -377,7 +377,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command shasum
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -386,7 +386,7 @@ phase_repo_and_toolchain() {
 phase_resolve_identity() {
   if [[ -n "$SUBMISSION_ARTIFACT" ]]; then
     [[ -f "$SUBMISSION_ARTIFACT" ]] || die "Submission artifact not found: $SUBMISSION_ARTIFACT"
-    read -r JOB_ID TRANSACTION_ID REQUEST_ID PAYLOAD_SHA256 AUTHORITY PRIORITY INTENT_LABEL WORKSPACE_PATH WORKSPACE_ID TRUST_FILE < <(python - <<'PY' "$SUBMISSION_ARTIFACT"
+    read -r JOB_ID TRANSACTION_ID REQUEST_ID PAYLOAD_SHA256 AUTHORITY PRIORITY INTENT_LABEL WORKSPACE_PATH WORKSPACE_ID TRUST_FILE < <(python3 - <<'PY' "$SUBMISSION_ARTIFACT"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -408,7 +408,7 @@ PY
     RESOLVED_FROM_ARTIFACT="yes"
   elif [[ -n "$STATUS_ARTIFACT" ]]; then
     [[ -f "$STATUS_ARTIFACT" ]] || die "Status artifact not found: $STATUS_ARTIFACT"
-    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID < <(python - <<'PY' "$STATUS_ARTIFACT"
+    read -r STATUS_ID STATUS_ID_KIND REQUEST_ID < <(python3 - <<'PY' "$STATUS_ARTIFACT"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -473,7 +473,7 @@ phase_fetch_status() {
     status_key="request_id"
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_INSPECT_STATUS_REQUEST_JSON" \
     "$ADJUTORIX_TX_INSPECT_STATUS_METHOD" \
     "$status_key" \
@@ -507,7 +507,7 @@ phase_fetch_logs() {
   fi
   [[ -n "$JOB_ID" ]] || return 0
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_INSPECT_LOGS_REQUEST_JSON" \
     "$ADJUTORIX_TX_INSPECT_LOGS_METHOD" \
     "$JOB_ID" \
@@ -550,7 +550,7 @@ phase_fetch_graph() {
     graph_key="request_id"
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_INSPECT_GRAPH_REQUEST_JSON" \
     "$ADJUTORIX_TX_INSPECT_GRAPH_METHOD" \
     "$graph_key" \
@@ -589,7 +589,7 @@ phase_correlate_local_artifacts() {
   [[ -n "$GRAPH_ARTIFACT" && -f "$GRAPH_ARTIFACT" ]] && LOCAL_ARTIFACT_COUNT=$((LOCAL_ARTIFACT_COUNT + 1))
 
   if [[ -n "$LOG_ARTIFACT" && -f "$LOG_ARTIFACT" ]]; then
-    if python - <<'PY' "$LOG_ARTIFACT" >/dev/null 2>&1
+    if python3 - <<'PY' "$LOG_ARTIFACT" >/dev/null 2>&1
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -602,7 +602,7 @@ PY
 }
 
 phase_normalize_inspection() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_INSPECT_STATUS_RESPONSE_JSON" \
     "$ADJUTORIX_TX_INSPECT_LOGS_RESPONSE_JSON" \
     "$ADJUTORIX_TX_INSPECT_GRAPH_RESPONSE_JSON" \
@@ -742,7 +742,7 @@ out_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
 print(json.dumps(payload))
 PY
 
-  read -r RAW_STATE NORMALIZED_STATE TERMINAL SUCCESS STATE_REASON LOG_ROW_COUNT GRAPH_NODE_COUNT GRAPH_EDGE_COUNT CANCEL_PRESENT CANCEL_REASON < <(python - <<'PY' "$ADJUTORIX_TX_INSPECT_NORMALIZED_JSON"
+  read -r RAW_STATE NORMALIZED_STATE TERMINAL SUCCESS STATE_REASON LOG_ROW_COUNT GRAPH_NODE_COUNT GRAPH_EDGE_COUNT CANCEL_PRESENT CANCEL_REASON < <(python3 - <<'PY' "$ADJUTORIX_TX_INSPECT_NORMALIZED_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -894,4 +894,9 @@ main() {
   log_info "summary=${ADJUTORIX_TX_INSPECT_SUMMARY_FILE}"
   log_info "normalized_state=${NORMALIZED_STATE} terminal=${TERMINAL} success=${SUCCESS}"
 
-  if (( OVERALL_FAILURES > 0 )); the
+  if (( OVERALL_FAILURES > 0 )); then
+    die "Transaction inspect failed with ${OVERALL_FAILURES} failed phase(s)"
+  fi
+}
+
+main "$@"

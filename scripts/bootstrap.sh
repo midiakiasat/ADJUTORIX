@@ -87,7 +87,7 @@ PHASE_RESULTS=()
 PHASE_INDEX=0
 OVERALL_FAILURES=0
 PYTHON_VENV_PATH="${REPO_ROOT}/.venv"
-PYTHON_BIN="python"
+PYTHON_BIN="python3"
 PIP_BIN=""
 BOOTSTRAP_STATUS="unknown"
 
@@ -250,7 +250,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -259,7 +259,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -268,7 +268,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -307,7 +307,7 @@ maybe_generate_token() {
     return 0
   fi
   ensure_dir "$(dirname "$token_file")"
-  python - <<'PY' "$token_file"
+  python3 - <<'PY' "$token_file"
 import secrets, sys
 path = sys.argv[1]
 with open(path, 'w', encoding='utf-8') as fh:
@@ -345,7 +345,7 @@ phase_repo_and_toolchain() {
   require_file "$ADJUTORIX_BOOTSTRAP_APP_ENV_EXAMPLE"
   require_file "$ADJUTORIX_BOOTSTRAP_AGENT_ENV_EXAMPLE"
   require_command git
-  require_command python
+  require_command python3
   require_command node
   require_command npm
 }
@@ -360,17 +360,17 @@ phase_git_state() {
 }
 
 phase_detect_python() {
-  if [[ -x "${PYTHON_VENV_PATH}/bin/python" ]]; then
-    PYTHON_BIN="${PYTHON_VENV_PATH}/bin/python"
+  if [[ -x "${PYTHON_VENV_PATH}/bin/python3" ]]; then
+    PYTHON_BIN="${PYTHON_VENV_PATH}/bin/python3"
     PIP_BIN="${PYTHON_VENV_PATH}/bin/pip"
-    log_info "Using repository virtualenv python: ${PYTHON_BIN}"
+    log_info "Using repository virtualenv python3: ${PYTHON_BIN}"
     return 0
   fi
 
-  PYTHON_BIN="$(command -v python3 || command -v python || true)"
+  PYTHON_BIN="$(command -v python3 || command -v python3 || true)"
   [[ -n "$PYTHON_BIN" ]] || die "No usable Python interpreter found"
   PIP_BIN="${PYTHON_BIN} -m pip"
-  log_info "Using system python: ${PYTHON_BIN}"
+  log_info "Using system python3: ${PYTHON_BIN}"
 }
 
 phase_create_runtime_dirs() {
@@ -395,19 +395,19 @@ phase_install_python() {
     return 0
   fi
 
-  if [[ ! -x "${PYTHON_VENV_PATH}/bin/python" ]]; then
+  if [[ ! -x "${PYTHON_VENV_PATH}/bin/python3" ]]; then
     run_cmd_logged create_venv bash -lc "cd '$REPO_ROOT' && '${PYTHON_BIN}' -m venv .venv"
-    PYTHON_BIN="${PYTHON_VENV_PATH}/bin/python"
+    PYTHON_BIN="${PYTHON_VENV_PATH}/bin/python3"
     PIP_BIN="${PYTHON_VENV_PATH}/bin/pip"
   fi
 
-  run_cmd_logged pip_upgrade bash -lc "cd '$REPO_ROOT' && '${PYTHON_VENV_PATH}/bin/python' -m pip install --upgrade pip setuptools wheel build"
+  run_cmd_logged pip_upgrade bash -lc "cd '$REPO_ROOT' && '${PYTHON_VENV_PATH}/bin/python3' -m pip install --upgrade pip setuptools wheel build"
 
   if [[ -f "${ADJUTORIX_BOOTSTRAP_AGENT_DIR}/pyproject.toml" ]]; then
-    run_cmd_logged install_agent_editable bash -lc "cd '$ADJUTORIX_BOOTSTRAP_AGENT_DIR' && '${PYTHON_VENV_PATH}/bin/python' -m pip install -e ."
+    run_cmd_logged install_agent_editable bash -lc "cd '$ADJUTORIX_BOOTSTRAP_AGENT_DIR' && '${PYTHON_VENV_PATH}/bin/python3' -m pip install -e ."
   fi
   if [[ -f "${ADJUTORIX_BOOTSTRAP_CLI_DIR}/pyproject.toml" ]]; then
-    run_cmd_logged install_cli_editable bash -lc "cd '$ADJUTORIX_BOOTSTRAP_CLI_DIR' && '${PYTHON_VENV_PATH}/bin/python' -m pip install -e ."
+    run_cmd_logged install_cli_editable bash -lc "cd '$ADJUTORIX_BOOTSTRAP_CLI_DIR' && '${PYTHON_VENV_PATH}/bin/python3' -m pip install -e ."
   fi
 }
 
@@ -436,7 +436,7 @@ phase_create_token_if_requested() {
 }
 
 phase_python_import_sanity() {
-  if [[ ! -x "${PYTHON_VENV_PATH}/bin/python" ]]; then
+  if [[ ! -x "${PYTHON_VENV_PATH}/bin/python3" ]]; then
     if [[ "$ADJUTORIX_BOOTSTRAP_ALLOW_MISSING_VENV" == "true" ]]; then
       log_warn "Repository virtualenv missing; skipping Python import sanity"
       return 0
@@ -444,7 +444,7 @@ phase_python_import_sanity() {
     die "Repository virtualenv missing and missing venv is not allowed"
   fi
 
-  run_cmd_logged python_import_sanity bash -lc "cd '$REPO_ROOT' && '${PYTHON_VENV_PATH}/bin/python' - <<'PY'
+  run_cmd_logged python_import_sanity bash -lc "cd '$REPO_ROOT' && '${PYTHON_VENV_PATH}/bin/python3' - <<'PY'
 import importlib
 importlib.import_module('adjutorix_agent')
 importlib.import_module('adjutorix_cli')

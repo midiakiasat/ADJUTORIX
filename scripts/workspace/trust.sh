@@ -252,7 +252,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -261,7 +261,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -270,7 +270,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -299,7 +299,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command shasum
   require_command date
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -307,7 +307,7 @@ phase_repo_and_toolchain() {
 }
 
 phase_resolve_target() {
-  TARGET_CANONICAL="$(python - <<'PY' "$TARGET_INPUT"
+  TARGET_CANONICAL="$(python3 - <<'PY' "$TARGET_INPUT"
 import os, sys
 print(os.path.realpath(sys.argv[1]))
 PY
@@ -334,7 +334,7 @@ phase_validate_access() {
 
 phase_load_current_state() {
   if [[ -f "$STATE_FILE" ]]; then
-    read -r CURRENT_STATUS CURRENT_LEVEL CURRENT_EXPIRES_AT < <(python - <<'PY' "$STATE_FILE"
+    read -r CURRENT_STATUS CURRENT_LEVEL CURRENT_EXPIRES_AT < <(python3 - <<'PY' "$STATE_FILE"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -421,7 +421,7 @@ phase_persist_state() {
     die "Trust record creation disabled and record does not already exist"
   fi
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$STATE_FILE" \
     "$WORKSPACE_ID" \
     "$TARGET_CANONICAL" \
@@ -488,7 +488,7 @@ phase_register_recents() {
   if [[ "$ADJUTORIX_WORKSPACE_TRUST_REGISTER_RECENT" != "true" ]]; then
     return 0
   fi
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_WORKSPACE_TRUST_RECENTS_FILE" \
     "$WORKSPACE_ID" \
     "$TARGET_CANONICAL" \
@@ -532,7 +532,7 @@ PY
 }
 
 phase_write_event() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_WORKSPACE_TRUST_EVENT_FILE" \
     "$TRUST_EVENT_ID" \
     "$WORKSPACE_ID" \
@@ -577,7 +577,7 @@ phase_handoff_to_agent() {
   [[ -n "$token" ]] || die "Agent handoff requested but token file is empty"
 
   local payload
-  payload="$(python - <<'PY' "$WORKSPACE_ID" "$TARGET_CANONICAL" "$NEXT_LEVEL" "$NEXT_STATUS" "$REASON"
+  payload="$(python3 - <<'PY' "$WORKSPACE_ID" "$TARGET_CANONICAL" "$NEXT_LEVEL" "$NEXT_STATUS" "$REASON"
 import json, sys
 print(json.dumps({
     'jsonrpc': '2.0',

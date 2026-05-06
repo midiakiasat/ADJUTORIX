@@ -68,7 +68,7 @@ START_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 : "${ADJUTORIX_DEV_ENV_OVERRIDE_FILE:=${REPO_ROOT}/.env.local}"
 : "${ADJUTORIX_DEV_AGENT_ENV_OVERRIDE_FILE:=${REPO_ROOT}/.env.agent.local}"
 
-AGENT_CMD=(python -m adjutorix_agent.server.main)
+AGENT_CMD=(python3 -m adjutorix_agent.server.main)
 APP_CMD=(npm run dev)
 VERIFY_BOOT_CMD=(npm run verify)
 INSTALL_CMD=(npm install)
@@ -372,12 +372,12 @@ validate_toolchain() {
   require_command git
   require_command curl
   require_command lsof
-  require_command python
+  require_command python3
   require_command npm
   require_command node
 
   if [[ "$ADJUTORIX_DEV_OPEN_AGENT" == "true" ]]; then
-    require_command python
+    require_command python3
   fi
 }
 

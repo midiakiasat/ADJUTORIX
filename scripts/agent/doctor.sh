@@ -73,7 +73,7 @@ readonly START_TS
 : "${ADJUTORIX_AGENT_DOCTOR_ENV_EXAMPLE:=${REPO_ROOT}/configs/runtime/agent.env.example}"
 : "${ADJUTORIX_AGENT_DOCTOR_ENV_LOCAL:=${REPO_ROOT}/.env.agent.local}"
 : "${ADJUTORIX_AGENT_DOCTOR_APP_ENV_LOCAL:=${REPO_ROOT}/.env.local}"
-: "${ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN:=python}"
+: "${ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN:=python3}"
 
 ###############################################################################
 # GLOBAL STATE
@@ -261,7 +261,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -270,7 +270,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -279,7 +279,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -345,7 +345,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command lsof
   require_command ps
@@ -371,9 +371,9 @@ phase_check_python_environment() {
   if command -v "$ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN" >/dev/null 2>&1; then
     local version
     version="$($ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN --version 2>&1 | head -n 1 || true)"
-    record_finding D_PYTHON_BIN PASS python "Python interpreter available" "${ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN}: ${version}"
+    record_finding D_PYTHON_BIN PASS python3 "Python interpreter available" "${ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN}: ${version}"
   else
-    record_finding D_PYTHON_BIN FAIL python "Python interpreter unavailable" "$ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN"
+    record_finding D_PYTHON_BIN FAIL python3 "Python interpreter unavailable" "$ADJUTORIX_AGENT_DOCTOR_PYTHON_BIN"
   fi
 
   if [[ "$ADJUTORIX_AGENT_DOCTOR_SCAN_IMPORTS" == "true" ]]; then
@@ -382,12 +382,12 @@ import importlib
 importlib.import_module('adjutorix_agent')
 PY
     ); then
-      record_finding D_AGENT_IMPORT PASS python "adjutorix_agent import succeeded" "$ADJUTORIX_AGENT_DOCTOR_AGENT_DIR"
+      record_finding D_AGENT_IMPORT PASS python3 "adjutorix_agent import succeeded" "$ADJUTORIX_AGENT_DOCTOR_AGENT_DIR"
     else
-      record_finding D_AGENT_IMPORT FAIL python "adjutorix_agent import failed" "$ADJUTORIX_AGENT_DOCTOR_AGENT_DIR"
+      record_finding D_AGENT_IMPORT FAIL python3 "adjutorix_agent import failed" "$ADJUTORIX_AGENT_DOCTOR_AGENT_DIR"
     fi
   else
-    record_finding D_AGENT_IMPORT INFO python "Import diagnostics skipped" "scan_imports=false"
+    record_finding D_AGENT_IMPORT INFO python3 "Import diagnostics skipped" "scan_imports=false"
   fi
 }
 
@@ -521,7 +521,7 @@ phase_write_findings_and_json() {
     printf '%b\n' "$row" >>"$ADJUTORIX_AGENT_DOCTOR_FINDINGS_FILE"
   done
 
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_AGENT_DOCTOR_JSON_FILE" \
     "$PROGRAM_NAME" \
     "$START_TS" \

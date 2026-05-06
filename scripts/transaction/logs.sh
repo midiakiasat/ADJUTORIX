@@ -344,7 +344,7 @@ run_phase() {
   PHASE_INDEX=$((PHASE_INDEX + 1))
   local started started_epoch_ms finished duration_ms
   started="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  started_epoch_ms="$(python - <<'PY'
+  started_epoch_ms="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
 PY
@@ -353,7 +353,7 @@ PY
   section "[${PHASE_INDEX}] ${phase}"
   if "$@"; then
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -362,7 +362,7 @@ PY
     log_info "Phase passed: ${phase} (${duration_ms} ms)"
   else
     finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    duration_ms="$(python - <<PY
+    duration_ms="$(python3 - <<PY
 import time
 print(int(time.time() * 1000) - int(${started_epoch_ms}))
 PY
@@ -377,7 +377,7 @@ PY
 }
 
 redact_stream() {
-  python - <<'PY'
+  python3 - <<'PY'
 import re, sys
 patterns = [
     (re.compile(r'sk-[A-Za-z0-9]{20,}'), 'sk-****REDACTED****'),
@@ -404,7 +404,7 @@ fetch_status_state() {
     ${token:+-H "x-adjutorix-token: ${token}"} \
     -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"${ADJUTORIX_TX_LOGS_STATUS_METHOD}\",\"params\":{\"job_id\":\"${job_id}\"}}" \
     "$RPC_URL" > "$tmp_json"
-  read -r FINAL_STATE TERMINAL < <(python - <<'PY' "$tmp_json"
+  read -r FINAL_STATE TERMINAL < <(python3 - <<'PY' "$tmp_json"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -430,7 +430,7 @@ prepare_runtime_dirs() {
 }
 
 phase_repo_and_toolchain() {
-  require_command python
+  require_command python3
   require_command curl
   require_command grep
   [[ -d "$REPO_ROOT" ]] || die "Repository root not found: $REPO_ROOT"
@@ -439,7 +439,7 @@ phase_repo_and_toolchain() {
 phase_resolve_identity() {
   if [[ -n "$ADJUTORIX_TX_LOGS_LOCAL_SUBMISSION_JSON" ]]; then
     [[ -f "$ADJUTORIX_TX_LOGS_LOCAL_SUBMISSION_JSON" ]] || die "Submission artifact not found"
-    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python - <<'PY' "$ADJUTORIX_TX_LOGS_LOCAL_SUBMISSION_JSON"
+    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python3 - <<'PY' "$ADJUTORIX_TX_LOGS_LOCAL_SUBMISSION_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -450,7 +450,7 @@ PY
     RESOLVED_FROM_ARTIFACT="yes"
   elif [[ -n "$ADJUTORIX_TX_LOGS_LOCAL_STATUS_JSON" ]]; then
     [[ -f "$ADJUTORIX_TX_LOGS_LOCAL_STATUS_JSON" ]] || die "Status artifact not found"
-    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python - <<'PY' "$ADJUTORIX_TX_LOGS_LOCAL_STATUS_JSON"
+    read -r JOB_ID TRANSACTION_ID REQUEST_ID < <(python3 - <<'PY' "$ADJUTORIX_TX_LOGS_LOCAL_STATUS_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -488,7 +488,7 @@ phase_resolve_token_and_health() {
 }
 
 phase_fetch_logs_once() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_LOGS_REQUEST_JSON" \
     "$METHOD_USED" \
     "$STATUS_ID" \
@@ -518,7 +518,7 @@ PY
 }
 
 phase_normalize_logs() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_LOGS_RESPONSE_JSON" \
     "$ADJUTORIX_TX_LOGS_NORMALIZED_JSON" \
     "$ADJUTORIX_TX_LOGS_LEVEL_FILTER" \
@@ -578,7 +578,7 @@ out_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
 print(json.dumps(payload))
 PY
 
-  read -r RAW_ROW_COUNT FILTERED_ROW_COUNT LAST_SEQ < <(python - <<'PY' "$ADJUTORIX_TX_LOGS_NORMALIZED_JSON"
+  read -r RAW_ROW_COUNT FILTERED_ROW_COUNT LAST_SEQ < <(python3 - <<'PY' "$ADJUTORIX_TX_LOGS_NORMALIZED_JSON"
 import json, sys
 with open(sys.argv[1], 'r', encoding='utf-8') as fh:
     data = json.load(fh)
@@ -588,7 +588,7 @@ PY
 }
 
 phase_render_logs() {
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_LOGS_NORMALIZED_JSON" \
     "$ADJUTORIX_TX_LOGS_RENDERED_TXT" \
     "$ADJUTORIX_TX_LOGS_VIEW" \
@@ -630,7 +630,7 @@ phase_export_if_requested() {
   if (( FILTERED_ROW_COUNT > ADJUTORIX_TX_LOGS_MAX_EXPORT_ROWS )); then
     die "Filtered row count exceeds export ceiling"
   fi
-  python - <<'PY' \
+  python3 - <<'PY' \
     "$ADJUTORIX_TX_LOGS_NORMALIZED_JSON" \
     "$ADJUTORIX_TX_LOGS_EXPORT_JSON" \
     "$STATUS_ID" \
