@@ -204,6 +204,33 @@ function createHashLike(value: unknown): string {
   return acc.toString(16).padStart(8, "0");
 }
 
+
+function stableJsonStringify(value: unknown): string {
+  const normalize = (input: unknown): unknown => {
+    if (input === null || typeof input !== "object") return input;
+    if (Array.isArray(input)) return input.map(normalize);
+
+    const output: Record<string, unknown> = {};
+    for (const key of Object.keys(input as Record<string, unknown>).sort()) {
+      output[key] = normalize((input as Record<string, unknown>)[key]);
+    }
+    return output;
+  };
+
+  return JSON.stringify(normalize(value));
+}
+
+function stableHash(value: unknown): string {
+  const text = stableJsonStringify(value);
+  let hash = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (Math.imul(hash, 31) + text.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(16).padStart(8, "0");
+}
+
 function isEnvelope(value: unknown): value is Envelope<JsonValue> {
   return isObject(value) && typeof value.ok === "boolean" && isObject(value.meta);
 }
@@ -495,6 +522,7 @@ type AppContextValue = {
   state: AppState;
   api: AdjutorixExposedApi;
   notify: (level: NotificationLevel, title: string, message: string) => void;
+  recordEvent: (source: string, payload: { kind: string; detail?: unknown }) => void;
   refreshRuntime: () => Promise<void>;
   refreshWorkspaceHealth: () => Promise<void>;
   refreshAgentHealth: () => Promise<void>;
@@ -669,7 +697,7 @@ function CommandBar(): JSX.Element {
 }
 
 function ShellApp(): JSX.Element {
-  const { state, refreshAgentHealth, refreshDiagnosticsRuntime, refreshRuntime, refreshWorkspaceHealth } = useAppContext();
+  const { state, recordEvent, notify, api, refreshAgentHealth, refreshDiagnosticsRuntime, refreshRuntime, refreshWorkspaceHealth } = useAppContext();
 
   const shellHealth =
     state.phase === "failed"
@@ -805,14 +833,477 @@ const statusChips = [
     { label: "Bootstrap hash", value: state.bootstrapHash, tone: "neutral" },
   ];
 
+  type InteractionView =
+    | "overview"
+    | "workspace"
+    | "patch"
+    | "verify"
+    | "ledger"
+    | "agent"
+    | "diagnostics"
+    | "activity";
+
+  const [interactionView, setInteractionView] = React.useState<InteractionView>(
+    workspaceOpen ? "workspace" : "overview",
+  );
+
+  React.useEffect(() => {
+    if (workspaceOpen && interactionView === "overview") {
+      setInteractionView("workspace");
+    }
+  }, [workspaceOpen, interactionView]);
+
+  const selectInteractionView = React.useCallback((id: string, detail: string) => {
+    const allowed: InteractionView[] = [
+      "overview",
+      "workspace",
+      "patch",
+      "verify",
+      "ledger",
+      "agent",
+      "diagnostics",
+      "activity",
+    ];
+    const next = allowed.includes(id as InteractionView) ? (id as InteractionView) : "overview";
+    setInteractionView(next);
+    const navigationEvent = { id: next, detail };
+    console.info("[adjutorix.navigation]", JSON.stringify(navigationEvent));
+    recordEvent("renderer.navigation", { kind: "navigation.selected", detail: navigationEvent });
+  }, [recordEvent]);
+
+
+  type SurfaceFact = {
+    label: string;
+    value: string;
+    tone?: "good" | "warn" | "bad" | "neutral";
+  };
+
+  type SurfaceAction = {
+    id: string;
+    label: string;
+    description: string;
+    disabled?: boolean;
+    onClick?: () => unknown;
+  };
+
+  const surfaceWorkspaceRoot =
+    (((state.workspaceHealth as any)?.rootPath ??
+      (state.workspaceHealth as any)?.workspacePath ??
+      (state.runtimeSnapshot as any)?.workspace?.rootPath ??
+      null) as string | null);
+
+  const surfaceWorkspaceBound = Boolean(surfaceWorkspaceRoot);
+  const surfaceCapabilities = state.manifest?.capabilities ?? [];
+  const hasSurfaceCapability = React.useCallback(
+    (name: string) =>
+      surfaceCapabilities.some((capability) => {
+        const value = String(capability);
+        return (
+          value === name ||
+          value.startsWith(`${name}.`) ||
+          value.startsWith(`events.${name}`) ||
+          value.includes(`.${name}.`)
+        );
+      }),
+    [surfaceCapabilities],
+  );
+
+  const openWorkspace = React.useCallback(async () => {
+    try {
+      const envelope = normalizeEnvelope(await api.workspace.open({}), "workspace.open");
+      if (envelope.ok) {
+        notify("success", "Workspace opened", "Workspace posture is being refreshed.");
+        recordEvent("workspace.open", { kind: "workspace.opened", detail: envelope.data ?? null });
+        await Promise.allSettled([refreshWorkspaceHealth(), refreshRuntime()]);
+      } else {
+        notify("error", "Workspace open failed", envelope.error.message);
+        recordEvent("workspace.open", { kind: "workspace.open.failed", detail: envelope.error });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify("error", "Workspace open failed", message);
+      recordEvent("workspace.open", { kind: "workspace.open.threw", detail: { message } });
+    }
+  }, [api, notify, recordEvent, refreshRuntime, refreshWorkspaceHealth]);
+
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
+
+
+  const toSurfaceJson = (value: unknown) => (value ?? null) as JsonValue | null;
+
+  const factToneClass = (tone: SurfaceFact["tone"] = "neutral") => {
+    switch (tone) {
+      case "good":
+        return "border-emerald-700/30 bg-emerald-500/10 text-emerald-200";
+      case "warn":
+        return "border-amber-700/30 bg-amber-500/10 text-amber-200";
+      case "bad":
+        return "border-rose-700/30 bg-rose-500/10 text-rose-200";
+      default:
+        return "border-zinc-800 bg-zinc-950/60 text-zinc-200";
+    }
+  };
+
+  const SurfaceActions = ({ actions }: { actions: SurfaceAction[] }) => (
+    <div className="flex flex-wrap gap-3">
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          disabled={action.disabled || !action.onClick}
+          onClick={() => void action.onClick?.()}
+          className={[
+            "rounded-2xl border px-4 py-2 text-sm font-semibold transition",
+            action.disabled || !action.onClick
+              ? "cursor-not-allowed border-zinc-800 bg-zinc-900/50 text-zinc-600"
+              : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800",
+          ].join(" ")}
+          title={action.description}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const FactGrid = ({ facts }: { facts: SurfaceFact[] }) => (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {facts.map((fact) => (
+        <div key={fact.label} className={["rounded-2xl border p-4", factToneClass(fact.tone)].join(" ")}>
+          <div className="text-[10px] uppercase tracking-[0.22em] opacity-70">{fact.label}</div>
+          <div className="mt-2 break-words text-sm font-semibold">{fact.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const SurfaceFrame = ({
+    eyebrow,
+    title,
+    description,
+    facts,
+    actions,
+    children,
+  }: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    facts: SurfaceFact[];
+    actions: SurfaceAction[];
+    children: React.ReactNode;
+  }) => (
+    <div className="grid gap-6">
+      <section className="rounded-3xl border border-zinc-800 bg-zinc-950/50 p-6 shadow-lg">
+        <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">{eyebrow}</div>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50">{title}</h2>
+        <p className="mt-3 max-w-4xl text-sm leading-7 text-zinc-400">{description}</p>
+        <div className="mt-5">
+          <SurfaceActions actions={actions} />
+        </div>
+        <div className="mt-5">
+          <FactGrid facts={facts} />
+        </div>
+      </section>
+      {children}
+    </div>
+  );
+
+  const OverviewSurface = () => (
+    <SurfaceFrame
+      eyebrow="Overview"
+      title={surfaceWorkspaceBound ? "Governed workspace posture" : "Open a governed workspace"}
+      description={
+        surfaceWorkspaceBound
+          ? "Workspace posture is hydrated. Continue into Patch, Verify, Ledger, Agent, Diagnostics, or Activity from the routed surfaces."
+          : "No workspace is attached yet. The shell can inspect runtime, agent, and diagnostics posture, but workspace-bound mutation remains blocked."
+      }
+      actions={[
+        { id: "open-workspace", label: "Open workspace", description: "Open a governed workspace through the bridge.", onClick: openWorkspace },
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime bootstrap state.", onClick: refreshRuntime },
+        { id: "refresh-workspace", label: "Refresh workspace", description: "Reload workspace posture.", onClick: refreshWorkspaceHealth },
+        { id: "refresh-agent", label: "Refresh agent", description: "Reload agent posture.", onClick: refreshAgentHealth },
+        {
+          id: "refresh-diagnostics",
+          label: "Refresh diagnostics",
+          description: "Reload diagnostics runtime.",
+          onClick: refreshDiagnosticsRuntime,
+        },
+      ]}
+      facts={[
+        { label: "Phase", value: state.phase, tone: shellHealth === "healthy" ? "good" : shellHealth === "degraded" ? "warn" : "neutral" },
+        { label: "Workspace", value: surfaceWorkspaceRoot ?? "none", tone: surfaceWorkspaceBound ? "good" : "warn" },
+        { label: "Bridge", value: state.manifest ? `${state.manifest.name} v${state.manifest.version}` : "unavailable", tone: state.manifest ? "good" : "bad" },
+        { label: "Capabilities", value: String(surfaceCapabilities.length), tone: surfaceCapabilities.length > 0 ? "good" : "warn" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Runtime snapshot" value={toSurfaceJson(state.runtimeSnapshot)} />
+        <SnapshotCard title="Workspace posture" value={toSurfaceJson(state.workspaceHealth)} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const WorkspaceSurface = () => (
+    <SurfaceFrame
+      eyebrow="Workspace"
+      title={surfaceWorkspaceBound ? "Workspace attached" : "Workspace not attached"}
+      description="Workspace is the root authority boundary. File tree, trust posture, writable state, and large-file guard evidence must be visible before patch preview or apply."
+      actions={[
+        { id: "open-workspace", label: "Open workspace", description: "Open a governed workspace through the bridge.", onClick: openWorkspace },
+        { id: "refresh-workspace", label: "Refresh workspace posture", description: "Reload workspace health.", onClick: refreshWorkspaceHealth },
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime snapshot.", onClick: refreshRuntime },
+        {
+          id: "go-patch",
+          label: "Go to Patch",
+          description: "Open patch review surface.",
+          disabled: !surfaceWorkspaceBound,
+          onClick: () => selectInteractionView("patch", "Workspace posture accepted for patch review."),
+        },
+      ]}
+      facts={[
+        { label: "Root", value: surfaceWorkspaceRoot ?? "none", tone: surfaceWorkspaceBound ? "good" : "warn" },
+        { label: "Trust", value: String((state.workspaceHealth as any)?.trustLevel ?? "unknown"), tone: (state.workspaceHealth as any)?.trustLevel === "trusted" ? "good" : "neutral" },
+        { label: "Writable", value: String((state.workspaceHealth as any)?.writable ?? "unknown"), tone: (state.workspaceHealth as any)?.writable === true ? "good" : "neutral" },
+        { label: "Issues", value: String(((state.workspaceHealth as any)?.issues ?? []).length ?? 0), tone: ((state.workspaceHealth as any)?.issues ?? []).length ? "warn" : "good" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Workspace health" value={toSurfaceJson(state.workspaceHealth)} />
+        <SnapshotCard title="Runtime workspace context" value={toSurfaceJson((state.runtimeSnapshot as any)?.workspace ?? null)} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const PatchSurface = () => (
+    <SurfaceFrame
+      eyebrow="Patch"
+      title="Patch review gate"
+      description="Patch work is review-first. This surface now exposes the workspace gate, bridge capabilities, runtime evidence, and verification handoff instead of an inert placeholder."
+      actions={[
+        {
+          id: "refresh-workspace",
+          label: "Refresh workspace",
+          description: "Patch preview depends on current workspace posture.",
+          onClick: refreshWorkspaceHealth,
+        },
+        {
+          id: "refresh-runtime",
+          label: "Refresh runtime",
+          description: "Reload runtime evidence before patch review.",
+          onClick: refreshRuntime,
+        },
+        {
+          id: "open-verify",
+          label: "Bind verification",
+          description: "Move to verification surface.",
+          disabled: !surfaceWorkspaceBound,
+          onClick: () => selectInteractionView("verify", "Patch surface requested verification binding."),
+        },
+      ]}
+      facts={[
+        { label: "Workspace gate", value: surfaceWorkspaceBound ? "open" : "blocked", tone: surfaceWorkspaceBound ? "good" : "warn" },
+        { label: "Preview mode", value: "review-first", tone: "good" },
+        { label: "Apply mode", value: "blocked until verified", tone: "warn" },
+        { label: "Patch capability", value: hasSurfaceCapability("patch") ? "declared" : "not declared", tone: hasSurfaceCapability("patch") ? "good" : "bad" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-3">
+        <SnapshotCard title="Patch gate evidence" value={toSurfaceJson({ workspaceRoot: surfaceWorkspaceRoot, workspaceBound: surfaceWorkspaceBound, bridgeCapabilities: surfaceCapabilities.filter((c) => String(c).includes("patch")) })} />
+        <SnapshotCard title="Workspace posture" value={toSurfaceJson(state.workspaceHealth)} />
+        <SnapshotCard title="Runtime snapshot" value={toSurfaceJson(state.runtimeSnapshot)} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const VerifySurface = () => (
+    <SurfaceFrame
+      eyebrow="Verify"
+      title="Verification evidence gate"
+      description="Verification binds runtime, workspace, diagnostics, and patch lineage before any apply step. The surface is wired to refresh current evidence and expose degraded posture."
+      actions={[
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime state.", onClick: refreshRuntime },
+        { id: "refresh-diagnostics", label: "Refresh diagnostics", description: "Reload diagnostics evidence.", onClick: refreshDiagnosticsRuntime },
+        {
+          id: "open-ledger",
+          label: "Open ledger",
+          description: "Review history and evidence trail.",
+          onClick: () => selectInteractionView("ledger", "Verification evidence routed to ledger review."),
+        },
+      ]}
+      facts={[
+        { label: "Runtime", value: state.runtimeSnapshot ? "loaded" : "missing", tone: state.runtimeSnapshot ? "good" : "warn" },
+        { label: "Diagnostics", value: state.diagnosticsRuntime ? "loaded" : "missing", tone: state.diagnosticsRuntime ? "good" : "warn" },
+        { label: "Workspace", value: surfaceWorkspaceBound ? "bound" : "unbound", tone: surfaceWorkspaceBound ? "good" : "warn" },
+        { label: "Verify capability", value: hasSurfaceCapability("verify") ? "declared" : "not declared", tone: hasSurfaceCapability("verify") ? "good" : "bad" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Runtime evidence" value={toSurfaceJson(state.runtimeSnapshot)} />
+        <SnapshotCard title="Diagnostics evidence" value={toSurfaceJson(state.diagnosticsRuntime)} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const LedgerSurface = () => (
+    <SurfaceFrame
+      eyebrow="Ledger"
+      title="Ledger-backed history"
+      description="Ledger state must make history, event lineage, bootstrap hash, and replay anchors visible. This surface now exposes current evidence and event count."
+      actions={[
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime state.", onClick: refreshRuntime },
+        {
+          id: "open-activity",
+          label: "Open activity",
+          description: "Inspect live event stream.",
+          onClick: () => selectInteractionView("activity", "Ledger requested activity stream."),
+        },
+      ]}
+      facts={[
+        { label: "Bootstrap hash", value: state.bootstrapHash, tone: "neutral" },
+        { label: "Events", value: String(state.eventLog.length), tone: state.eventLog.length ? "good" : "neutral" },
+        { label: "Ledger capability", value: hasSurfaceCapability("ledger") ? "declared" : "not declared", tone: hasSurfaceCapability("ledger") ? "good" : "bad" },
+        { label: "Phase", value: state.phase, tone: state.phase === "ready" ? "good" : "warn" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Ledger context" value={toSurfaceJson({ bootstrapHash: state.bootstrapHash, phase: state.phase, readyAtMs: state.readyAtMs, eventCount: state.eventLog.length })} />
+        <SnapshotCard title="Recent event log" value={toSurfaceJson(state.eventLog.slice(0, 20))} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const AgentSurface = () => (
+    <SurfaceFrame
+      eyebrow="Agent"
+      title="Agent readiness"
+      description="Agent state is not inferred from a green chip. This surface exposes endpoint, auth, reconnect posture, failures, and pending request state."
+      actions={[
+        { id: "refresh-agent", label: "Refresh agent", description: "Reload agent health.", onClick: refreshAgentHealth },
+        { id: "refresh-diagnostics", label: "Refresh diagnostics", description: "Reload diagnostics runtime.", onClick: refreshDiagnosticsRuntime },
+      ]}
+      facts={[
+        { label: "Agent", value: state.agentHealth ? "loaded" : "missing", tone: state.agentHealth ? "good" : "warn" },
+        { label: "Endpoint", value: String((state.agentHealth as any)?.url ?? (state.agentHealth as any)?.endpoint ?? "unknown"), tone: state.agentHealth ? "good" : "neutral" },
+        { label: "Agent capability", value: hasSurfaceCapability("agent") ? "declared" : "not declared", tone: hasSurfaceCapability("agent") ? "good" : "bad" },
+        { label: "Failure", value: String((state.agentHealth as any)?.error ?? (state.agentHealth as any)?.failure ?? "none"), tone: (state.agentHealth as any)?.error ? "bad" : "good" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Agent health" value={toSurfaceJson(state.agentHealth)} />
+        <SnapshotCard title="Diagnostics runtime" value={toSurfaceJson(state.diagnosticsRuntime)} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const DiagnosticsSurface = () => (
+    <SurfaceFrame
+      eyebrow="Diagnostics"
+      title="Diagnostics cockpit"
+      description="Diagnostics are the inspectability boundary for startup, runtime, provider state, crash context, and degraded operation."
+      actions={[
+        { id: "refresh-diagnostics", label: "Refresh diagnostics", description: "Reload diagnostics runtime.", onClick: refreshDiagnosticsRuntime },
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime snapshot.", onClick: refreshRuntime },
+        { id: "refresh-agent", label: "Refresh agent", description: "Reload provider/agent status.", onClick: refreshAgentHealth },
+      ]}
+      facts={[
+        { label: "Diagnostics", value: state.diagnosticsRuntime ? "loaded" : "missing", tone: state.diagnosticsRuntime ? "good" : "warn" },
+        { label: "Runtime", value: state.runtimeSnapshot ? "loaded" : "missing", tone: state.runtimeSnapshot ? "good" : "warn" },
+        { label: "Fatal", value: state.fatalError ?? "none", tone: state.fatalError ? "bad" : "good" },
+        { label: "Degraded", value: state.degradedReason ?? "none", tone: state.degradedReason ? "warn" : "good" },
+      ]}
+    >
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SnapshotCard title="Diagnostics runtime" value={toSurfaceJson(state.diagnosticsRuntime)} />
+        <SnapshotCard title="Bootstrap diagnostics" value={toSurfaceJson({ phase: state.phase, degradedReason: state.degradedReason, fatalError: state.fatalError, bootstrapHash: state.bootstrapHash })} />
+      </div>
+    </SurfaceFrame>
+  );
+
+  const ActivitySurface = () => (
+    <SurfaceFrame
+      eyebrow="Activity"
+      title="Activity stream"
+      description="Activity records renderer-observed workspace, agent, diagnostics, patch, and verify events. An empty stream is now an explicit state, not a blank panel."
+      actions={[
+        { id: "refresh-runtime", label: "Refresh runtime", description: "Reload runtime state.", onClick: refreshRuntime },
+        {
+          id: "open-diagnostics",
+          label: "Open diagnostics",
+          description: "Inspect diagnostics posture.",
+          onClick: () => selectInteractionView("diagnostics", "Activity stream requested diagnostics."),
+        },
+      ]}
+      facts={[
+        { label: "Events", value: String(state.eventLog.length), tone: state.eventLog.length ? "good" : "neutral" },
+        { label: "Notifications", value: String(state.notifications.length), tone: state.notifications.length ? "warn" : "good" },
+        { label: "Phase", value: state.phase, tone: state.phase === "ready" ? "good" : "warn" },
+        { label: "Hash", value: state.bootstrapHash, tone: "neutral" },
+      ]}
+    >
+      <section className="rounded-3xl border border-zinc-800 bg-zinc-950/50 p-6 shadow-lg">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-400">Event stream</h3>
+        <div className="mt-4 space-y-3">
+          {state.eventLog.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">
+              Event bus is wired. No events observed yet.
+            </div>
+          ) : (
+            state.eventLog.map((event) => {
+              const payload = ((event as any).payload ?? {}) as any;
+              return (
+                <div key={(event as any).id} className="rounded-2xl border border-zinc-800 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{String((event as any).source ?? "unknown")}</div>
+                    <div className="text-[10px] text-zinc-600">{new Date((event as any).atMs ?? Date.now()).toLocaleTimeString()}</div>
+                  </div>
+                  <div className="mt-2 text-sm font-medium text-zinc-100">{String(payload.kind ?? "event")}</div>
+                  <pre className="mt-3 max-h-48 overflow-auto text-xs leading-6 text-zinc-300">
+                    {JSON.stringify(payload.detail ?? payload, null, 2)}
+                  </pre>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+    </SurfaceFrame>
+  );
+
+  const renderPrimaryContent = () => {
+    switch (interactionView) {
+      case "workspace":
+        return <WorkspaceSurface />;
+      case "patch":
+        return <PatchSurface />;
+      case "verify":
+        return <VerifySurface />;
+      case "ledger":
+        return <LedgerSurface />;
+      case "agent":
+        return <AgentSurface />;
+      case "diagnostics":
+        return <DiagnosticsSurface />;
+      case "activity":
+        return <ActivitySurface />;
+      case "overview":
+      default:
+        return <OverviewSurface />;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <AppShell
         appTitle="Adjutorix"
         subtitle={workspaceOpen ? `Governed workspace · ${workspaceName}` : "Governed execution surface"}
         health={shellHealth as any}
-        currentView={(workspaceOpen ? "workspace" : "overview") as any}
+        currentView={interactionView}
         loading={state.phase === "booting"}
+        commandPaletteOpen={commandPaletteOpen}
+        onToggleCommandPalette={() => {
+          const nextOpen = !commandPaletteOpen;
+          setCommandPaletteOpen(nextOpen);
+          recordEvent("renderer.command", { kind: "command.palette.toggled", detail: { nextOpen } });
+        }}
         bottomPanelVisible={true}
         statusChips={statusChips as any}
         banners={banners as any}
@@ -832,67 +1323,7 @@ const statusChips = [
             />
           </div>
         }
-        primaryContent={
-          workspaceOpen ? (
-            <div className="grid gap-6 2xl:grid-cols-[0.95fr_1.05fr]">
-              <div className="grid gap-6">
-                <SnapshotCard title="Runtime snapshot" value={state.runtimeSnapshot as JsonValue | null} />
-                <SnapshotCard title="Workspace health" value={state.workspaceHealth as JsonValue | null} />
-              </div>
-              <div className="grid gap-6">
-                <SnapshotCard title="Agent health" value={state.agentHealth as JsonValue | null} />
-                <SnapshotCard title="Diagnostics runtime" value={state.diagnosticsRuntime as JsonValue | null} />
-              </div>
-            </div>
-          ) : (
-            <WelcomeScreen
-              productName="Adjutorix"
-              title="Open a governed workspace"
-              subtitle="Hydrate workspace trust, diagnostics, and agent posture before governed execution."
-              health={shellHealth as any}
-              blockingMessage={state.fatalError}
-              diagnosticsHint={
-                state.diagnosticsRuntime
-                  ? "Diagnostics runtime snapshot is already available."
-                  : "Refresh diagnostics to load runtime posture."
-              }
-              primaryAction={{
-                id: "refresh-workspace",
-                label: "Refresh workspace posture",
-                description: "Load workspace health through the exposed bridge.",
-                onClick: () => void refreshWorkspaceHealth(),
-              }}
-              secondaryActions={[
-                {
-                  id: "refresh-runtime",
-                  label: "Refresh runtime",
-                  description: "Reload runtime bootstrap state.",
-                  tone: "secondary",
-                  onClick: () => void refreshRuntime(),
-                },
-                {
-                  id: "refresh-agent",
-                  label: "Refresh agent",
-                  description: "Reload agent health and endpoint posture.",
-                  tone: "secondary",
-                  onClick: () => void refreshAgentHealth(),
-                },
-                {
-                  id: "refresh-diagnostics",
-                  label: "Refresh diagnostics",
-                  description: "Reload diagnostics runtime surfaces.",
-                  tone: "secondary",
-                  onClick: () => void refreshDiagnosticsRuntime(),
-                },
-              ]}
-              footerNote={
-                state.manifest
-                  ? `Bridge ${state.manifest.bridgeName} v${state.manifest.bridgeVersion} exposes ${capabilities.length} declared capabilities.`
-                  : "Bridge manifest unavailable."
-              }
-            />
-          )
-        }
+        primaryContent={renderPrimaryContent()}
         rightRail={
           <ProviderStatus
             title="Provider posture"
@@ -908,13 +1339,59 @@ const statusChips = [
               ]);
             }}
             onReconnectRequested={(provider) => {
-              if (provider.id === "agent") {
+              if (!provider || provider.id === "agent") {
                 void refreshAgentHealth();
               }
             }}
           />
         }
         bottomPanel={<EventStreamCard />}
+        modalLayer={
+          commandPaletteOpen ? (
+            <div className="pointer-events-auto grid h-full place-items-start justify-center bg-black/40 p-10 backdrop-blur-sm">
+              <section className="mt-24 w-full max-w-3xl rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Commands</div>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50">Route surface</h2>
+                    <p className="mt-2 text-sm leading-7 text-zinc-400">
+                      Command palette is wired to the same governed navigation path as the left rail.
+                    </p>
+                  </div>
+                  <button
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-800"
+                    onClick={() => setCommandPaletteOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  {[
+                    ["overview", "Overview"],
+                    ["workspace", "Workspace"],
+                    ["patch", "Patch"],
+                    ["verify", "Verify"],
+                    ["ledger", "Ledger"],
+                    ["agent", "Agent"],
+                    ["diagnostics", "Diagnostics"],
+                    ["activity", "Activity"],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left text-sm font-semibold text-zinc-100 hover:bg-zinc-800"
+                      onClick={() => {
+                        setCommandPaletteOpen(false);
+                        selectInteractionView(id as InteractionView, `Command palette selected: ${label}`);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null
+        }
         footer={
           <div className="px-4 py-3 text-xs text-zinc-500">
             bootstrap={state.phase} · workspace={workspaceOpen ? String(workspaceRoot) : "none"} · hash={state.bootstrapHash}
@@ -945,6 +1422,19 @@ function AppProvider(props: { api: AdjutorixExposedApi; children: React.ReactNod
       },
     });
   }, []);
+  const recordEvent = React.useCallback((source: string, payload: { kind: string; detail?: unknown }) => {
+    const atMs = Date.now();
+    dispatch({
+      type: "EVENT_RECEIVED",
+      item: {
+        id: stableHash({ source, payload, atMs }),
+        source,
+        payload,
+        atMs,
+      },
+    });
+  }, []);
+
 
   const refreshRuntime = useCallback(async () => {
     const envelope = normalizeEnvelope<JsonObject>(await props.api.runtime.snapshot(), "runtime.snapshot");
@@ -1059,12 +1549,13 @@ function AppProvider(props: { api: AdjutorixExposedApi; children: React.ReactNod
       state,
       api: props.api,
       notify,
+    recordEvent,
       refreshRuntime,
       refreshWorkspaceHealth,
       refreshAgentHealth,
       refreshDiagnosticsRuntime,
     }),
-    [state, props.api, notify, refreshRuntime, refreshWorkspaceHealth, refreshAgentHealth, refreshDiagnosticsRuntime],
+    [state, props.api, notify, recordEvent, refreshRuntime, refreshWorkspaceHealth, refreshAgentHealth, refreshDiagnosticsRuntime],
   );
 
   if (state.phase === "failed") {
