@@ -282,9 +282,9 @@ function buildCompatApi(bridge: any) {
       events: wrapSubscription("adjutorix:event:diagnostics", safeBridge.diagnostics?.subscribe),
     },
     agent: {
-      health: async () => envelope("adjutorix:agent:health", (await safeBridge.agent?.connect?.()) ?? {}),
-      status: async () => envelope("adjutorix:agent:status", (await safeBridge.agent?.connect?.()) ?? {}),
-      start: async (_input?: JsonObject) => envelope("adjutorix:agent:start", {}),
+      health: async () => envelope("adjutorix:agent:health", (await safeBridge.agent?.health?.()) ?? {}),
+      status: async () => envelope("adjutorix:agent:status", (await safeBridge.agent?.status?.()) ?? {}),
+      start: async (input?: JsonObject) => envelope("adjutorix:agent:start", (await safeBridge.agent?.start?.(input)) ?? {}),
       stop: async (_input?: JsonObject) => envelope("adjutorix:agent:stop", {}),
       events: wrapSubscription("adjutorix:event:agent", safeBridge.agent?.subscribe),
     },

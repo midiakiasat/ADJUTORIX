@@ -66,6 +66,20 @@ export function ProviderStatus(props: ProviderStatusProps) {
     /\binvalid\b/.test(providerPostureText) ||
     /invalid[_-]?auth/.test(providerPostureText) ||
     /auth[^a-z0-9]+invalid/.test(providerPostureText);
+  const missingAuthPosture =
+    /missing[_-]?auth/.test(providerPostureText) ||
+    /auth[^a-z0-9]+missing/.test(providerPostureText) ||
+    providerPostureText.includes('"auth":"missing"') ||
+    providerPostureText.includes('"authstatus":"missing"');
+  const restrictedAuthPosture =
+    /restricted[_-]?auth/.test(providerPostureText) ||
+    /auth[^a-z0-9]+restricted/.test(providerPostureText) ||
+    providerPostureText.includes('"auth":"restricted"') ||
+    providerPostureText.includes('"authstatus":"restricted"');
+  const loadingPosture =
+    providerPostureText.includes('"loading":true') ||
+    providerPostureText.includes('"status":"loading"') ||
+    providerPostureText.includes('"state":"loading"');
 
   const call = (fn: unknown) => {
     if (typeof fn === "function") fn();
@@ -78,11 +92,22 @@ export function ProviderStatus(props: ProviderStatusProps) {
     providerPayloadText.includes('"state":"reconnecting"') ||
     providerPayloadText.includes('"connection":"reconnecting"') ||
     providerPayloadText.includes('"recovering"');
+  const connectedPosture =
+    providerPayloadText.includes('"connected"') ||
+    providerPayloadText.includes('"status":"connected"') ||
+    providerPayloadText.includes('"status":"ready"') ||
+    providerPayloadText.includes('"state":"connected"') ||
+    providerPayloadText.includes('"connection":"connected"') ||
+    providerPayloadText.includes('"ok":true') ||
+    providerPayloadText.includes('"healthy":true');
+
   const disconnectedPosture =
-    providerPayloadText.includes('"disconnected"') ||
-    providerPayloadText.includes('"connection":"down"') ||
-    providerPayloadText.includes('"status":"down"') ||
-    providerPayloadText.includes('"state":"down"');
+    !connectedPosture &&
+    (providerPayloadText.includes('"disconnected"') ||
+      providerPayloadText.includes('"connection":"down"') ||
+      providerPayloadText.includes('"status":"down"') ||
+      providerPayloadText.includes('"state":"down"') ||
+      providerPayloadText.includes('"ok":false'));
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 shadow-xl">
@@ -98,13 +123,15 @@ export function ProviderStatus(props: ProviderStatusProps) {
           <div>{session}</div>
 
           <div>
-            <span>available</span>
-            <span>trusted</span>
-            <span>healthy</span>
+            <span>{connectedPosture ? "available" : "unavailable"}</span>
+            <span>{invalidAuthPosture || missingAuthPosture || restrictedAuthPosture ? "auth-blocked" : "auth-observed"}</span>
+            <span>{connectedPosture ? "healthy" : "unhealthy"}</span>
           </div>
 
           <div>
-            Provider is connected with valid auth and local endpoint identity. Pending request count remains visible so latency and stream state are not inferred from color only.
+            {connectedPosture
+              ? "Provider transport is healthy; endpoint identity and pending request count remain visible."
+              : "Provider transport is not healthy; endpoint, auth posture, and pending request count remain visible."}
           </div>
 
           <div>
@@ -117,7 +144,14 @@ export function ProviderStatus(props: ProviderStatusProps) {
           {disconnectedPosture ? <div>Provider connection is down.</div> : null}
           {reconnectingProviderPosture ? <div>reconnecting</div> : null}
           {reconnectingProviderPosture ? <div>3</div> : null}
-          <div>missing auth restricted loading{invalidAuthPosture ? <span> auth is invalid</span> : null}</div>
+                    {!connectedPosture && (missingAuthPosture || restrictedAuthPosture || loadingPosture || invalidAuthPosture) ? (
+            <div>
+              {missingAuthPosture ? <span>missing auth </span> : null}
+              {restrictedAuthPosture ? <span>restricted </span> : null}
+              {loadingPosture ? <span>loading </span> : null}
+              {invalidAuthPosture ? <span>auth is invalid</span> : null}
+            </div>
+          ) : null}
         </div>
 
         <div>
