@@ -246,8 +246,21 @@ function basename(path: string): string {
   return parts[parts.length - 1] ?? normalized;
 }
 
+function uniqueStable(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values.map((v) => v.trim()).filter(Boolean)) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+
+  return out;
+}
+
 function uniqueSorted(values: string[]): string[] {
-  return [...new Set(values.map((v) => v.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return uniqueStable(values).sort((a, b) => a.localeCompare(b));
 }
 
 function normalizeSelections(selections: SelectionRange[]): SelectionRange[] {
@@ -415,7 +428,7 @@ export function editorBuffersReducer(state: EditorBuffersState, action: EditorBu
         return recomputeState(core);
       }
       core.byPath[path] = makeBuffer(action.payload, "opening");
-      core.tabOrder = uniqueSorted([...core.tabOrder, path]);
+      core.tabOrder = uniqueStable([...core.tabOrder, path]);
       core.previousActivePath = state.activePath;
       core.activePath = path;
       core.globalRevision += 1;
@@ -451,7 +464,7 @@ export function editorBuffersReducer(state: EditorBuffersState, action: EditorBu
         lastDiskSyncAtMs: nowMs(action.payload.atMs),
         lastError: null,
       });
-      core.tabOrder = uniqueSorted([...core.tabOrder, path]);
+      core.tabOrder = uniqueStable([...core.tabOrder, path]);
       core.previousActivePath = state.activePath;
       core.activePath = path;
       core.globalRevision += 1;
@@ -528,7 +541,7 @@ export function editorBuffersReducer(state: EditorBuffersState, action: EditorBu
     case "BUFFER_REORDERED": {
       const ordered = action.tabOrder.map(normalizePath).filter((p) => core.byPath[p]);
       const missing = core.tabOrder.filter((p) => !ordered.includes(p));
-      core.tabOrder = [...ordered, ...missing];
+      core.tabOrder = uniqueStable([...ordered, ...missing]);
       core.globalRevision += 1;
       return recomputeState(core);
     }
@@ -852,6 +865,12 @@ export function validateEditorBuffersState(state: EditorBuffersState): void {
   const uniqueTabOrder = uniqueSorted(state.tabOrder);
   if (stableJson(uniqueTabOrder) !== stableJson([...state.tabOrder].sort((a, b) => a.localeCompare(b)))) {
     throw new Error("editor_buffers_tab_order_not_normalized");
+  }
+
+  for (const path of state.tabOrder) {
+    if (!state.byPath[path]) {
+      throw new Error(`editor_buffers_tab_path_missing:${path}`);
+    }
   }
 
   for (const path of Object.keys(state.byPath)) {

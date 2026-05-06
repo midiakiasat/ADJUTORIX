@@ -20,7 +20,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,json,css,md}\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run tests/renderer/file_tree_pane.test.tsx tests/renderer/diagnostic_parser.test.ts tests/renderer/about_panel.test.tsx tests/renderer/release_surface_guard.test.ts tests/renderer/interaction_contract.test.tsx",
+    "test": "vitest run tests/renderer/editor_buffers.test.ts tests/renderer/file_tree_pane.test.tsx tests/renderer/diagnostic_parser.test.ts tests/renderer/about_panel.test.tsx tests/renderer/release_surface_guard.test.ts tests/renderer/interaction_contract.test.tsx",
     "test:watch": "vitest",
     "verify": "pnpm run assert:electron && pnpm run guard:release-surface && pnpm run guard:interaction-contract && pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
     "start": "pnpm run assert:electron && pnpm exec electron .",
