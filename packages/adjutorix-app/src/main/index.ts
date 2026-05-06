@@ -195,6 +195,16 @@ const agentState: AgentState = {
   },
 };
 
+const workspaceState: {
+  currentPath: string | null;
+  openedAtMs: number | null;
+  checkedAtMs: number | null;
+} = {
+  currentPath: null,
+  openedAtMs: null,
+  checkedAtMs: null,
+};
+
 // -----------------------------------------------------------------------------
 // UTILITIES
 // -----------------------------------------------------------------------------
@@ -629,11 +639,14 @@ function registerIpc(config: RuntimeConfig): void {
         headlessSmokeMode: config.environment.headlessSmokeMode,
       },
       workspace: {
-        currentPath: null,
-        workspacePath: null,
-        health: "unknown",
-        status: "unknown",
-        isOpen: false,
+        currentPath: workspaceState.currentPath,
+        workspacePath: workspaceState.currentPath,
+        rootPath: workspaceState.currentPath,
+        health: workspaceState.currentPath ? "ready" : "unknown",
+        status: workspaceState.currentPath ? "ready" : "unknown",
+        isOpen: Boolean(workspaceState.currentPath),
+        openedAtMs: workspaceState.openedAtMs,
+        checkedAtMs: workspaceState.checkedAtMs,
       },
       agent: {
         url: agentState.url,
@@ -662,16 +675,19 @@ function registerIpc(config: RuntimeConfig): void {
   });
 
   registerLegacyCompatHandler("adjutorix:workspace:health", async () => {
+    workspaceState.checkedAtMs = Date.now();
+    const isOpen = Boolean(workspaceState.currentPath);
     const payload = {
       ok: true,
       schema: 1,
-      status: "unknown",
-      health: "unknown",
-      currentPath: null,
-      workspacePath: null,
-      isOpen: false,
-      checkedAtMs: Date.now(),
-      issues: ["no-workspace-open"],
+      status: isOpen ? "ready" : "unknown",
+      health: isOpen ? "ready" : "unknown",
+      currentPath: workspaceState.currentPath,
+      workspacePath: workspaceState.currentPath,
+      rootPath: workspaceState.currentPath,
+      isOpen,
+      checkedAtMs: workspaceState.checkedAtMs,
+      issues: isOpen ? [] : ["no-workspace-open"],
     };
     return payload as Json;
   });
@@ -703,7 +719,9 @@ function registerIpc(config: RuntimeConfig): void {
         uptime_seconds: Math.floor(process.uptime()),
       },
       runtime: {
-        workspacePath: null,
+        workspacePath: workspaceState.currentPath,
+        rootPath: workspaceState.currentPath,
+        workspaceOpen: Boolean(workspaceState.currentPath),
         agentUrl: agentState.url,
         agentHealthy: agentState.lastHealth.ok,
         configHash: appDiagnostics.configHash,
@@ -740,10 +758,59 @@ function registerIpc(config: RuntimeConfig): void {
   });
 
 
-  safeHandle("adjutorix:workspace:open", async (workspacePath: string) => {
-    const normalized = normalizeFsPath(workspacePath);
+  safeHandle("adjutorix:workspace:open", async (payload) => {
+    const objectPayload =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : null;
+
+    const requestedPath =
+      typeof payload === "string" && payload.trim().length > 0
+        ? payload
+        : typeof objectPayload?.rootPath === "string" && objectPayload.rootPath.trim().length > 0
+          ? objectPayload.rootPath
+          : typeof objectPayload?.workspacePath === "string" && objectPayload.workspacePath.trim().length > 0
+            ? objectPayload.workspacePath
+            : null;
+
+    let selectedPath = requestedPath;
+
+    if (!selectedPath) {
+      const result = await dialog.showOpenDialog({
+        title: "Open governed workspace",
+        properties: ["openDirectory"],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true, cancelled: true, path: null } satisfies Json;
+      }
+
+      selectedPath = result.filePaths[0] ?? null;
+    }
+
+    assert(typeof selectedPath === "string" && selectedPath.trim().length > 0, "workspace_path_invalid");
+
+    const normalized = normalizeFsPath(selectedPath.trim());
     assert(fs.existsSync(normalized), "workspace_missing");
-    return { ok: true, path: normalized } satisfies Json;
+
+    const now = Date.now();
+    workspaceState.currentPath = normalized;
+    workspaceState.openedAtMs = now;
+    workspaceState.checkedAtMs = now;
+
+    recordEvent("workspace.opened", { path: normalized });
+
+    return {
+      ok: true,
+      path: normalized,
+      currentPath: normalized,
+      workspacePath: normalized,
+      rootPath: normalized,
+      isOpen: true,
+      status: "ready",
+      health: "ready",
+      checkedAtMs: now,
+    } satisfies Json;
   });
 
   safeHandle("adjutorix:workspace:revealInShell", async (targetPath: string) => {

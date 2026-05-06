@@ -122,7 +122,8 @@ const EVENT_CHANNEL_ALLOWLIST = new Set<string>([
 type WorkspaceOpenRequest = {
   schema: 1;
   actor: RendererActor;
-  rootPath: string;
+  rootPath?: string;
+  workspacePath?: string;
   source: "ipc" | "menu" | "startup" | "system" | "reopen";
 };
 
@@ -377,10 +378,18 @@ function normalizeWorkspaceOpenRequest(input: unknown): WorkspaceOpenRequest {
   const obj = requireJsonRecord(input, "workspace_open_request");
   const source = requireString(obj.source, "source") as WorkspaceOpenRequest["source"];
   assert(["ipc", "menu", "startup", "system", "reopen"].includes(source), "source_invalid");
+
+  const rootPath =
+    obj.rootPath !== undefined
+      ? requireString(obj.rootPath, "rootPath")
+      : obj.workspacePath !== undefined
+        ? requireString(obj.workspacePath, "workspacePath")
+        : undefined;
+
   return {
     schema: 1,
     actor: "renderer",
-    rootPath: requireString(obj.rootPath, "rootPath"),
+    ...(rootPath ? { rootPath, workspacePath: rootPath } : {}),
     source,
   };
 }

@@ -472,9 +472,44 @@ function registerIpc(state: BootstrapState): void {
     return rpcInvokeThroughAgent(state, method, params as Record<string, unknown>);
   });
 
-  safeHandle("adjutorix:workspace:open", async (workspacePath) => {
-    assert(typeof workspacePath === "string" && workspacePath.length > 0, "workspace_path_invalid");
-    const normalized = path.resolve(workspacePath);
+  safeHandle("adjutorix:workspace:open", async (payload) => {
+    const objectPayload =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : null;
+
+    const requestedPath =
+      typeof payload === "string" && payload.trim().length > 0
+        ? payload
+        : typeof objectPayload?.rootPath === "string" && objectPayload.rootPath.trim().length > 0
+          ? objectPayload.rootPath
+          : typeof objectPayload?.workspacePath === "string" && objectPayload.workspacePath.trim().length > 0
+            ? objectPayload.workspacePath
+            : null;
+
+    let selectedPath = requestedPath;
+
+    if (!selectedPath) {
+      const chooserOptions: Electron.OpenDialogOptions = {
+        title: "Open governed workspace",
+        properties: ["openDirectory"],
+      };
+
+      const result =
+        state.window && !state.window.isDestroyed()
+          ? await dialog.showOpenDialog(state.window, chooserOptions)
+          : await dialog.showOpenDialog(chooserOptions);
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true, cancelled: true, path: null };
+      }
+
+      selectedPath = result.filePaths[0] ?? null;
+    }
+
+    assert(typeof selectedPath === "string" && selectedPath.trim().length > 0, "workspace_path_invalid");
+
+    const normalized = path.resolve(selectedPath.trim());
     assert(fs.existsSync(normalized), "workspace_missing");
     state.workspace.currentPath = normalized;
     state.workspace.recentPaths = Array.from(new Set([normalized, ...state.workspace.recentPaths])).slice(0, 20);

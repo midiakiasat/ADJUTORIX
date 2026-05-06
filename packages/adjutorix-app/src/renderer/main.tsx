@@ -910,11 +910,24 @@ const statusChips = [
 
   const openWorkspace = React.useCallback(async () => {
     try {
-      const envelope = normalizeEnvelope(await api.workspace.open({}), "workspace.open");
-      if (envelope.ok) {
-        notify("success", "Workspace opened", "Workspace posture is being refreshed.");
-        recordEvent("workspace.open", { kind: "workspace.opened", detail: envelope.data ?? null });
+      const envelope = normalizeEnvelope(
+        await api.workspace.open({ schema: 1, actor: "renderer", source: "ipc" }),
+        "workspace.open",
+      );
+
+      const operationOk =
+        envelope.ok &&
+        isObject(envelope.data) &&
+        envelope.data.ok !== false &&
+        typeof envelope.data.path === "string" &&
+        envelope.data.path.length > 0;
+
+      if (operationOk) {
         await Promise.allSettled([refreshWorkspaceHealth(), refreshRuntime()]);
+        notify("success", "Workspace opened", "Workspace posture refreshed.");
+        recordEvent("workspace.open", { kind: "workspace.opened", detail: envelope.data ?? null });
+      } else if (envelope.ok) {
+        recordEvent("workspace.open", { kind: "workspace.open.cancelled", detail: envelope.data ?? null });
       } else {
         notify("error", "Workspace open failed", envelope.error.message);
         recordEvent("workspace.open", { kind: "workspace.open.failed", detail: envelope.error });
@@ -924,7 +937,7 @@ const statusChips = [
       notify("error", "Workspace open failed", message);
       recordEvent("workspace.open", { kind: "workspace.open.threw", detail: { message } });
     }
-  }, [api, notify, recordEvent, refreshRuntime, refreshWorkspaceHealth]);
+  }, [api.workspace, notify, recordEvent, refreshRuntime, refreshWorkspaceHealth]);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
