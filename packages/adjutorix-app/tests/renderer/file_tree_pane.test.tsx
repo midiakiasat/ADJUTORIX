@@ -280,6 +280,23 @@ describe("FileTreePane", () => {
     expect(props.onSelectPath).toHaveBeenCalledWith("/repo/adjutorix-app/src/renderer/App.tsx");
   });
 
+  it("opens file entries on single click while keeping directory clicks selection-only", () => {
+    const props = buildProps();
+    render(<FileTreePane {...props} />);
+
+    fireEvent.click(screen.getByText("App.tsx"));
+
+    expect(props.onSelectPath).toHaveBeenCalledWith("/repo/adjutorix-app/src/renderer/App.tsx");
+    expect(props.onOpenPath).toHaveBeenCalledWith("/repo/adjutorix-app/src/renderer/App.tsx");
+
+    vi.clearAllMocks();
+
+    fireEvent.click(screen.getByText("src"));
+
+    expect(props.onSelectPath).toHaveBeenCalledWith("/repo/adjutorix-app/src");
+    expect(props.onOpenPath).not.toHaveBeenCalled();
+  });
+
   it("wires directory expansion toggles explicitly instead of mutating local tree state silently", () => {
     const props = buildProps();
     render(<FileTreePane {...props} />);
@@ -336,10 +353,10 @@ describe("FileTreePane", () => {
   it("surfaces metrics for total, hidden, ignored, and opened entries as operator-facing facts", () => {
     render(<FileTreePane {...buildProps()} />);
 
-    expect(screen.getByText(/total/i)).toBeInTheDocument();
-    expect(screen.getByText(/hidden/i)).toBeInTheDocument();
-    expect(screen.getByText(/ignored/i)).toBeInTheDocument();
-    expect(screen.getByText(/opened/i)).toBeInTheDocument();
+    expect(screen.getByText("Total")).toBeInTheDocument();
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    expect(screen.getByText("Ignored")).toBeInTheDocument();
+    expect(screen.getByText("Opened")).toBeInTheDocument();
   });
 
   it("renders a degraded health posture explicitly instead of reusing the healthy empty-state shell", () => {
@@ -473,7 +490,7 @@ describe("FileTreePane", () => {
     expect(allButtons.length).toBeGreaterThanOrEqual(3);
 
     expect(screen.getByText("App.tsx")).toBeInTheDocument();
-    expect(screen.getByText(/opened/i)).toBeInTheDocument();
+    expect(screen.getByText("Opened")).toBeInTheDocument();
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 });

@@ -410,17 +410,20 @@ export function FileTreePane(props: FileTreePaneProps) {
           />
         </label>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-6">
-          <div><span>Root path</span><strong>{tree.path}</strong></div>
-          <div><span>Total</span><strong>{entries.length}</strong></div>
-          <div><span>Concealed count</span><strong>{hiddenCount}</strong></div>
-          <div><span>Excluded count</span><strong>{ignoredCount}</strong></div>
-          <div><span>Opened</span><strong>{opened.size}</strong></div>
-          <div><span>Selection</span><strong>{selected.size} paths selected</strong></div>
+        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+            <span className="block truncate text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Root</span>
+            <strong className="mt-1 block truncate text-sm text-zinc-100" title={tree.path}>{tree.path}</strong>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"><span className="block text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Total</span><strong className="mt-1 block text-sm text-zinc-100">{entries.length}</strong></div>
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"><span className="block text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Hidden</span><strong className="mt-1 block text-sm text-zinc-100">{hiddenCount}</strong></div>
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"><span className="block text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Ignored</span><strong className="mt-1 block text-sm text-zinc-100">{ignoredCount}</strong></div>
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"><span className="block text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Opened</span><strong className="mt-1 block text-sm text-zinc-100">{opened.size}</strong></div>
+          <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"><span className="block text-[0.62rem] uppercase tracking-[0.18em] text-zinc-500">Selected</span><strong className="mt-1 block text-sm text-zinc-100">{selected.size}</strong></div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <span>Selected path {operatorRelativePath(selectedPath || "none", props.rootPath)}</span>
+          <span className="min-w-0 flex-1 truncate" title={selectedPath}>Selected path {operatorRelativePath(selectedPath || "none", rootPath)}</span>
           <button type="button" onClick={() => invoke(props, ["onRevealInTree", "onRevealPathRequested", "onRevealPath", "onRevealRequested"], selectedPath)}>
             Reveal
           </button>
@@ -447,7 +450,12 @@ export function FileTreePane(props: FileTreePaneProps) {
                 aria-expanded={node.type === "directory" ? true : undefined}
                 data-path={node.originalPath}
                 data-type={node.type}
-                style={{ paddingLeft: depth * 16 }}
+                className={`group flex w-full min-w-0 cursor-default items-center gap-2 rounded-xl border px-2 py-1.5 text-left text-sm transition ${
+                    tokenMatches(selected, node)
+                      ? "border-emerald-700/50 bg-emerald-500/10 text-emerald-100"
+                      : "border-transparent text-zinc-300 hover:border-zinc-800 hover:bg-zinc-900/80"
+                  }`}
+                  style={{ paddingLeft: 8 + depth * 14 }}
                 onClick={() => {
                   invoke(props, ["onPathSelected", "onSelectPath", "onPathSelectionRequested", "onFileSelected"], node.originalPath);
                   if (node.type === "file") {
@@ -458,12 +466,11 @@ export function FileTreePane(props: FileTreePaneProps) {
                   if (node.type === "directory") invoke(props, ["onToggleExpandedPath", "onDirectoryToggleRequested", "onToggleDirectory", "onDirectoryExpandedChange"], node.originalPath);
                 }}
               >
-                <span>{node.name}</span>
-                <span> {node.type}</span>
-                {node.hidden ? <span aria-label="hidden entry" data-state="hidden" /> : null}
-                {node.ignored ? <span aria-label="ignored entry" data-state="ignored" /> : null}
-                {tokenMatches(selected, node) ? <span> selected</span> : null}
-                {tokenMatches(opened, node) ? <span aria-label="opened entry" data-state="opened" /> : null}
+                <span className="shrink-0 text-zinc-500">{node.type === "directory" ? "▸" : "•"}</span>
+                <span className={`min-w-0 flex-1 truncate ${node.type === "directory" ? "font-semibold" : "font-medium"}`} title={operatorRelativePath(node.originalPath, rootPath)}>{node.name}</span>
+                {node.hidden ? <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[0.58rem] uppercase tracking-[0.12em] text-zinc-400">hidden</span> : null}
+                {node.ignored ? <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[0.58rem] uppercase tracking-[0.12em] text-zinc-400">ignored</span> : null}
+                {tokenMatches(opened, node) ? <span className="shrink-0 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[0.58rem] uppercase tracking-[0.12em] text-emerald-300">open</span> : null}
               </div>
             ))}
           </div>
