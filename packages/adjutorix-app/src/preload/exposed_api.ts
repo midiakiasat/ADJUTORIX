@@ -196,6 +196,7 @@ export type ExposedWorkspaceApi = {
   close: () => Promise<ExposedResult<WorkspaceCloseResponse>>;
   reveal: (input: WorkspaceRevealRequest) => Promise<ExposedResult<JsonObject>>;
   health: () => Promise<ExposedResult<WorkspaceHealthResponse>>;
+  readFile: (input: Parameters<WorkspaceBridgeApi["readFile"]>[0]) => Promise<ExposedResult<JsonObject>>;
   trust: {
     read: () => Promise<ExposedResult<WorkspaceTrustReadResponse>>;
     set: (input: WorkspaceTrustSetRequest) => Promise<ExposedResult<WorkspaceTrustSetResponse>>;
@@ -492,6 +493,7 @@ export function createWorkspaceFacade(workspace: WorkspaceBridgeApi): ExposedWor
     close: async () => normalizeBridgeEnvelope(await workspace.close()),
     reveal: async (input) => normalizeBridgeEnvelope(await workspace.reveal(input)),
     health: async () => normalizeBridgeEnvelope(await workspace.health()),
+    readFile: async (input) => normalizeBridgeEnvelope(await workspace.readFile(input as Parameters<WorkspaceBridgeApi["readFile"]>[0])),
     trust: deepFreeze({
       read: async () => normalizeBridgeEnvelope(await workspace.trust.read()),
       set: async (input) => normalizeBridgeEnvelope(await workspace.trust.set(input)),

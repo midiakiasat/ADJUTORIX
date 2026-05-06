@@ -50,6 +50,7 @@
     "adjutorix:agent:health",
     "adjutorix:diagnostics:runtimeSnapshot",
     "adjutorix:runtime:snapshot",
+    "adjutorix:workspace:file:read",
     "adjutorix:workspace:health"
   ],
   "preload_boundary": {

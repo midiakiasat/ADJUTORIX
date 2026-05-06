@@ -81,6 +81,7 @@ const INVOKE_CHANNEL_ALLOWLIST = new Set<string>([
   CHANNELS.workspaceClose,
   CHANNELS.workspaceReveal,
   CHANNELS.workspaceHealth,
+  CHANNELS.workspaceFileRead,
   CHANNELS.workspaceTrustRead,
   CHANNELS.workspaceTrustSet,
   CHANNELS.patchPreview,
@@ -403,6 +404,16 @@ function normalizeWorkspaceRevealRequest(input: unknown): WorkspaceRevealRequest
   };
 }
 
+function normalizeWorkspaceFileReadRequest(input: unknown): WorkspaceFileReadRequest {
+  const obj = requireJsonRecord(input, "workspace_file_read_request");
+  const rawPath = obj.path !== undefined ? obj.path : obj.targetPath;
+  return {
+    schema: 1,
+    actor: "renderer",
+    path: requireString(rawPath, "path"),
+  };
+}
+
 function normalizeWorkspaceTrustSetRequest(input: unknown): WorkspaceTrustSetRequest {
   const obj = requireJsonRecord(input, "workspace_trust_set_request");
   const level = requireString(obj.level, "level") as WorkspaceTrustSetRequest["level"];
@@ -596,6 +607,7 @@ const bridge = {
     close: async () => guardedInvoke(CHANNELS.workspaceClose, {}),
     reveal: async (input: unknown) => guardedInvoke(CHANNELS.workspaceReveal, normalizeWorkspaceRevealRequest(input)),
     health: async () => guardedInvoke(CHANNELS.workspaceHealth, {}),
+    readFile: async (input: unknown) => guardedInvoke(CHANNELS.workspaceFileRead, normalizeWorkspaceFileReadRequest(input)),
     trust: deepFreeze({
       read: async () => guardedInvoke(CHANNELS.workspaceTrustRead, {}),
       set: async (input: unknown) => guardedInvoke(CHANNELS.workspaceTrustSet, normalizeWorkspaceTrustSetRequest(input)),

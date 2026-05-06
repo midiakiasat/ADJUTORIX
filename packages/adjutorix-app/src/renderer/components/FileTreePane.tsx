@@ -450,6 +450,9 @@ export function FileTreePane(props: FileTreePaneProps) {
                 style={{ paddingLeft: depth * 16 }}
                 onClick={() => {
                   invoke(props, ["onPathSelected", "onSelectPath", "onPathSelectionRequested", "onFileSelected"], node.originalPath);
+                  if (node.type === "file") {
+                    invoke(props, ["onOpenPath", "onOpenPathRequested", "onOpenRequested"], node.originalPath);
+                  }
                 }}
                 onDoubleClick={() => {
                   if (node.type === "directory") invoke(props, ["onToggleExpandedPath", "onDirectoryToggleRequested", "onToggleDirectory", "onDirectoryExpandedChange"], node.originalPath);

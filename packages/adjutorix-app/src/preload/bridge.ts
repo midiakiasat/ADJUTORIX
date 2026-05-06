@@ -272,11 +272,20 @@ export type RuntimeBridgeApi = {
   snapshot: () => Promise<BridgeEnvelope<RuntimeSnapshotResponse>>;
 };
 
+export type WorkspaceFileReadRequest = {
+  schema?: 1;
+  actor?: RendererActor;
+  path: string;
+};
+
+export type WorkspaceFileReadResponse = JsonObject;
+
 export type WorkspaceBridgeApi = {
   open: (input: WorkspaceOpenRequest) => Promise<BridgeEnvelope<JsonObject>>;
   close: () => Promise<BridgeEnvelope<WorkspaceCloseResponse>>;
   reveal: (input: WorkspaceRevealRequest) => Promise<BridgeEnvelope<JsonObject>>;
   health: () => Promise<BridgeEnvelope<WorkspaceHealthResponse>>;
+  readFile: (input: WorkspaceFileReadRequest) => Promise<BridgeEnvelope<WorkspaceFileReadResponse>>;
   trust: {
     read: () => Promise<BridgeEnvelope<WorkspaceTrustReadResponse>>;
     set: (input: WorkspaceTrustSetRequest) => Promise<BridgeEnvelope<WorkspaceTrustSetResponse>>;
@@ -362,6 +371,7 @@ export const BRIDGE_CHANNELS = {
   workspaceClose: "adjutorix:workspace:close",
   workspaceReveal: "adjutorix:workspace:reveal",
   workspaceHealth: "adjutorix:workspace:health",
+  workspaceFileRead: "adjutorix:workspace:file:read",
   workspaceTrustRead: "adjutorix:workspace:trust:read",
   workspaceTrustSet: "adjutorix:workspace:trust:set",
 
@@ -405,6 +415,7 @@ export type BridgeInvokeChannel =
   | typeof BRIDGE_CHANNELS.workspaceClose
   | typeof BRIDGE_CHANNELS.workspaceReveal
   | typeof BRIDGE_CHANNELS.workspaceHealth
+  | typeof BRIDGE_CHANNELS.workspaceFileRead
   | typeof BRIDGE_CHANNELS.workspaceTrustRead
   | typeof BRIDGE_CHANNELS.workspaceTrustSet
   | typeof BRIDGE_CHANNELS.patchPreview

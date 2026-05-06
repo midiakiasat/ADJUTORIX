@@ -621,77 +621,6 @@ function registerIpc(config: RuntimeConfig): void {
     }
   };
 
-  registerLegacyCompatHandler("adjutorix:runtime:snapshot", async () => {
-    const mem = process.memoryUsage();
-    const snapshot = {
-      schema: 1,
-      ok: true,
-      phase: appDiagnostics.phase,
-      startedAtMs: appDiagnostics.startedAtMs,
-      configHash: appDiagnostics.configHash,
-      environment: {
-        appVersion: config.environment.appVersion,
-        node: config.environment.node,
-        electron: config.environment.electron,
-        platform: config.environment.platform,
-        arch: config.environment.arch,
-        isPackaged: config.environment.isPackaged,
-        headlessSmokeMode: config.environment.headlessSmokeMode,
-      },
-      workspace: {
-        currentPath: workspaceState.currentPath,
-        workspacePath: workspaceState.currentPath,
-        rootPath: workspaceState.currentPath,
-        health: workspaceState.currentPath ? "ready" : "unknown",
-        status: workspaceState.currentPath ? "ready" : "unknown",
-        isOpen: Boolean(workspaceState.currentPath),
-        openedAtMs: workspaceState.openedAtMs,
-        checkedAtMs: workspaceState.checkedAtMs,
-      },
-      agent: {
-        url: agentState.url,
-        managed: agentState.managed,
-        pid: agentState.pid,
-        healthy: agentState.lastHealth.ok,
-        status: agentState.lastHealth.status,
-        checkedAtMs: agentState.lastHealth.checkedAtMs ?? null,
-      },
-      diagnostics: {
-        events: appDiagnostics.events.length,
-        crashes: appDiagnostics.crashes.length,
-        windowCreated: appDiagnostics.windowCreated,
-        rendererLoaded: appDiagnostics.rendererLoaded,
-      },
-      resources: {
-        rss_bytes: mem.rss,
-        heap_total_bytes: mem.heapTotal,
-        heap_used_bytes: mem.heapUsed,
-        external_bytes: mem.external,
-        cpu_load_avg: os.loadavg(),
-      },
-    };
-    const payload = { ok: true, snapshot, ...snapshot };
-    return payload as Json;
-  });
-
-  registerLegacyCompatHandler("adjutorix:workspace:health", async () => {
-    workspaceState.checkedAtMs = Date.now();
-    const isOpen = Boolean(workspaceState.currentPath);
-    const payload = {
-      ok: true,
-      schema: 1,
-      status: isOpen ? "ready" : "unknown",
-      health: isOpen ? "ready" : "unknown",
-      currentPath: workspaceState.currentPath,
-      workspacePath: workspaceState.currentPath,
-      rootPath: workspaceState.currentPath,
-      isOpen,
-      checkedAtMs: workspaceState.checkedAtMs,
-      issues: isOpen ? [] : ["no-workspace-open"],
-    };
-    return payload as Json;
-  });
-
   registerLegacyCompatHandler("adjutorix:agent:health", async () => {
     const payload = {
       ok: agentState.lastHealth.ok,
@@ -756,6 +685,316 @@ function registerIpc(config: RuntimeConfig): void {
     };
     return payload as Json;
   });
+
+  registerLegacyCompatHandler("adjutorix:runtime:snapshot", async () => {
+    const mem = process.memoryUsage();
+    const snapshot = {
+      schema: 1,
+      ok: true,
+      phase: appDiagnostics.phase,
+      startedAtMs: appDiagnostics.startedAtMs,
+      configHash: appDiagnostics.configHash,
+      environment: {
+        appVersion: config.environment.appVersion,
+        node: config.environment.node,
+        electron: config.environment.electron,
+        platform: config.environment.platform,
+        arch: config.environment.arch,
+        isPackaged: config.environment.isPackaged,
+        headlessSmokeMode: config.environment.headlessSmokeMode,
+      },
+      workspace: {
+        currentPath: workspaceState.currentPath,
+        workspacePath: workspaceState.currentPath,
+        rootPath: workspaceState.currentPath,
+        health: workspaceState.currentPath ? "ready" : "unknown",
+        status: workspaceState.currentPath ? "ready" : "unknown",
+        isOpen: Boolean(workspaceState.currentPath),
+        openedAtMs: workspaceState.openedAtMs,
+        checkedAtMs: workspaceState.checkedAtMs,
+      },
+      agent: {
+        url: agentState.url,
+        managed: agentState.managed,
+        pid: agentState.pid,
+        healthy: agentState.lastHealth.ok,
+        status: agentState.lastHealth.status,
+        checkedAtMs: agentState.lastHealth.checkedAtMs ?? null,
+      },
+      diagnostics: {
+        events: appDiagnostics.events.length,
+        crashes: appDiagnostics.crashes.length,
+        windowCreated: appDiagnostics.windowCreated,
+        rendererLoaded: appDiagnostics.rendererLoaded,
+      },
+      resources: {
+        rss_bytes: mem.rss,
+        heap_total_bytes: mem.heapTotal,
+        heap_used_bytes: mem.heapUsed,
+        external_bytes: mem.external,
+        cpu_load_avg: os.loadavg(),
+      },
+    };
+    const payload = { ok: true, snapshot, ...snapshot };
+    return payload as Json;
+  });
+
+  registerLegacyCompatHandler("adjutorix:workspace:file:read", async (payload) => {
+    const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const requestedPath = obj.path ?? obj.targetPath;
+    const currentPath =
+      typeof workspaceState.currentPath === "string" && workspaceState.currentPath.length > 0
+        ? workspaceState.currentPath
+        : null;
+
+    return buildRendererWorkspaceFileSnapshot(currentPath, requestedPath);
+  });
+
+  registerLegacyCompatHandler("adjutorix:workspace:health", async () => {
+    const currentPath =
+      typeof workspaceState.currentPath === "string" && workspaceState.currentPath.length > 0
+        ? workspaceState.currentPath
+        : null;
+    const entries = buildRendererWorkspaceEntries(currentPath);
+    const isOpen = Boolean(currentPath);
+    const recentPaths = Array.isArray(workspaceState.recentPaths) ? workspaceState.recentPaths : [];
+
+    return {
+      schema: 1,
+      ok: true,
+      checkedAtMs: Date.now(),
+      currentPath,
+      rootPath: currentPath,
+      workspacePath: currentPath,
+      isOpen,
+      status: isOpen ? "ready" : "unknown",
+      health: isOpen ? "healthy" : "unknown",
+      level: isOpen ? "healthy" : "unknown",
+      issues: isOpen ? [] : ["no-workspace-open"],
+      recentPaths,
+      entryCount: entries.length,
+      treeTruncated: entries.length >= RENDERER_WORKSPACE_TREE_MAX_ENTRIES,
+      treeMaxEntries: RENDERER_WORKSPACE_TREE_MAX_ENTRIES,
+      treeMaxDepth: RENDERER_WORKSPACE_TREE_MAX_DEPTH,
+      entries,
+    };
+  });
+
+
+
+  type RendererWorkspaceEntry = {
+  path: string;
+  relativePath: string;
+  name: string;
+  kind: "file" | "directory" | "symlink" | "unknown";
+  parentPath: string | null;
+  extension: string | null;
+  sizeBytes: number | null;
+  hidden: boolean;
+  ignored: boolean;
+  depth: number;
+  childCount: number | null;
+  modifiedAtMs: number | null;
+};
+
+const RENDERER_WORKSPACE_TREE_MAX_ENTRIES = 900;
+const RENDERER_WORKSPACE_TREE_MAX_DEPTH = 6;
+const RENDERER_WORKSPACE_TREE_IGNORED_NAMES = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  ".tmp",
+  ".next",
+  "coverage",
+  "target",
+  ".DS_Store",
+]);
+
+function toRendererRelativePath(rootPath: string, targetPath: string): string {
+  const relative = path.relative(rootPath, targetPath).split(path.sep).join("/");
+  return relative || ".";
+}
+
+const RENDERER_WORKSPACE_FILE_MAX_BYTES = 1024 * 1024;
+
+function isPathInside(parentPath: string, childPath: string): boolean {
+  const relative = path.relative(parentPath, childPath);
+  return relative === "" || (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function inferRendererWorkspaceLanguage(filePath: string): string | null {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".ts" || ext === ".tsx") return "typescript";
+  if (ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") return "javascript";
+  if (ext === ".json") return "json";
+  if (ext === ".md" || ext === ".markdown") return "markdown";
+  if (ext === ".css") return "css";
+  if (ext === ".html" || ext === ".htm") return "html";
+  if (ext === ".yml" || ext === ".yaml") return "yaml";
+  if (ext === ".py") return "python";
+  if (ext === ".sh" || ext === ".bash" || ext === ".zsh") return "shell";
+  if (ext === ".sql") return "sql";
+  return null;
+}
+
+function detectRendererWorkspaceLineEnding(content: string): "lf" | "crlf" | "cr" | "unknown" {
+  if (content.includes("\r\n")) return "crlf";
+  if (content.includes("\n")) return "lf";
+  if (content.includes("\r")) return "cr";
+  return "unknown";
+}
+
+function assertTextBuffer(buffer: Buffer): void {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8192));
+  for (const byte of sample) {
+    if (byte === 0) throw new Error("workspace_file_read_binary_rejected");
+  }
+}
+
+function buildRendererWorkspaceFileSnapshot(rootPath: string | null, requestedPath: unknown): Json {
+  if (!rootPath) throw new Error("workspace_file_read_requires_open_workspace");
+  if (typeof requestedPath !== "string" || requestedPath.trim().length === 0) {
+    throw new Error("workspace_file_read_path_required");
+  }
+
+  const rootRealPath = fs.realpathSync(path.resolve(rootPath));
+  const targetResolvedPath = path.resolve(requestedPath);
+  const lstat = fs.lstatSync(targetResolvedPath);
+
+  if (lstat.isSymbolicLink()) throw new Error("workspace_file_read_symlink_rejected");
+  if (lstat.isDirectory()) throw new Error("workspace_file_read_directory_rejected");
+  if (!lstat.isFile()) throw new Error("workspace_file_read_non_file_rejected");
+  if (lstat.size > RENDERER_WORKSPACE_FILE_MAX_BYTES) throw new Error("workspace_file_read_too_large");
+
+  const targetRealPath = fs.realpathSync(targetResolvedPath);
+  if (!isPathInside(rootRealPath, targetRealPath)) throw new Error("workspace_file_read_outside_workspace");
+
+  const buffer = fs.readFileSync(targetRealPath);
+  assertTextBuffer(buffer);
+
+  const content = buffer.toString("utf8");
+  if (content.includes("\uFFFD")) throw new Error("workspace_file_read_invalid_utf8_rejected");
+
+  const relativePath = toRendererRelativePath(rootRealPath, targetRealPath);
+
+  return {
+    schema: 1,
+    ok: true,
+    path: targetRealPath,
+    relativePath,
+    name: path.basename(targetRealPath),
+    language: inferRendererWorkspaceLanguage(targetRealPath),
+    encoding: "utf8",
+    lineEnding: detectRendererWorkspaceLineEnding(content),
+    sizeBytes: buffer.byteLength,
+    modifiedAtMs: Math.floor(lstat.mtimeMs),
+    sha256: sha256(buffer),
+    content,
+    readOnly: true,
+    maxBytes: RENDERER_WORKSPACE_FILE_MAX_BYTES,
+  } as Json;
+}
+
+function buildRendererWorkspaceEntries(rootPath: string | null): RendererWorkspaceEntry[] {
+  if (!rootPath) return [];
+
+  const normalizedRoot = path.resolve(rootPath);
+  if (!fs.existsSync(normalizedRoot)) return [];
+
+  let rootStat: fs.Stats;
+  try {
+    rootStat = fs.statSync(normalizedRoot);
+  } catch {
+    return [];
+  }
+
+  if (!rootStat.isDirectory()) return [];
+
+  const entries: RendererWorkspaceEntry[] = [];
+
+  const visit = (directoryPath: string, depth: number): void => {
+    if (entries.length >= RENDERER_WORKSPACE_TREE_MAX_ENTRIES) return;
+    if (depth > RENDERER_WORKSPACE_TREE_MAX_DEPTH) return;
+
+    let children: fs.Dirent[];
+    try {
+      children = fs.readdirSync(directoryPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    children.sort((a, b) => {
+      const ad = a.isDirectory() ? 0 : 1;
+      const bd = b.isDirectory() ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      return a.name.localeCompare(b.name);
+    });
+
+    for (const child of children) {
+      if (entries.length >= RENDERER_WORKSPACE_TREE_MAX_ENTRIES) return;
+      if (RENDERER_WORKSPACE_TREE_IGNORED_NAMES.has(child.name)) continue;
+
+      const fullPath = path.join(directoryPath, child.name);
+      const relativePath = toRendererRelativePath(normalizedRoot, fullPath);
+      const kind = child.isDirectory()
+        ? "directory"
+        : child.isFile()
+          ? "file"
+          : child.isSymbolicLink()
+            ? "symlink"
+            : "unknown";
+
+      let sizeBytes: number | null = null;
+      let modifiedAtMs: number | null = null;
+      let childCount: number | null = null;
+
+      try {
+        const stat = fs.statSync(fullPath);
+        sizeBytes = stat.isFile() ? stat.size : null;
+        modifiedAtMs = Math.floor(stat.mtimeMs);
+        if (stat.isDirectory()) {
+          try {
+            childCount = fs.readdirSync(fullPath).length;
+          } catch {
+            childCount = null;
+          }
+        }
+      } catch {
+        sizeBytes = null;
+        modifiedAtMs = null;
+      }
+
+      entries.push({
+        path: fullPath,
+        relativePath,
+        name: child.name,
+        kind,
+        parentPath: directoryPath === normalizedRoot ? normalizedRoot : directoryPath,
+        extension: kind === "file" ? path.extname(child.name) || null : null,
+        sizeBytes,
+        hidden: child.name.startsWith("."),
+        ignored: false,
+        depth: relativePath.split("/").filter(Boolean).length,
+        childCount,
+        modifiedAtMs,
+      });
+
+      if (kind === "directory") visit(fullPath, depth + 1);
+    }
+  };
+
+  visit(normalizedRoot, 1);
+  return entries;
+}
+
+
+
+
+
+
+
+
 
 
   safeHandle("adjutorix:workspace:open", async (payload) => {

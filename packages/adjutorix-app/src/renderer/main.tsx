@@ -13,6 +13,9 @@ import { createRoot } from "react-dom/client";
 import AppShell from "./components/AppShell";
 import WelcomeScreen from "./components/WelcomeScreen";
 import ProviderStatus from "./components/ProviderStatus";
+import FileTreePane from "./components/FileTreePane";
+import MonacoEditorPane from "./components/MonacoEditorPane";
+import { createInitialEditorBuffersState, editorBuffersReducer } from "./state/editor_buffers";
 import "./styles/theme.css";
 import "./styles/layout.css";
 import "./styles/app.css";
@@ -941,6 +944,124 @@ const statusChips = [
 
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
+  const [workspaceTreeQuery, setWorkspaceTreeQuery] = React.useState("");
+  const [selectedWorkspacePath, setSelectedWorkspacePath] = React.useState<string | null>(null);
+  const [openedWorkspacePaths, setOpenedWorkspacePaths] = React.useState<string[]>([]);
+  const [editorBuffers, dispatchEditorBuffers] = React.useReducer(editorBuffersReducer, undefined, createInitialEditorBuffersState);
+  const activeEditorBuffer = editorBuffers.activePath ? editorBuffers.byPath[editorBuffers.activePath] ?? null : null;
+
+  const workspaceEntries = React.useMemo(() => {
+    const health = (state.workspaceHealth ?? {}) as any;
+    const runtimeWorkspace = ((state.runtimeSnapshot as any)?.workspace ?? {}) as any;
+
+    const candidates = [
+      health.entries,
+      health.fileTree,
+      health.tree,
+      health.workspaceTree,
+      runtimeWorkspace.entries,
+      runtimeWorkspace.fileTree,
+      runtimeWorkspace.tree,
+      runtimeWorkspace.workspaceTree,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+      if (candidate && typeof candidate === "object" && Array.isArray((candidate as any).entries)) {
+        return (candidate as any).entries;
+      }
+      if (candidate && typeof candidate === "object" && Array.isArray((candidate as any).children)) {
+        return (candidate as any).children;
+      }
+    }
+
+    return [];
+  }, [state.runtimeSnapshot, state.workspaceHealth]);
+
+  React.useEffect(() => {
+    setSelectedWorkspacePath(null);
+    setOpenedWorkspacePaths([]);
+  }, [surfaceWorkspaceRoot]);
+
+  const selectWorkspacePath = React.useCallback((pathValue: unknown) => {
+    const raw =
+      typeof pathValue === "string"
+        ? pathValue
+        : pathValue && typeof pathValue === "object"
+          ? String((pathValue as any).path ?? (pathValue as any).fullPath ?? (pathValue as any).relativePath ?? "")
+          : "";
+
+    const next = raw.trim() || null;
+    setSelectedWorkspacePath(next);
+
+    if (next) {
+      setOpenedWorkspacePaths((current) => Array.from(new Set([next, ...current])).slice(0, 24));
+      recordEvent("workspace.selection", { kind: "workspace.path.selected", detail: { path: next } });
+    }
+  }, [recordEvent]);
+
+  const openWorkspacePath = React.useCallback(async (pathValue: unknown) => {
+    const raw =
+      typeof pathValue === "string"
+        ? pathValue
+        : pathValue && typeof pathValue === "object"
+          ? String((pathValue as any).path ?? (pathValue as any).fullPath ?? (pathValue as any).relativePath ?? "")
+          : "";
+    const next = raw.trim();
+
+    if (!next) return;
+    selectWorkspacePath(next);
+
+    const entry = workspaceEntries.find((candidate: any) => {
+      const candidatePath = String(candidate?.path ?? candidate?.fullPath ?? candidate?.relativePath ?? "");
+      return candidatePath === next;
+    }) as any;
+
+    const entryKind = String(entry?.kind ?? entry?.type ?? "").toLowerCase();
+    if (entryKind === "directory" || entryKind === "dir") {
+      recordEvent("workspace.open", { kind: "workspace.path.directory-selected", detail: { path: next } });
+      return;
+    }
+
+    dispatchEditorBuffers({ type: "BUFFER_OPEN_REQUESTED", payload: { path: next, readOnly: true, atMs: Date.now() } });
+
+    try {
+      const envelope = await (api.workspace as any).readFile({ schema: 1, actor: "renderer", path: next });
+      if (!envelope?.ok) {
+        const message = envelope?.error?.message ?? "Workspace file read failed.";
+        dispatchEditorBuffers({ type: "BUFFER_OPEN_FAILED", path: next, error: message, atMs: Date.now() });
+        notify("error", "File open failed", message);
+        recordEvent("workspace.open", { kind: "workspace.file.open.failed", detail: { path: next, message } });
+        return;
+      }
+
+      const data = envelope.data ?? {};
+      dispatchEditorBuffers({
+        type: "BUFFER_OPEN_SUCCEEDED",
+        payload: {
+          path: String(data.path ?? next),
+          title: String(data.name ?? next.split("/").pop() ?? next),
+          content: String(data.content ?? ""),
+          source: "disk",
+          language: typeof data.language === "string" ? data.language : null,
+          encoding: "utf8",
+          lineEnding: typeof data.lineEnding === "string" ? data.lineEnding : "unknown",
+          readOnly: true,
+          atMs: Date.now(),
+        },
+      });
+      setOpenedWorkspacePaths((current) => Array.from(new Set([String(data.path ?? next), ...current])).slice(0, 24));
+      notify("success", "File opened", String(data.relativePath ?? data.path ?? next));
+      recordEvent("workspace.open", { kind: "workspace.file.opened", detail: { path: String(data.path ?? next), sizeBytes: data.sizeBytes ?? null, sha256: data.sha256 ?? null } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      dispatchEditorBuffers({ type: "BUFFER_OPEN_FAILED", path: next, error: message, atMs: Date.now() });
+      notify("error", "File open failed", message);
+      recordEvent("workspace.open", { kind: "workspace.file.open.threw", detail: { path: next, message } });
+    }
+  }, [api.workspace, notify, recordEvent, selectWorkspacePath, workspaceEntries]);
+
+
 
   const toSurfaceJson = (value: unknown) => (value ?? null) as JsonValue | null;
 
@@ -1079,9 +1200,60 @@ const statusChips = [
         { label: "Issues", value: String(((state.workspaceHealth as any)?.issues ?? []).length ?? 0), tone: ((state.workspaceHealth as any)?.issues ?? []).length ? "warn" : "good" },
       ]}
     >
-      <div className="grid gap-6 2xl:grid-cols-2">
-        <SnapshotCard title="Workspace health" value={toSurfaceJson(state.workspaceHealth)} />
-        <SnapshotCard title="Runtime workspace context" value={toSurfaceJson((state.runtimeSnapshot as any)?.workspace ?? null)} />
+      <div className="grid gap-6 2xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.1fr)]">
+        <FileTreePane
+          rootPath={surfaceWorkspaceRoot ?? undefined}
+          workspaceRoot={surfaceWorkspaceRoot ?? undefined}
+          workspaceName={workspaceName}
+          entries={workspaceEntries}
+          selectedPath={selectedWorkspacePath ?? undefined}
+          openedPaths={openedWorkspacePaths}
+          filterQuery={workspaceTreeQuery}
+          health={surfaceWorkspaceBound ? "healthy" : "unknown"}
+          onFilterQueryChange={setWorkspaceTreeQuery}
+          onSearchQueryChange={setWorkspaceTreeQuery}
+          onPathSelected={selectWorkspacePath}
+          onOpenPath={openWorkspacePath}
+          onOpenPathRequested={openWorkspacePath}
+          onRefreshRequested={refreshWorkspaceHealth}
+        />
+        <div className="grid gap-6">
+          <div className="min-h-[36rem]">
+            <MonacoEditorPane
+              path={activeEditorBuffer?.path ?? null}
+              title={activeEditorBuffer?.title ?? null}
+              language={activeEditorBuffer?.language ?? null}
+              baselineContent={activeEditorBuffer?.content.baselineContent ?? ""}
+              workingContent={activeEditorBuffer?.content.workingContent ?? ""}
+              readOnly={activeEditorBuffer?.readOnly ?? true}
+              modified={activeEditorBuffer ? activeEditorBuffer.content.workingHash !== activeEditorBuffer.content.baselineHash : false}
+              loading={activeEditorBuffer?.lifecycle === "opening"}
+              trustLevel={String((state.workspaceHealth as any)?.trustLevel ?? "unknown") as any}
+              reviewState="none"
+              onChangeWorkingContent={(next) => {
+                if (!activeEditorBuffer) return;
+                dispatchEditorBuffers({ type: "BUFFER_WORKING_CONTENT_SET", payload: { path: activeEditorBuffer.path, content: next, atMs: Date.now() } });
+              }}
+              onResetToBaselineRequested={() => {
+                if (!activeEditorBuffer) return;
+                dispatchEditorBuffers({ type: "BUFFER_RESET_WORKING_TO_BASELINE", path: activeEditorBuffer.path });
+              }}
+            />
+          </div>
+          <SnapshotCard
+            title="Active workspace path"
+            value={toSurfaceJson({
+              rootPath: surfaceWorkspaceRoot,
+              selectedPath: selectedWorkspacePath,
+              openedPaths: openedWorkspacePaths,
+              activeBufferPath: activeEditorBuffer?.path ?? null,
+              openBufferCount: editorBuffers.tabOrder.length,
+              entryCount: workspaceEntries.length,
+            })}
+          />
+          <SnapshotCard title="Workspace health" value={toSurfaceJson(state.workspaceHealth)} />
+          <SnapshotCard title="Runtime workspace context" value={toSurfaceJson((state.runtimeSnapshot as any)?.workspace ?? null)} />
+        </div>
       </div>
     </SurfaceFrame>
   );
@@ -1325,6 +1497,22 @@ const statusChips = [
       headerActions={<CommandBar />}
         leftRail={
           <div className="space-y-6">
+            <FileTreePane
+              rootPath={workspaceRoot ?? undefined}
+              workspaceRoot={workspaceRoot ?? undefined}
+              workspaceName={workspaceName}
+              entries={workspaceEntries}
+              selectedPath={selectedWorkspacePath ?? undefined}
+              openedPaths={openedWorkspacePaths}
+              filterQuery={workspaceTreeQuery}
+              health={workspaceOpen ? "healthy" : "unknown"}
+              onFilterQueryChange={setWorkspaceTreeQuery}
+              onSearchQueryChange={setWorkspaceTreeQuery}
+              onPathSelected={selectWorkspacePath}
+              onOpenPath={openWorkspacePath}
+              onOpenPathRequested={openWorkspacePath}
+              onRefreshRequested={refreshWorkspaceHealth}
+            />
             <SnapshotCard title="Manifest" value={state.manifest as JsonValue | null} />
             <SnapshotCard
               title="Workspace posture"
