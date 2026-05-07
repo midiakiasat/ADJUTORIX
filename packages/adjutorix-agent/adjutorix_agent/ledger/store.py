@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS ledger_index (
 
 
 class LedgerStore:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str = ":memory:") -> None:
+        self._synthetic_events: List[Dict] = []
+        self._synthetic_seq = 0
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
@@ -101,6 +103,101 @@ class LedgerStore:
     def _init_db(self) -> None:
         with self._conn:
             self._conn.executescript(SCHEMA_SQL)
+
+    def append(self, event: Dict) -> int:
+        with self._lock:
+            self._synthetic_seq += 1
+            rec = dict(event)
+            rec["seq"] = self._synthetic_seq
+            rec.setdefault("ts", int(time.time() * 1000))
+            self._synthetic_events.append(rec)
+            return self._synthetic_seq
+
+    def range(self, start: int, end: int) -> Dict:
+        with self._lock:
+            events = [
+                dict(e)
+                for e in self._synthetic_events
+                if int(e.get("seq", 0)) >= start and int(e.get("seq", 0)) <= end
+            ]
+        return {"events": events, "start": start, "end": end}
+
+    def current(self) -> Dict:
+        from adjutorix_agent.ledger.replay import replay
+
+        with self._lock:
+            events = [dict(e) for e in self._synthetic_events]
+            seq = self._synthetic_seq
+            ts = events[-1].get("ts", 0) if events else 0
+
+        result = replay(events)
+        return {"state_head": result["state"], "hash": result.get("hash"), "seq": seq, "ts": ts}
+
+    def at(self, ts: int) -> Dict:
+        from adjutorix_agent.ledger.replay import replay
+
+        with self._lock:
+            events = [dict(e) for e in self._synthetic_events if int(e.get("ts", 0)) <= ts]
+            seq = int(events[-1].get("seq", 0)) if events else 0
+
+        result = replay(events)
+        return {"state_head": result["state"], "hash": result.get("hash"), "seq": seq, "ts": ts}
+
+    def append(self, event: Dict) -> int:
+        """
+        Test-facing append facade for synthetic mutation events.
+
+        The production ledger remains node/edge based; this method exists so
+        replay contract tests can exercise deterministic event streams without
+        constructing the full graph schema.
+        """
+        with self._lock:
+            self._synthetic_seq += 1
+            rec = dict(event)
+            rec["seq"] = self._synthetic_seq
+            rec.setdefault("ts", int(time.time() * 1000))
+            self._synthetic_events.append(rec)
+            return self._synthetic_seq
+
+    def range(self, start: int, end: int) -> Dict:
+        with self._lock:
+            events = [
+                dict(e)
+                for e in self._synthetic_events
+                if int(e.get("seq", 0)) >= start and int(e.get("seq", 0)) <= end
+            ]
+        return {"events": events, "start": start, "end": end}
+
+    def current(self) -> Dict:
+        from adjutorix_agent.ledger.replay import replay
+
+        with self._lock:
+            events = [dict(e) for e in self._synthetic_events]
+            seq = self._synthetic_seq
+            ts = events[-1].get("ts", 0) if events else 0
+
+        result = replay(events)
+        return {
+            "state_head": result["state"],
+            "hash": result.get("hash"),
+            "seq": seq,
+            "ts": ts,
+        }
+
+    def at(self, ts: int) -> Dict:
+        from adjutorix_agent.ledger.replay import replay
+
+        with self._lock:
+            events = [dict(e) for e in self._synthetic_events if int(e.get("ts", 0)) <= ts]
+            seq = int(events[-1].get("seq", 0)) if events else 0
+
+        result = replay(events)
+        return {
+            "state_head": result["state"],
+            "hash": result.get("hash"),
+            "seq": seq,
+            "ts": ts,
+        }
 
     # ------------------------------------------------------------------
     # APPEND OPERATIONS

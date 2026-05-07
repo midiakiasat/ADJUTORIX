@@ -272,3 +272,107 @@ def can(state: TxState, event: TxEvent, ctx: TxContext) -> bool:
 
 def apply(state: TxState, event: TxEvent, ctx: TxContext) -> Tuple[TxState, Dict[str, Any]]:
     return get_state_machine().apply(state, event, ctx)
+
+
+# ---------------------------------------------------------------------------
+# COMPATIBILITY INTENT STATE SURFACE
+# ---------------------------------------------------------------------------
+
+import copy as _copy
+import hashlib as _hashlib
+import json as _json
+
+
+@dataclass(frozen=True)
+class Intent:
+    op: str
+    payload: Dict[str, Any] = field(default_factory=dict)
+    idempotency_key: Optional[str] = None
+
+
+@dataclass
+class State:
+    jobs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    patches: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    workflows: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    authority: str = "root"
+    environment: Dict[str, Any] = field(default_factory=dict)
+    version: int = 0
+
+    @property
+    def hash(self) -> str:
+        payload = {
+            "jobs": self.jobs,
+            "patches": self.patches,
+            "workflows": self.workflows,
+            "authority": self.authority,
+            "environment": self.environment,
+            "version": self.version,
+        }
+        return _hashlib.sha256(
+            _json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+@dataclass(frozen=True)
+class TransitionResult:
+    new_state: State
+    artifacts: Dict[str, Any]
+    logs: List[Dict[str, Any]]
+
+
+def _stable_job_id(intent: Intent) -> str:
+    if intent.idempotency_key:
+        seed = {"idempotency_key": intent.idempotency_key, "op": intent.op}
+    else:
+        seed = {"op": intent.op, "payload": intent.payload}
+    digest = _hashlib.sha256(
+        _json.dumps(seed, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:16]
+    return f"job_{digest}"
+
+
+def _compat_transition(self: StateMachine, state: State, intent: Intent) -> TransitionResult:
+    if intent.op != "create_job":
+        raise InvalidTransition(f"unknown_intent_op: {intent.op}")
+
+    new_state = _copy.deepcopy(state)
+    job_id = _stable_job_id(intent)
+
+    created = job_id not in new_state.jobs
+    if created:
+        new_state.jobs[job_id] = {
+            "job_id": job_id,
+            "name": intent.payload.get("name", job_id),
+            "payload": _copy.deepcopy(intent.payload),
+            "state": "created",
+        }
+        new_state.version += 1
+
+    patch_id = f"patch_{job_id}"
+    new_state.patches.setdefault(
+        patch_id,
+        {
+            "patch_id": patch_id,
+            "job_id": job_id,
+            "op": intent.op,
+            "payload_hash": _hashlib.sha256(
+                _json.dumps(intent.payload, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        },
+    )
+
+    artifacts = {"patch": new_state.patches[patch_id]}
+    logs = [
+        {
+            "event": "job_created" if created else "job_replayed",
+            "ts": new_state.version,
+            "job_id": job_id,
+            "patch_id": patch_id,
+        }
+    ]
+
+    return TransitionResult(new_state=new_state, artifacts=artifacts, logs=logs)
+
+
+StateMachine.transition = _compat_transition

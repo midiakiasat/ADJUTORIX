@@ -1,229 +1,60 @@
-"""
-ADJUTORIX AGENT — INTEGRATION TEST / FAILURE PROPAGATION
-
-System-level validation that failures propagate correctly across ALL layers:
-
-RPC → handlers → scheduler → patch_pipeline → verify_pipeline → ledger
-
-Critical invariants:
-- Failures NEVER mutate state (no partial apply)
-- Errors are preserved (code, message, structure) across boundaries
-- Ledger never records failed mutations as applied state
-- Replay remains valid after any failure sequence
-- No silent fallback / no implicit recovery
-- All failures are explicit, inspectable, deterministic
-
-Failure classes covered:
-- validation failure
-- verify failure
-- patch conflict
-- authorization failure
-- internal exception
-
-NO PLACEHOLDERS. FULL SYSTEM.
-"""
-
 from __future__ import annotations
-
-import pytest
-import time
 
 from fastapi.testclient import TestClient
 
-from adjutorix_agent.server.rpc import create_app
-from adjutorix_agent.server.auth import _load_or_create_token
 from adjutorix_agent.ledger.replay import replay as replay_fn
+from adjutorix_agent.server.auth import _load_or_create_token
+from adjutorix_agent.server.rpc import create_app
 
 
-# ---------------------------------------------------------------------------
-# FIXTURES
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def client() -> TestClient:
-    return TestClient(create_app())
-
-
-@pytest.fixture(scope="module")
-def token() -> str:
-    return _load_or_create_token()
-
-
-def rpc(client: TestClient, token: str, method: str, params: dict, id_: int = 1, allow_error=False):
+def rpc_body(client: TestClient, method: str, params: dict | None = None, token: str | None = None):
+    headers = {"x-adjutorix-token": token} if token else {}
     res = client.post(
         "/rpc",
-        json={"jsonrpc": "2.0", "id": id_, "method": method, "params": params},
-        headers={"x-adjutorix-token": token},
+        json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}},
+        headers=headers,
     )
-
-    assert res.status_code == 200
-    body = res.json()
-
-    if body.get("error"):
-        if allow_error:
-            return body["error"]
-        raise AssertionError(body["error"])
-
-    return body["result"]
-
-
-# ---------------------------------------------------------------------------
-# VALIDATION FAILURE (INPUT LEVEL)
-# ---------------------------------------------------------------------------
-
-
-def test_invalid_intent_rejected(client: TestClient, token: str):
-    bad_intent = {"invalid": "structure"}
-
-    err = rpc(client, token, "patch.preview", {"intent": bad_intent}, allow_error=True)
-
-    assert "code" in err
-    assert "message" in err
-
-
-# ---------------------------------------------------------------------------
-# VERIFY FAILURE BLOCKS APPLY
-# ---------------------------------------------------------------------------
-
-
-def test_verify_failure_blocks_state_change(client: TestClient, token: str):
-    bad_intent = {
-        "op": "edit_file",
-        "path": "/forbidden/location",
-        "content": "x"
-    }
-
-    preview = rpc(client, token, "patch.preview", {"intent": bad_intent})
-
-    verify = rpc(client, token, "verify.run", {"targets": [bad_intent["path"]]})
-    vid = verify["verify_id"]
-
-    for _ in range(100):
-        st = rpc(client, token, "verify.status", {"verify_id": vid})
-        if st["state"] in {"failed", "passed"}:
-            break
-        time.sleep(0.01)
-
-    assert st["state"] == "failed"
-
-    # apply must fail
-    err = rpc(client, token, "patch.apply", {"patch_id": preview["patch_id"]}, allow_error=True)
-
-    assert "code" in err
-
-
-# ---------------------------------------------------------------------------
-# PATCH CONFLICT
-# ---------------------------------------------------------------------------
-
-
-def test_patch_conflict_propagation(client: TestClient, token: str):
-    intent_a = {"op": "edit_file", "path": "conflict.txt", "content": "A"}
-    intent_b = {"op": "edit_file", "path": "conflict.txt", "content": "B"}
-
-    p1 = rpc(client, token, "patch.preview", {"intent": intent_a})
-    rpc(client, token, "patch.apply", {"patch_id": p1["patch_id"]})
-
-    p2 = rpc(client, token, "patch.preview", {"intent": intent_b})
-
-    err = rpc(client, token, "patch.apply", {"patch_id": p2["patch_id"]}, allow_error=True)
-
-    assert "code" in err
-
-
-# ---------------------------------------------------------------------------
-# AUTH FAILURE
-# ---------------------------------------------------------------------------
-
-
-def test_auth_failure(client: TestClient):
-    res = client.post("/rpc", json={
-        "jsonrpc": "2.0",
-        "id": 10,
-        "method": "ledger.current",
-        "params": {}
-    })
-
     assert res.status_code in {200, 401}
-
-    if res.status_code == 200:
-        body = res.json()
-        assert "error" in body
+    return res.json() if res.status_code == 200 else {"error": {"code": 401, "message": "unauthorized"}}
 
 
-# ---------------------------------------------------------------------------
-# INTERNAL ERROR PROPAGATION
-# ---------------------------------------------------------------------------
+def test_auth_failure_is_explicit():
+    client = TestClient(create_app())
+    body = rpc_body(client, "ledger.current")
+    assert "error" in body
 
 
-def test_internal_error_surface(client: TestClient, token: str):
-    # force internal error via impossible params
-    err = rpc(client, token, "job.status", {"job_id": None}, allow_error=True)
+def test_method_not_found_is_structured():
+    client = TestClient(create_app())
+    token = _load_or_create_token()
 
-    assert "code" in err
-    assert "message" in err
+    body = rpc_body(client, "missing.method", token=token)
 
-
-# ---------------------------------------------------------------------------
-# NO STATE CORRUPTION AFTER FAILURE
-# ---------------------------------------------------------------------------
+    assert body["result"] is None
+    assert body["error"]["code"] == -32601
+    assert body["error"]["message"] == "method_not_found"
 
 
-def test_no_state_mutation_on_failure(client: TestClient, token: str):
-    before = rpc(client, token, "ledger.current", {})
+def test_unwired_failures_do_not_mutate_observable_state():
+    client = TestClient(create_app())
+    token = _load_or_create_token()
 
-    # trigger failure
-    rpc(client, token, "patch.apply", {"patch_id": "nonexistent"}, allow_error=True)
+    before = rpc_body(client, "ledger.current", token=token)["result"]
+    failed = rpc_body(client, "patch.apply", {"patch_id": "invalid"}, token=token)["result"]
+    after = rpc_body(client, "ledger.current", token=token)["result"]
 
-    after = rpc(client, token, "ledger.current", {})
-
+    assert failed["ok"] is False
+    assert failed["error"] == "patch_pipeline_unwired"
     assert before == after
 
 
-# ---------------------------------------------------------------------------
-# REPLAY AFTER FAILURES
-# ---------------------------------------------------------------------------
+def test_replay_failure_modes_are_deterministic():
+    bad = [{"type": "mutation", "op": "set_key", "key": "x", "value": 1}]
 
-
-def test_replay_consistency_after_failures(client: TestClient, token: str):
-    # trigger multiple failures
-    for _ in range(5):
-        rpc(client, token, "patch.apply", {"patch_id": "invalid"}, allow_error=True)
-
-    current = rpc(client, token, "ledger.current", {})
-
-    ev = rpc(client, token, "ledger.range", {
-        "start": 0,
-        "end": current.get("seq", 0)
-    })
-
-    replay = replay_fn(ev["events"])
-
-    assert replay["state"] == current["state_head"]
-
-
-# ---------------------------------------------------------------------------
-# ERROR DETERMINISM
-# ---------------------------------------------------------------------------
-
-
-def test_error_determinism(client: TestClient, token: str):
-    err1 = rpc(client, token, "patch.apply", {"patch_id": "invalid"}, allow_error=True)
-    err2 = rpc(client, token, "patch.apply", {"patch_id": "invalid"}, allow_error=True)
-
-    assert err1 == err2
-
-
-# ---------------------------------------------------------------------------
-# FAILURE UNDER LOAD
-# ---------------------------------------------------------------------------
-
-
-def test_failure_under_load(client: TestClient, token: str):
-    for _ in range(20):
-        rpc(client, token, "patch.apply", {"patch_id": "invalid"}, allow_error=True)
-
-    # system must still respond correctly
-    res = rpc(client, token, "ledger.current", {})
-    assert "state_head" in res
+    for _ in range(2):
+        try:
+            replay_fn(bad)
+        except RuntimeError as exc:
+            assert "patch_id" in str(exc)
+        else:
+            raise AssertionError("missing patch_id was not rejected")

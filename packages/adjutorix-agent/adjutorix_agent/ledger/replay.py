@@ -298,3 +298,79 @@ def verify_replay_matches_index(store: LedgerStore) -> None:
 
 def replay_ledger(store: LedgerStore) -> ReplayResult:
     return LedgerReplayer(store).replay_all()
+
+
+
+
+
+def replay(events: Iterable[Dict]) -> Dict[str, object]:
+    normalized: List[Dict] = []
+    seqs: List[int] = []
+
+    for index, raw in enumerate(events):
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"unknown_event_record: {raw!r}")
+
+        rec = dict(raw)
+        raw_seq = rec.get("seq") or rec.get("sequence") or rec.get("index")
+        seq = int(raw_seq) if raw_seq is not None else index + 1
+        if raw_seq is not None:
+            seqs.append(seq)
+
+        payload = rec.get("payload", rec.get("data", rec))
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"unknown_event_payload: {payload!r}")
+
+        normalized.append({
+            "seq": seq,
+            "kind": rec.get("kind") or payload.get("kind") or rec.get("type") or payload.get("type"),
+            "payload": payload,
+        })
+
+    if seqs:
+        expected = list(range(seqs[0], seqs[0] + len(seqs)))
+        if seqs != expected:
+            raise RuntimeError(f"non_contiguous_or_out_of_order_sequence: {seqs}")
+
+    all_mutations = all(
+        (entry["payload"].get("type") == "mutation" or "op" in entry["payload"])
+        for entry in normalized
+    )
+
+    if all_mutations:
+        state: Dict[str, object] = {}
+
+        for entry in normalized:
+            payload = entry["payload"]
+            if not payload.get("patch_id"):
+                raise RuntimeError("mutation_missing_patch_id")
+
+            op = payload.get("op")
+            key = payload.get("key") or payload.get("path")
+            if not key:
+                raise RuntimeError("mutation_missing_key")
+
+            if op == "set_key":
+                state[str(key)] = payload.get("value")
+            elif op == "unset_key":
+                state.pop(str(key), None)
+            elif op == "increment":
+                if str(key) not in state:
+                    raise RuntimeError(f"increment_missing_key: {key}")
+                value = state[str(key)]
+                if not isinstance(value, int):
+                    raise RuntimeError(f"increment_non_integer_key: {key}")
+                state[str(key)] = value + 1
+            elif op == "edit_file":
+                state[str(key)] = payload.get("content")
+            else:
+                raise RuntimeError(f"unknown_mutation_op: {op}")
+
+        state_hash = _stable_hash(state)
+        return {"state": state, "hash": state_hash, "applied": len(normalized)}
+
+    opaque = {"events": normalized}
+    opaque_hash = _stable_hash(opaque)
+    return {"state": opaque_hash, "hash": opaque_hash, "applied": len(normalized)}

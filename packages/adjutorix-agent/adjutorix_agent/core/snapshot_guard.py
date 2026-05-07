@@ -145,3 +145,60 @@ def validate_snapshot_guard(
     known_snapshots: Dict[str, str],
 ) -> None:
     get_snapshot_guard().validate_full(patch, workspace, known_snapshots)
+
+
+# ---------------------------------------------------------------------------
+# TEST / DICT-COMPAT SNAPSHOT GUARD SURFACE
+# ---------------------------------------------------------------------------
+
+if not getattr(SnapshotGuard, "_adjutorix_compat_surface_v2", False):
+    import json as _sg_json
+    import math as _sg_math
+    import re as _sg_re
+
+    def _sg_walk_validate_json_safe(value, path="$"):
+        if isinstance(value, float):
+            if not _sg_math.isfinite(value):
+                raise ValueError(f"invalid non-finite float at {path}")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError(f"invalid non-string key at {path}")
+                _sg_walk_validate_json_safe(item, f"{path}.{key}")
+            return
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                _sg_walk_validate_json_safe(item, f"{path}[{index}]")
+            return
+        if value is None or isinstance(value, (str, int, bool, bytes)):
+            return
+        raise ValueError(f"invalid snapshot value at {path}: {type(value).__name__}")
+
+    def _sg_compat_validate_put(self, content):
+        if content is None:
+            raise ValueError("snapshot content is required")
+        _sg_walk_validate_json_safe(content)
+        _sg_json.dumps(content, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str)
+        if isinstance(content, (str, bytes)) and len(content) > 10_000_000:
+            raise ValueError("snapshot content too large")
+        return None
+
+    def _sg_compat_validate_get(self, snapshot_id):
+        sid = str(snapshot_id or "")
+        if not _sg_re.fullmatch(r"[0-9a-f]{32,128}", sid):
+            raise ValueError("snapshot_id must be hash-like")
+        return None
+
+    def _sg_compat_validate_delete(self, snapshot_id):
+        return _sg_compat_validate_get(self, snapshot_id)
+
+    def _sg_compat_validate_list(self):
+        return None
+
+    SnapshotGuard.validate_put = _sg_compat_validate_put
+    SnapshotGuard.validate_get = _sg_compat_validate_get
+    SnapshotGuard.validate_delete = _sg_compat_validate_delete
+    SnapshotGuard.validate_list = _sg_compat_validate_list
+    SnapshotGuard._adjutorix_compat_surface_v1 = True
+    SnapshotGuard._adjutorix_compat_surface_v2 = True

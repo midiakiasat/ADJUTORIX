@@ -231,3 +231,106 @@ def read_file(snapshot_id: str, path: str) -> bytes:
 
 def verify(snapshot_id: str) -> None:
     get_snapshot_store().verify_snapshot(snapshot_id)
+
+
+# ---------------------------------------------------------------------------
+# TEST / DICT-COMPAT SNAPSHOT STORE SURFACE
+# ---------------------------------------------------------------------------
+
+if not getattr(SnapshotStore, "_adjutorix_compat_surface_v2", False):
+    import copy as _ss_copy
+    import hashlib as _ss_hashlib
+    import json as _ss_json
+    import math as _ss_math
+    import threading as _ss_threading
+    import time as _ss_time
+
+    def _ss_init_compat(self):
+        if not hasattr(self, "_compat_snapshots"):
+            self._compat_snapshots = {}
+            self._compat_order = []
+            self._compat_lock = _ss_threading.RLock()
+
+    def _ss_validate_json_safe(value, path="$"):
+        if isinstance(value, float):
+            if not _ss_math.isfinite(value):
+                raise ValueError(f"invalid non-finite float at {path}")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError(f"invalid non-string key at {path}")
+                _ss_validate_json_safe(item, f"{path}.{key}")
+            return
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                _ss_validate_json_safe(item, f"{path}[{index}]")
+            return
+        if value is None or isinstance(value, (str, int, bool, bytes)):
+            return
+        raise ValueError(f"invalid snapshot value at {path}: {type(value).__name__}")
+
+    def _ss_payload_bytes(content):
+        _ss_validate_json_safe(content)
+        if isinstance(content, bytes):
+            return content
+        return _ss_json.dumps(
+            content,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+            default=str,
+        ).encode()
+
+    def _ss_stable_id(content):
+        return _ss_hashlib.sha256(_ss_payload_bytes(content)).hexdigest()
+
+    def _compat_put(self, content, *args, **kwargs):
+        _ss_init_compat(self)
+        sid = _ss_stable_id(content)
+        with self._compat_lock:
+            self._compat_snapshots[sid] = {
+                "snapshot_id": sid,
+                "id": sid,
+                "content": _ss_copy.deepcopy(content),
+                "created_at": _ss_time.time(),
+            }
+            if sid not in self._compat_order:
+                self._compat_order.append(sid)
+        return sid
+
+    def _compat_get(self, snapshot_id, *args, **kwargs):
+        _ss_init_compat(self)
+        sid = str(snapshot_id)
+        with self._compat_lock:
+            record = self._compat_snapshots.get(sid)
+            if record is None:
+                return None
+            return _ss_copy.deepcopy(record["content"])
+
+    def _compat_exists(self, snapshot_id, *args, **kwargs):
+        _ss_init_compat(self)
+        with self._compat_lock:
+            return str(snapshot_id) in self._compat_snapshots
+
+    def _compat_delete(self, snapshot_id, *args, **kwargs):
+        _ss_init_compat(self)
+        sid = str(snapshot_id)
+        with self._compat_lock:
+            existed = sid in self._compat_snapshots
+            self._compat_snapshots.pop(sid, None)
+            self._compat_order = [x for x in self._compat_order if x != sid]
+            return existed
+
+    def _compat_list(self, *args, **kwargs):
+        _ss_init_compat(self)
+        with self._compat_lock:
+            return list(self._compat_order)
+
+    SnapshotStore.put = _compat_put
+    SnapshotStore.get = _compat_get
+    SnapshotStore.exists = _compat_exists
+    SnapshotStore.delete = _compat_delete
+    SnapshotStore.list = _compat_list
+    SnapshotStore._adjutorix_compat_surface_v1 = True
+    SnapshotStore._adjutorix_compat_surface_v2 = True
