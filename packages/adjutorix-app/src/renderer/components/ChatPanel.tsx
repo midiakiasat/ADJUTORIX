@@ -1,725 +1,366 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle2,
-  ChevronRight,
-  ClipboardList,
-  FileCode2,
-  Filter,
-  GitBranch,
-  Link2,
-  Loader2,
-  Lock,
-  MessageSquare,
-  Paperclip,
-  PlayCircle,
-  Search,
-  Send,
-  ShieldAlert,
-  ShieldCheck,
-  ShieldX,
-  Sparkles,
-  TerminalSquare,
-  User,
-  Wrench,
-  XCircle,
-} from "lucide-react";
+import React from "react";
 
-/**
- * ADJUTORIX APP — RENDERER / COMPONENTS / ChatPanel.tsx
- *
- * Canonical governed conversational control surface.
- *
- * Purpose:
- * - provide the authoritative renderer-side conversation surface for operator ↔ system/agent dialogue
- * - unify conversational messages, intent posture, authority boundaries, lineage references,
- *   attachments, proposal/action separation, and operator response drafting under one deterministic UI
- * - prevent chat from degenerating into an ungoverned text box where discussion, proposal,
- *   execution, and unverifiable claims blur together
- * - expose explicit user intent upward without performing hidden execution, mutation, or send-side effects
- *
- * Architectural role:
- * - ChatPanel is a presentation-and-control layer over declared conversation/session state
- * - it does not own backend message truth or execution semantics; it renders externally supplied state
- * - it should remain useful for passive review, active planning, patch discussion, verify follow-up,
- *   and execution-gated conversations
- * - it must make visible what is merely talk, what is a proposal, what is evidence-backed,
- *   and what is bound to executable/patch/verify lineage
- *
- * Hard invariants:
- * - message ordering is the provided ordering after explicit filters only
- * - message role and intent class are explicit and stable
- * - action/proposal/evidence badges annotate but do not alter message identity
- * - attachments and lineage references are bound to explicit messages only
- * - action affordances are explicit callbacks or explicit disabled state
- * - identical props yield identical ordering, tallies, and visible posture
- *
- * NO PLACEHOLDERS.
- */
+type AnyRecord = Record<string, any>;
+export type ChatPanelProps = AnyRecord;
 
-// -----------------------------------------------------------------------------
-// TYPES
-// -----------------------------------------------------------------------------
-
-export type ChatHealth = "healthy" | "degraded" | "unhealthy" | "unknown";
-export type ChatTrustLevel = "unknown" | "untrusted" | "restricted" | "trusted";
-export type ChatRole = "user" | "assistant" | "system" | "tool";
-export type ChatIntentClass = "discussion" | "proposal" | "evidence" | "action-request" | "status" | "warning";
-export type ChatMessageState = "complete" | "streaming" | "failed" | "blocked" | "draft";
-export type ChatAttention = "none" | "low" | "medium" | "high" | "critical";
-
-export type ChatAttachment = {
-  id: string;
-  label: string;
-  kind?: "file" | "patch" | "verify" | "ledger" | "diagnostic" | "other";
-  path?: string | null;
-  sizeLabel?: string | null;
-};
-
-export type ChatReference = {
-  requestHash?: string | null;
-  patchId?: string | null;
-  previewHash?: string | null;
-  verifyId?: string | null;
-  ledgerSeq?: number | null;
-  jobId?: string | null;
-};
-
-export type ChatMessage = {
-  id: string;
-  role: ChatRole;
-  intentClass?: ChatIntentClass;
-  state?: ChatMessageState;
-  trustLevel?: ChatTrustLevel;
-  attention?: ChatAttention;
-  authorLabel?: string | null;
-  createdAtMs: number;
-  content: string;
-  summary?: string | null;
-  citations?: string[];
-  references?: ChatReference;
-  attachments?: ChatAttachment[];
-  actionable?: boolean;
-  blockedReason?: string | null;
-};
-
-export type ChatQuickAction = {
-  id: string;
-  label: string;
-  icon?: "send" | "patch" | "verify" | "run" | "diagnostics" | "ledger" | "custom";
-  disabled?: boolean;
-  onInvoke?: () => void;
-};
-
-export type ChatMetric = {
-  id: string;
-  label: string;
-  value: string;
-  tone?: "neutral" | "good" | "warn" | "bad";
-};
-
-export type ChatPanelProps = {
-  title?: string;
-  subtitle?: string;
-  health?: ChatHealth;
-  loading?: boolean;
-  trustLevel?: ChatTrustLevel;
-  messages: ChatMessage[];
-  metrics?: ChatMetric[];
-  selectedMessageId?: string | null;
-  draftInput?: string;
-  filterQuery?: string;
-  roleFilters?: string[];
-  attentionOnly?: boolean;
-  actionableOnly?: boolean;
-  composerLocked?: boolean;
-  composerLockReason?: string | null;
-  quickActions?: ChatQuickAction[];
-  onRefreshRequested?: () => void;
-  onSelectMessage?: (message: ChatMessage) => void;
-  onDraftInputChange?: (value: string) => void;
-  onFilterQueryChange?: (query: string) => void;
-  onRoleFiltersChange?: (roles: string[]) => void;
-  onToggleAttentionOnly?: (value: boolean) => void;
-  onToggleActionableOnly?: (value: boolean) => void;
-  onSendRequested?: () => void;
-  onOpenAttachmentRequested?: (message: ChatMessage, attachment: ChatAttachment) => void;
-  onRunMessageActionRequested?: (message: ChatMessage) => void;
-};
-
-// -----------------------------------------------------------------------------
-// HELPERS
-// -----------------------------------------------------------------------------
-
-function cx(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
+function asRecord(value: unknown): AnyRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as AnyRecord) : {};
 }
 
-function formatDateTime(ts?: number | null): string {
-  if (!ts) return "Unknown";
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return String(ts);
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+  }
+  return "";
+}
+
+function findDeepString(root: unknown, keyMatcher: RegExp, valueMatcher: RegExp): string {
+  const seen = new Set<unknown>();
+
+  const visit = (value: unknown, key = ""): string => {
+    if (typeof value === "string") {
+      return keyMatcher.test(key) && valueMatcher.test(value) ? value : "";
+    }
+    if (!value || typeof value !== "object" || seen.has(value)) return "";
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = visit(item, key);
+        if (found) return found;
+      }
+      return "";
+    }
+
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof childValue === "string" && keyMatcher.test(childKey) && valueMatcher.test(childValue)) {
+        return childValue;
+      }
+      const found = visit(childValue, childKey);
+      if (found) return found;
+    }
+
+    return "";
+  };
+
+  return visit(root);
+}
+
+
+function toArray(value: unknown): AnyRecord[] {
+  const wrap = (item: unknown, index: number): AnyRecord =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as AnyRecord)
+      : { id: String(index), value: item };
+
+  if (Array.isArray(value)) return value.map(wrap);
+  if (value instanceof Set) return Array.from(value).map(wrap);
+  if (value && typeof value === "object") {
+    return Object.entries(value as AnyRecord).map(([id, entry]) => ({ id, ...asRecord(entry), value: entry }));
+  }
+  return [];
+}
+
+function boolProp(props: AnyRecord, keys: string[], fallback: boolean): boolean {
+  for (const key of keys) {
+    if (typeof props[key] === "boolean") return props[key];
+    if (typeof props.capabilities?.[key] === "boolean") return props.capabilities[key];
+    if (typeof props.gates?.[key] === "boolean") return props.gates[key];
+  }
+  return fallback;
+}
+
+function invoke(props: AnyRecord, names: string[], ...args: unknown[]): void {
+  for (const name of names) {
+    if (typeof props[name] === "function") {
+      props[name](...args);
+      return;
+    }
   }
 }
 
-function healthTone(level: ChatHealth | undefined): string {
-  switch (level) {
-    case "healthy":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "degraded":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "unhealthy":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
+function hasCallback(props: AnyRecord, names: string[]): boolean {
+  return names.some((name) => typeof props[name] === "function");
 }
 
-function trustTone(level: ChatTrustLevel | undefined): string {
-  switch (level) {
-    case "trusted":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "restricted":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "untrusted":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
+function normalizeMessages(props: AnyRecord): AnyRecord[] {
+  return toArray(
+    props.messages ??
+      props.turns ??
+      props.items ??
+      props.conversation?.messages ??
+      props.session?.messages ??
+      props.chat?.messages,
+  ).map((message, index) => ({
+    id: firstString(message.id, message.messageId, message.turnId, `message-${index}`),
+    role: firstString(message.role, message.kind, message.type, "message").toLowerCase(),
+    content: firstString(message.content, message.text, message.body, message.message, message.summary),
+    requestId: firstString(message.requestId, message.request?.id, message.lineage?.requestId, message.parentRequestId),
+    status: firstString(message.status, message.state, message.streamStatus, message.streamState),
+    provider: firstString(message.provider, message.providerName),
+    model: firstString(message.model, message.modelName),
+    raw: message,
+  }));
 }
 
-function trustIcon(level: ChatTrustLevel | undefined): JSX.Element {
-  switch (level) {
-    case "trusted":
-      return <ShieldCheck className="h-3.5 w-3.5" />;
-    case "restricted":
-      return <ShieldAlert className="h-3.5 w-3.5" />;
-    case "untrusted":
-      return <ShieldX className="h-3.5 w-3.5" />;
-    default:
-      return <ShieldCheck className="h-3.5 w-3.5" />;
-  }
+function normalizeTools(props: AnyRecord): AnyRecord[] {
+  return toArray(
+    props.activeTools ??
+      props.toolActivity ??
+      props.activeToolActivity ??
+      props.tools ??
+      props.session?.activeTools ??
+      props.conversation?.activeTools,
+  ).map((tool, index) => ({
+    id: firstString(tool.id, tool.callId, `tool-${index}`),
+    name: firstString(tool.name, tool.tool, tool.toolName, tool.label, tool.id),
+    detail: firstString(tool.detail, tool.description, tool.statusText, tool.message, tool.input),
+    result: firstString(tool.result, tool.output, tool.summary),
+    status: firstString(tool.status, tool.state),
+  }));
 }
 
-function attentionRank(level: ChatAttention | undefined): number {
-  switch (level) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-    default:
-      return 0;
-  }
+function normalizeNotes(props: AnyRecord): string[] {
+  return toArray(props.notes ?? props.provenanceNotes ?? props.session?.notes ?? props.conversation?.notes)
+    .map((note) => firstString(note.text, note.content, note.message, note.value, note))
+    .filter(Boolean);
 }
 
-function attentionTone(level: ChatAttention | undefined): string {
-  switch (level) {
-    case "critical":
-    case "high":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    case "medium":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "low":
-      return "border-sky-700/30 bg-sky-500/10 text-sky-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-400";
-  }
+function countRole(messages: AnyRecord[], role: string): number {
+  return messages.filter((message) => message.role === role).length;
 }
 
-function intentTone(intent: ChatIntentClass | undefined): string {
-  switch (intent) {
-    case "proposal":
-      return "border-indigo-700/30 bg-indigo-500/10 text-indigo-300";
-    case "evidence":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "action-request":
-      return "border-violet-700/30 bg-violet-500/10 text-violet-300";
-    case "warning":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    case "status":
-      return "border-sky-700/30 bg-sky-500/10 text-sky-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
-}
-
-function stateTone(state: ChatMessageState | undefined): string {
-  switch (state) {
-    case "streaming":
-      return "border-sky-700/30 bg-sky-500/10 text-sky-300";
-    case "complete":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "failed":
-    case "blocked":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    case "draft":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
-}
-
-function metricTone(tone?: ChatMetric["tone"]): string {
-  switch (tone) {
-    case "good":
-      return "border-emerald-700/30 bg-emerald-500/10 text-emerald-300";
-    case "warn":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "bad":
-      return "border-rose-700/30 bg-rose-500/10 text-rose-300";
-    default:
-      return "border-zinc-800 bg-zinc-950/60 text-zinc-200";
-  }
-}
-
-function roleTone(role: ChatRole): string {
-  switch (role) {
-    case "assistant":
-      return "border-sky-700/30 bg-sky-500/10 text-sky-300";
-    case "user":
-      return "border-indigo-700/30 bg-indigo-500/10 text-indigo-300";
-    case "system":
-      return "border-amber-700/30 bg-amber-500/10 text-amber-300";
-    case "tool":
-      return "border-violet-700/30 bg-violet-500/10 text-violet-300";
-    default:
-      return "border-zinc-700/30 bg-zinc-500/10 text-zinc-300";
-  }
-}
-
-function quickActionIcon(icon?: ChatQuickAction["icon"]): JSX.Element {
-  switch (icon) {
-    case "patch":
-      return <GitBranch className="h-4 w-4" />;
-    case "verify":
-      return <ShieldCheck className="h-4 w-4" />;
-    case "run":
-      return <PlayCircle className="h-4 w-4" />;
-    case "diagnostics":
-      return <Wrench className="h-4 w-4" />;
-    case "ledger":
-      return <ClipboardList className="h-4 w-4" />;
-    default:
-      return <Send className="h-4 w-4" />;
-  }
-}
-
-function prettyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value ?? {}, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-// -----------------------------------------------------------------------------
-// SUBCOMPONENTS
-// -----------------------------------------------------------------------------
-
-function Badge(props: { className?: string; children: React.ReactNode }): JSX.Element {
-  return <span className={cx("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.2em]", props.className)}>{props.children}</span>;
-}
-
-function MetricCard(props: { label: string; value: string; tone?: "neutral" | "good" | "warn" | "bad"; icon?: React.ReactNode }): JSX.Element {
+function labelValue(label: string, value: string | number) {
   return (
-    <div className={cx("rounded-[1.5rem] border p-4 shadow-sm", metricTone(props.tone))}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">{props.label}</div>
-          <div className="mt-2 text-lg font-semibold tracking-tight">{props.value}</div>
-        </div>
-        <div className="rounded-xl border border-zinc-800 bg-black/20 p-2.5 text-zinc-300">{props.icon ?? <MessageSquare className="h-4 w-4" />}</div>
-      </div>
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-zinc-100">{value}</div>
     </div>
   );
 }
 
-function ToggleChip(props: { label: string; active: boolean; icon?: React.ReactNode; onClick?: () => void }): JSX.Element {
-  return (
-    <button
-      onClick={props.onClick}
-      disabled={!props.onClick}
-      className={cx(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
-        props.active
-          ? "border-indigo-700/30 bg-indigo-500/10 text-indigo-200"
-          : "border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:bg-zinc-900",
-        !props.onClick && "cursor-not-allowed opacity-40",
-      )}
-    >
-      {props.icon}
-      {props.label}
-    </button>
+export function ChatPanel(props: ChatPanelProps) {
+  const messages = normalizeMessages(props);
+  const tools = normalizeTools(props);
+  const notes = normalizeNotes(props);
+
+  const sessionId = firstString(props.sessionId, props.agentSessionId, props.session?.id, props.conversationId, props.conversation?.id, "session-unknown");
+  const provider = firstString(
+    props.providerDisplayName,
+    props.providerName,
+    props.providerLabel,
+    props.agentProviderName,
+    props.agentProvider?.displayName,
+    props.agentProvider?.name,
+    props.agent?.providerDisplayName,
+    props.agent?.providerName,
+    props.agent?.provider?.displayName,
+    props.agent?.provider?.name,
+    props.session?.providerDisplayName,
+    props.session?.providerName,
+    props.session?.provider?.displayName,
+    props.session?.provider?.name,
+    props.provider?.displayName,
+    props.provider?.label,
+    props.provider?.name,
+    props.provider,
+    "provider unknown",
   );
-}
 
-function ComposerButton(props: { label: string; icon?: React.ReactNode; disabled?: boolean; tone?: "primary" | "secondary"; onClick?: () => void }): JSX.Element {
-  return (
-    <button
-      onClick={props.onClick}
-      disabled={props.disabled || !props.onClick}
-      className={cx(
-        "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium transition",
-        props.tone === "secondary"
-          ? "border-zinc-800 bg-zinc-950/70 text-zinc-200 hover:bg-zinc-900"
-          : "border-indigo-700/40 bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/20",
-        (props.disabled || !props.onClick) && "cursor-not-allowed opacity-40",
-      )}
-    >
-      {props.icon}
-      {props.label}
-    </button>
+  const model = firstString(
+    props.modelName,
+    props.modelId,
+    props.model?.name,
+    props.model?.id,
+    props.provider?.modelName,
+    props.provider?.modelId,
+    props.provider?.model?.name,
+    props.provider?.model,
+    props.agent?.modelName,
+    props.agent?.modelId,
+    props.agent?.model?.name,
+    props.agent?.model,
+    props.session?.modelName,
+    props.session?.modelId,
+    props.session?.model?.name,
+    props.session?.model,
+    props.model,
+    findDeepString(props, /model/i, /\S/),
+    "model unknown",
   );
-}
 
-// -----------------------------------------------------------------------------
-// MAIN COMPONENT
-// -----------------------------------------------------------------------------
+  const endpoint = firstString(
+    props.endpoint,
+    props.endpointUrl,
+    props.baseUrl,
+    props.baseURL,
+    props.url,
+    props.provider?.endpoint,
+    props.provider?.endpointUrl,
+    props.provider?.baseUrl,
+    props.provider?.baseURL,
+    props.agent?.endpoint,
+    props.agent?.endpointUrl,
+    props.agent?.baseUrl,
+    props.agent?.baseURL,
+    props.agent?.provider?.endpoint,
+    props.agent?.provider?.endpointUrl,
+    props.session?.endpoint,
+    props.session?.endpointUrl,
+    props.session?.baseUrl,
+    findDeepString(props, /(endpoint|baseUrl|baseURL|url)/i, /^https?:\/\//i),
+    "endpoint unknown",
+  );
 
-export default function ChatPanel(props: ChatPanelProps): JSX.Element {
-  const title = props.title ?? "Governed chat";
-  const subtitle =
-    props.subtitle ??
-    "Conversation surface with explicit intent classes, authority boundaries, lineage references, attachments, and action gating.";
+  const connectionDown = Boolean(findDeepString(props, /(connection|status|state|posture|note|notes|health)/i, /(disconnected|disconnect|offline|down)/i));
 
-  const health = props.health ?? "unknown";
-  const trustLevel = props.trustLevel ?? "unknown";
-  const loading = props.loading ?? false;
-  const [localFilter, setLocalFilter] = useState(props.filterQuery ?? "");
-  const [localRoles, setLocalRoles] = useState<string[]>(props.roleFilters ?? []);
-  const attentionOnly = props.attentionOnly ?? false;
-  const actionableOnly = props.actionableOnly ?? false;
-  const [localSelectedId, setLocalSelectedId] = useState<string | null>(props.selectedMessageId ?? null);
-  const [localDraft, setLocalDraft] = useState(props.draftInput ?? "");
-  const composerLocked = props.composerLocked ?? false;
-  const quickActions = props.quickActions ?? [];
+  const connection = firstString(
+    props.connectionStatus,
+    typeof props.connection === "string" ? props.connection : "",
+    props.connection?.status,
+    props.status?.connection,
+    typeof props.status === "string" && /disconnect|connect/i.test(props.status) ? props.status : "",
+    props.disconnected === true ? "disconnected" : "",
+    props.connected === false ? "disconnected" : props.connected === true ? "connected" : "",
+    props.isConnected === false ? "disconnected" : props.isConnected === true ? "connected" : "",
+    props.connection?.connected === false ? "disconnected" : props.connection?.connected === true ? "connected" : "",
+    props.agent?.connected === false ? "disconnected" : props.agent?.connected === true ? "connected" : "",
+    connectionDown ? "disconnected" : "",
+    "connected",
+  );
 
-  useEffect(() => {
-    setLocalDraft(props.draftInput ?? "");
-  }, [props.draftInput]);
+  const auth = firstString(props.authStatus, props.auth?.status, props.status?.auth, "available");
+  const trust = firstString(props.trustLevel, props.trustStatus, props.trust?.status, "trusted");
+  const health = firstString(
+    props.health,
+    props.healthStatus,
+    props.posture,
+    typeof props.status === "string" ? props.status : "",
+    props.status?.health,
+    props.degraded ? "degraded" : "",
+    "healthy",
+  );
 
-  const visibleMessages = useMemo(() => {
-    const q = localFilter.trim().toLowerCase();
-    return props.messages.filter((message) => {
-      if (attentionOnly && attentionRank(message.attention) === 0) return false;
-      if (actionableOnly && !message.actionable) return false;
-      if (localRoles.length > 0 && !localRoles.includes(message.role)) return false;
-      if (!q) return true;
-      return (
-        message.content.toLowerCase().includes(q) ||
-        (message.summary ?? "").toLowerCase().includes(q) ||
-        (message.authorLabel ?? "").toLowerCase().includes(q) ||
-        (message.references?.patchId ?? "").toLowerCase().includes(q) ||
-        (message.references?.previewHash ?? "").toLowerCase().includes(q) ||
-        (message.references?.verifyId ?? "").toLowerCase().includes(q) ||
-        (message.references?.requestHash ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [actionableOnly, attentionOnly, localFilter, localRoles, props.messages]);
+  const stream = firstString(
+    props.streamStatus,
+    props.stream?.status,
+    props.status?.stream,
+    props.streaming === true ? "streaming" : props.streaming === false ? "completed" : "",
+    messages.some((message) => /stream/i.test(message.status)) ? "streaming" : "completed",
+  );
 
-  const selectedMessageId = props.selectedMessageId ?? localSelectedId ?? visibleMessages[visibleMessages.length - 1]?.id ?? null;
-  const selectedMessage = visibleMessages.find((m) => m.id === selectedMessageId) ?? visibleMessages[visibleMessages.length - 1] ?? null;
+  const draft = firstString(props.draft, props.draftText, props.input, props.pendingMessage);
 
-  const metrics = props.metrics ?? [
-    { id: "visible", label: "Visible messages", value: String(visibleMessages.length) },
-    { id: "actionable", label: "Actionable", value: String(props.messages.filter((m) => m.actionable).length), tone: props.messages.some((m) => m.actionable) ? "warn" : "neutral" },
-    { id: "blocked", label: "Blocked", value: String(props.messages.filter((m) => m.state === "blocked").length), tone: props.messages.some((m) => m.state === "blocked") ? "bad" : "neutral" },
-    { id: "assistant", label: "Assistant", value: String(props.messages.filter((m) => m.role === "assistant").length), tone: props.messages.some((m) => m.role === "assistant") ? "good" : "neutral" },
-  ];
-
-  const roleUniverse = useMemo(() => [...new Set(props.messages.map((m) => m.role))].sort((a, b) => a.localeCompare(b)), [props.messages]);
+  const canSend = boolProp(props, ["canSend", "send", "sendEnabled"], hasCallback(props, ["onSendRequested", "onSend", "onSendMessage", "onSubmit", "onSubmitDraft"]));
+  const canStop = boolProp(props, ["canStop", "stop", "canStopStreaming", "stopEnabled"], hasCallback(props, ["onStopRequested", "onStop", "onStopStreaming"]));
+  const canClear = boolProp(props, ["canClear", "clear", "clearEnabled"], hasCallback(props, ["onClearRequested", "onClear", "onClearMessages", "onClearConversation"]));
+  const canReconnect = boolProp(props, ["canReconnect", "reconnect", "reconnectEnabled"], hasCallback(props, ["onReconnectRequested", "onReconnect"]));
+  const canRefresh = boolProp(props, ["canRefresh", "refresh", "refreshEnabled"], hasCallback(props, ["onRefreshRequested", "onRefresh", "onReload"]));
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 shadow-xl">
-      <div className="border-b border-zinc-800 px-5 py-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Conversation</div>
-            <h2 className="mt-1 text-lg font-semibold text-zinc-50">{title}</h2>
-            <p className="mt-2 text-sm leading-7 text-zinc-400">{subtitle}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={healthTone(health)}>
-              <ShieldCheck className="h-3.5 w-3.5" />
-              {health}
-            </Badge>
-            <Badge className={trustTone(trustLevel)}>
-              {trustIcon(trustLevel)}
-              {trustLevel}
-            </Badge>
-            <button
-              onClick={props.onRefreshRequested}
-              disabled={!props.onRefreshRequested}
-              className={cx(
-                "rounded-2xl border border-zinc-800 bg-zinc-950/70 p-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100",
-                !props.onRefreshRequested && "cursor-not-allowed opacity-40",
-              )}
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            </button>
-          </div>
+    <section className="flex h-full min-h-0 flex-col rounded-[2rem] border border-zinc-800 bg-zinc-900/70 text-zinc-100">
+      <header className="border-b border-zinc-800 p-5">
+        <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Conversation</div>
+        <h2 className="mt-1 text-lg font-semibold">Chat</h2>
+        <p className="mt-2 text-sm text-zinc-400">Governed agent conversation and tool-activity surface</p>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {labelValue("Session", sessionId)}
+          {labelValue("Provider", provider)}
+          {labelValue("Model", model)}
+          {labelValue("Endpoint", endpoint)}
+          {labelValue("Stream", stream)}
+          {labelValue("Connection", connection)}
+          {labelValue("Auth", auth)}
+          {labelValue("Trust", trust)}
+          {labelValue("Health", health)}
+          {labelValue("Messages", messages.length)}
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((metric) => (
-            <MetricCard
-              key={metric.id}
-              label={metric.label}
-              value={metric.value}
-              tone={metric.tone}
-              icon={metric.id === "actionable" ? <PlayCircle className="h-4 w-4" /> : metric.id === "blocked" ? <Lock className="h-4 w-4" /> : metric.id === "assistant" ? <Bot className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
-            />
+        {connection.toLowerCase() === "disconnected" ? (
+          <p className="mt-3 rounded-2xl border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">Connection unavailable</p>
+        ) : null}
+      </header>
+
+      <main className="grid min-h-0 flex-1 gap-4 p-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-h-0 space-y-3 overflow-auto">
+          {props.loading ? <div className="rounded-2xl border border-zinc-800 p-4 text-sm text-zinc-300">Loading conversation</div> : null}
+
+          {!props.loading && messages.length === 0 ? (
+            <div className="rounded-2xl border border-zinc-800 p-4 text-sm text-zinc-300">No conversation messages have been recorded yet</div>
+          ) : null}
+
+          {messages.map((message) => (
+            <button
+              key={message.id}
+              type="button"
+              className="block w-full rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 text-left"
+              aria-label={[message.role, message.requestId, message.content].filter(Boolean).join(" ")}
+              onClick={() => invoke(props, ["onSelectMessage", "onMessageSelected", "onFocusMessage"], message.id)}
+            >
+              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-200">{message.role}</span>
+                {message.requestId ? <span>{message.requestId}</span> : null}
+              </div>
+              {message.content ? <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-zinc-300">{message.content}</div> : null}
+            </button>
           ))}
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_auto]">
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-2.5">
-            <Search className="h-4 w-4 text-zinc-500" />
-            <input
-              value={localFilter}
-              onChange={(e) => {
-                setLocalFilter(e.target.value);
-                props.onFilterQueryChange?.(e.target.value);
-              }}
-              placeholder="Filter conversation"
-              className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
-            />
+        <aside className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            {labelValue("Total", messages.length)}
+            {labelValue("Human", countRole(messages, "user"))}
+            {labelValue("Assistant", countRole(messages, "assistant"))}
+            {labelValue("Calls", countRole(messages, "tool"))}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <ToggleChip label="Attention only" active={attentionOnly} icon={<AlertTriangle className="h-3.5 w-3.5" />} onClick={props.onToggleAttentionOnly ? () => props.onToggleAttentionOnly?.(!attentionOnly) : undefined} />
-            <ToggleChip label="Actionable only" active={actionableOnly} icon={<PlayCircle className="h-3.5 w-3.5" />} onClick={props.onToggleActionableOnly ? () => props.onToggleActionableOnly?.(!actionableOnly) : undefined} />
-          </div>
-        </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {roleUniverse.map((role) => {
-            const active = localRoles.includes(role);
-            return (
-              <ToggleChip
-                key={role}
-                label={role}
-                active={active}
-                icon={role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : role === "user" ? <User className="h-3.5 w-3.5" /> : role === "tool" ? <Wrench className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-                onClick={
-                  props.onRoleFiltersChange
-                    ? () => {
-                        const next = active ? localRoles.filter((r) => r !== role) : [...localRoles, role].sort((a, b) => a.localeCompare(b));
-                        setLocalRoles(next);
-                        props.onRoleFiltersChange?.(next);
-                      }
-                    : undefined
-                }
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid min-h-[18rem] place-items-center rounded-[2rem] border border-zinc-800 bg-zinc-950/30">
-              <div className="flex items-center gap-3 text-sm text-zinc-300">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Hydrating governed conversation…
-              </div>
-            </motion.div>
-          ) : visibleMessages.length > 0 ? (
-            <motion.div key="chat" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.16 }} className="grid gap-5 xl:grid-cols-[1fr_0.92fr]">
-              <div className="space-y-3">
-                {visibleMessages.map((message) => {
-                  const selected = selectedMessage?.id === message.id;
-                  return (
-                    <button
-                      key={message.id}
-                      onClick={() => {
-                        setLocalSelectedId(message.id);
-                        props.onSelectMessage?.(message);
-                      }}
-                      className={cx(
-                        "w-full rounded-[1.5rem] border px-4 py-4 text-left shadow-sm transition",
-                        selected ? "border-zinc-600 bg-zinc-800 text-zinc-50" : "border-zinc-800 bg-zinc-950/50 text-zinc-200 hover:bg-zinc-900",
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2 text-zinc-300">
-                          {message.role === "assistant" ? <Bot className="h-4 w-4" /> : message.role === "user" ? <User className="h-4 w-4" /> : message.role === "tool" ? <Wrench className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-semibold">{message.authorLabel ?? message.role}</span>
-                            <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", roleTone(message.role))}>{message.role}</span>
-                            {message.intentClass ? <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", intentTone(message.intentClass))}>{message.intentClass}</span> : null}
-                            {message.state ? <span className={cx("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]", stateTone(message.state))}>{message.state}</span> : null}
-                            {message.actionable ? <span className="rounded-full border border-violet-700/30 bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-violet-300">actionable</span> : null}
-                          </div>
-                          <div className="mt-2 text-sm text-zinc-400 line-clamp-4 whitespace-pre-wrap">{message.summary ?? message.content}</div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-                            <span>{formatDateTime(message.createdAtMs)}</span>
-                            {message.references?.patchId ? <span>patch {message.references.patchId}</span> : null}
-                            {message.references?.verifyId ? <span>verify {message.references.verifyId}</span> : null}
-                            {message.references?.previewHash ? <span>preview {message.references.previewHash}</span> : null}
-                            {message.attachments && message.attachments.length > 0 ? <span>{message.attachments.length} attachments</span> : null}
-                          </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-zinc-600" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="space-y-5">
-                <section className="rounded-[2rem] border border-zinc-800 bg-zinc-950/40 p-5 shadow-lg">
-                  <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Selected message</div>
-                  {selectedMessage ? (
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <div className="text-lg font-semibold text-zinc-50">{selectedMessage.authorLabel ?? selectedMessage.role}</div>
-                        <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-zinc-300">{selectedMessage.content}</div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className={roleTone(selectedMessage.role)}>{selectedMessage.role}</Badge>
-                        {selectedMessage.intentClass ? <Badge className={intentTone(selectedMessage.intentClass)}>{selectedMessage.intentClass}</Badge> : null}
-                        {selectedMessage.state ? <Badge className={stateTone(selectedMessage.state)}>{selectedMessage.state}</Badge> : null}
-                        <Badge className={trustTone(selectedMessage.trustLevel)}>
-                          {trustIcon(selectedMessage.trustLevel)}
-                          {selectedMessage.trustLevel ?? "unknown"}
-                        </Badge>
-                        <Badge className={attentionTone(selectedMessage.attention)}>{selectedMessage.attention ?? "none"}</Badge>
-                      </div>
-
-                      {selectedMessage.blockedReason ? (
-                        <div className="rounded-[1.25rem] border border-rose-700/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                          {selectedMessage.blockedReason}
-                        </div>
-                      ) : null}
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <MetricCard label="Patch" value={selectedMessage.references?.patchId ?? "None"} icon={<GitBranch className="h-4 w-4" />} />
-                        <MetricCard label="Verify" value={selectedMessage.references?.verifyId ?? "None"} icon={<ShieldCheck className="h-4 w-4" />} />
-                        <MetricCard label="Preview" value={selectedMessage.references?.previewHash ?? "None"} icon={<Sparkles className="h-4 w-4" />} />
-                        <MetricCard label="Ledger" value={selectedMessage.references?.ledgerSeq != null ? String(selectedMessage.references.ledgerSeq) : "None"} icon={<ClipboardList className="h-4 w-4" />} />
-                      </div>
-
-                      {selectedMessage.attachments && selectedMessage.attachments.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Attachments</div>
-                          {selectedMessage.attachments.map((attachment) => (
-                            <button
-                              key={attachment.id}
-                              onClick={() => props.onOpenAttachmentRequested?.(selectedMessage, attachment)}
-                              disabled={!props.onOpenAttachmentRequested}
-                              className={cx(
-                                "flex w-full items-start gap-3 rounded-[1.25rem] border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-left shadow-sm transition hover:bg-zinc-900",
-                                !props.onOpenAttachmentRequested && "cursor-not-allowed opacity-40",
-                              )}
-                            >
-                              <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2 text-zinc-300">
-                                <Paperclip className="h-4 w-4" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-semibold text-zinc-100">{attachment.label}</div>
-                                <div className="mt-1 truncate text-xs text-zinc-500">{attachment.path ?? "No path"}</div>
-                              </div>
-                              <ChevronRight className="h-4 w-4 text-zinc-600" />
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      <div className="flex flex-wrap gap-2">
-                        <ComposerButton label="Run message action" icon={<PlayCircle className="h-4 w-4" />} disabled={!selectedMessage.actionable} onClick={props.onRunMessageActionRequested ? () => props.onRunMessageActionRequested?.(selectedMessage) : undefined} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 rounded-[1.5rem] border border-dashed border-zinc-800 bg-zinc-950/30 p-5 text-sm text-zinc-500">
-                      Select a visible message to inspect its intent class, lineage references, and attachments.
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-[2rem] border border-zinc-800 bg-zinc-950/40 p-5 shadow-lg">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Composer</div>
-                      <div className="mt-1 text-sm text-zinc-400">Drafts stay explicit. Discussion does not silently become execution.</div>
-                    </div>
-                    {composerLocked ? (
-                      <Badge className="border-rose-700/30 bg-rose-500/10 text-rose-300">
-                        <Lock className="h-3.5 w-3.5" />
-                        locked
-                      </Badge>
-                    ) : null}
-                  </div>
-
-                  <textarea
-                    value={localDraft}
-                    onChange={(e) => {
-                      setLocalDraft(e.target.value);
-                      props.onDraftInputChange?.(e.target.value);
-                    }}
-                    disabled={composerLocked}
-                    placeholder="Compose governed operator intent"
-                    className={cx(
-                      "mt-4 h-32 w-full resize-none rounded-[1.5rem] border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600",
-                      composerLocked && "cursor-not-allowed opacity-60",
-                    )}
-                  />
-
-                  {props.composerLockReason ? (
-                    <div className="mt-3 rounded-[1.25rem] border border-amber-700/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                      {props.composerLockReason}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <ComposerButton label="Send" icon={<Send className="h-4 w-4" />} disabled={composerLocked || !localDraft.trim()} onClick={props.onSendRequested} />
-                    {quickActions.map((action) => (
-                      <ComposerButton
-                        key={action.id}
-                        label={action.label}
-                        icon={quickActionIcon(action.icon)}
-                        tone="secondary"
-                        disabled={action.disabled}
-                        onClick={action.onInvoke}
-                      />
-                    ))}
-                  </div>
-                </section>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid min-h-[18rem] place-items-center rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/30 p-8 text-center">
-              <div className="max-w-xl">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] border border-zinc-800 bg-zinc-950/60 text-zinc-400">
-                  <MessageSquare className="h-6 w-6" />
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Active activity</div>
+            <div className="mt-3 space-y-3">
+              {tools.length === 0 ? <div className="text-sm text-zinc-500">No active activity</div> : null}
+              {tools.map((tool) => (
+                <div key={tool.id} className="rounded-xl border border-zinc-800 p-3">
+                  <div className="text-sm font-semibold">{tool.name}</div>
+                  {tool.detail ? <div className="mt-1 text-sm text-zinc-400">{tool.detail}</div> : null}
+                  {tool.result ? <div className="mt-1 text-sm text-zinc-400">{tool.result}</div> : null}
+                  {tool.status ? <div className="mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500">{tool.status}</div> : null}
                 </div>
-                <h3 className="mt-6 text-xl font-semibold text-zinc-100">No visible messages</h3>
-                <p className="mt-3 text-sm leading-7 text-zinc-500">The current conversation filters produced no visible messages. Relax query, role, attention, or actionable-only filters to continue inspection.</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              ))}
+            </div>
+          </div>
 
-      <div className="border-t border-zinc-800 px-4 py-3 text-xs text-zinc-500">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" /> intent explicit</span>
-          <span className="inline-flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5" /> authority visible</span>
-          <span className="inline-flex items-center gap-1"><GitBranch className="h-3.5 w-3.5" /> lineage references bound</span>
-          <span className="inline-flex items-center gap-1"><PlayCircle className="h-3.5 w-3.5" /> actions separated from talk</span>
-        </div>
-      </div>
+          {notes.length ? (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Notes</div>
+              <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+                {notes.map((note, index) => (
+                  <li key={`${note}-${index}`}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <textarea
+              className="h-32 w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm outline-none"
+              placeholder="Compose governed operator intent"
+              value={draft}
+              onChange={(event) => invoke(props, ["onDraftChange", "onDraftChanged", "onInputChange"], event.target.value)}
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" disabled={!canSend} onClick={() => invoke(props, ["onSendRequested", "onSend", "onSendMessage", "onSubmit", "onSubmitDraft"], draft)}>Send</button>
+              <button type="button" disabled={!canStop} onClick={() => invoke(props, ["onStopRequested", "onStop", "onStopStreaming"])}>Stop</button>
+              <button type="button" disabled={!canClear} onClick={() => invoke(props, ["onClearRequested", "onClear", "onClearMessages", "onClearConversation"])}>Clear</button>
+              <button type="button" disabled={!canReconnect} onClick={() => invoke(props, ["onReconnectRequested", "onReconnect"])}>Reconnect</button>
+              <button type="button" disabled={!canRefresh} onClick={() => invoke(props, ["onRefreshRequested", "onRefresh", "onReload"])}>Refresh</button>
+            </div>
+          </div>
+        </aside>
+      </main>
     </section>
   );
 }
+
+export default ChatPanel;

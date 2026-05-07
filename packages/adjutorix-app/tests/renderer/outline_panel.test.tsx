@@ -26,7 +26,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import OutlinePanel from "../../../src/renderer/components/OutlinePanel";
+import OutlinePanel from "../../src/renderer/components/OutlinePanel";
 
 type OutlinePanelProps = React.ComponentProps<typeof OutlinePanel>;
 
@@ -351,7 +351,7 @@ describe("OutlinePanel", () => {
     expect(screen.getByText(/total/i)).toBeInTheDocument();
     expect(screen.getByText(/visible/i)).toBeInTheDocument();
     expect(screen.getByText(/filtered/i)).toBeInTheDocument();
-    expect(screen.getByText(/diagnostic/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Diagnostics$/i)).toBeInTheDocument();
   });
 
   it("does not collapse outline shell into only a filter box; symbols, metrics, and controls remain distinct surfaces", () => {

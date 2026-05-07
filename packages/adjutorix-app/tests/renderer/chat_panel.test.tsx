@@ -25,7 +25,7 @@ import "@testing-library/jest-dom/vitest";
  * - if the production prop surface evolves, update buildProps() first
  */
 
-import ChatPanel from "../../../src/renderer/components/ChatPanel";
+import ChatPanel from "../../src/renderer/components/ChatPanel";
 
 type ChatPanelProps = React.ComponentProps<typeof ChatPanel>;
 
@@ -150,9 +150,16 @@ describe("ChatPanel", () => {
     render(<ChatPanel {...buildProps()} />);
 
     expect(screen.getByText(/user/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/assistant/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/tool/i)).toBeInTheDocument();
-    expect(screen.getByText(/tool: ledger\.lookup/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /assistant req-42 Verification is partially complete/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /tool req-42 tool: ledger\.lookup/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("surfaces connection, auth, trust, and stream posture explicitly instead of presenting an unqualified chat log", () => {
@@ -161,7 +168,7 @@ describe("ChatPanel", () => {
     expect(screen.getByText(/connected/i)).toBeInTheDocument();
     expect(screen.getByText(/available/i)).toBeInTheDocument();
     expect(screen.getByText(/trusted/i)).toBeInTheDocument();
-    expect(screen.getByText(/streaming/i)).toBeInTheDocument();
+    expect(screen.getByText(/^streaming$/i)).toBeInTheDocument();
   });
 
   it("surfaces request lineage explicitly so completed and streaming turns remain attributable", () => {
@@ -319,7 +326,7 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/No conversation messages have been recorded yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/^No conversation messages have been recorded yet$/i)).toBeInTheDocument();
     expect(screen.queryByText(/Explain the current verification blockers/i)).not.toBeInTheDocument();
   });
 
