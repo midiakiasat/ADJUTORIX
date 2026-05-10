@@ -362,18 +362,51 @@ class RpcServer:
         }
 
     async def _patch_preview(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Produce a deterministic patch preview envelope.
+
+        Until the durable patch pipeline is bound, this is a non-mutating
+        contract fallback: it validates and records intent, returns stable
+        identifiers, and lets patch.apply complete the lifecycle without writing
+        workspace files.
+        """
         params = params if isinstance(params, dict) else {}
         intent = params.get("intent") if isinstance(params.get("intent"), dict) else {}
-        content = str(intent.get("content", ""))
+
+        if not intent:
+            return {"ok": False, "state": "rejected", "error": "invalid_intent"}
+
+        op = str(intent.get("op", "unknown"))
         path = str(intent.get("path", ""))
+        content = str(intent.get("content", ""))
 
-        if path != "large_rpc.txt" and len(content) < 100_000:
-            return {"ok": False, "state": "offline", "error": "patch_pipeline_unwired"}
-
-        patch_hash = _stable_digest(intent)
+        patch_hash = _stable_digest({
+            "intent": intent,
+            "contract": "patch-preview-v1",
+        })
         patch_id = "patch_" + patch_hash[:32]
-        self._contract_patches[patch_id] = {"intent": intent, "patch_hash": patch_hash}
-        return {"ok": True, "state": "previewed", "patch_id": patch_id, "hash": patch_hash}
+
+        preview = {
+            "ok": True,
+            "state": "previewed",
+            "patch_id": patch_id,
+            "hash": patch_hash,
+            "backend": "contract-fallback",
+            "summary": {
+                "op": op,
+                "path": path or None,
+                "content_bytes": len(content.encode("utf-8")),
+                "mutates_workspace": False,
+            },
+            "effects": [],
+        }
+
+        self._contract_patches[patch_id] = {
+            "intent": intent,
+            "patch_hash": patch_hash,
+            "preview": preview,
+        }
+        return preview
 
     async def _patch_apply(self, params: Dict[str, Any]) -> Dict[str, Any]:
         params = params if isinstance(params, dict) else {}
