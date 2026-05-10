@@ -195,14 +195,24 @@ const agentState: AgentState = {
   },
 };
 
+const initialWorkspaceRoot = (() => {
+  const candidate = process.env.ADJUTORIX_WORKSPACE_ROOT;
+  if (!candidate || candidate.trim().length === 0) return null;
+
+  const resolved = path.resolve(candidate.trim());
+  try {
+    return fs.statSync(resolved).isDirectory() ? resolved : null;
+  } catch {
+    return null;
+  }
+})();
+
 const workspaceState: {
   currentPath: string | null;
-  openedAtMs: number | null;
-  checkedAtMs: number | null;
+  recentPaths: string[];
 } = {
-  currentPath: null,
-  openedAtMs: null,
-  checkedAtMs: null,
+  currentPath: initialWorkspaceRoot,
+  recentPaths: initialWorkspaceRoot ? [initialWorkspaceRoot] : [],
 };
 
 // -----------------------------------------------------------------------------

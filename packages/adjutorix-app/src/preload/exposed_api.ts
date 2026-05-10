@@ -352,6 +352,41 @@ export function isExposedResult<T extends JsonValue = JsonValue>(value: unknown)
   return isExposedOk<T>(value) || isExposedErr(value);
 }
 
+function toPreloadJsonValue(input: unknown): JsonValue {
+  if (input === null || input === undefined) return null;
+
+  if (typeof input === "string") return input;
+  if (typeof input === "boolean") return input;
+  if (typeof input === "number") return Number.isFinite(input) ? input : null;
+  if (typeof input === "bigint") return String(input);
+  if (typeof input === "symbol" || typeof input === "function") return null;
+
+  if (input instanceof Date) return input.toISOString();
+
+  if (input instanceof Error) {
+    const out: Record<string, JsonValue> = {
+      name: input.name,
+      message: input.message,
+    };
+    if (typeof input.stack === "string") out.stack = input.stack;
+    if ("cause" in input) {
+      out.cause = toPreloadJsonValue((input as { cause?: unknown }).cause);
+    }
+    return out;
+  }
+
+  if (Array.isArray(input)) {
+    return input.map((item) => toPreloadJsonValue(item));
+  }
+
+  const out: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol") continue;
+    out[key] = toPreloadJsonValue(value);
+  }
+  return out;
+}
+
 export function normalizeBridgeEnvelope<T extends JsonValue = JsonValue>(envelope: BridgeEnvelope<T>): ExposedResult<T> {
   if (envelope.ok) {
     const ok: ExposedOk<T> = {
@@ -483,7 +518,7 @@ export function listCapabilities(): ExposedCapability[] {
 
 export function createRuntimeFacade(runtime: RuntimeBridgeApi): ExposedRuntimeApi {
   return deepFreeze({
-    snapshot: async () => normalizeBridgeEnvelope(await runtime.snapshot()),
+    snapshot: async () => normalizeBridgeEnvelope(toPreloadJsonValue(await runtime.snapshot()) as BridgeEnvelope<JsonObject>),
   });
 }
 

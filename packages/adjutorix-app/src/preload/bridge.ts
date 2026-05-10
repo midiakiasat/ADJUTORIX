@@ -26,6 +26,39 @@
  * NO PLACEHOLDERS.
  */
 
+function describeNonJsonValueForPreloadDebug(value: unknown, path = "$", seen = new WeakSet<object>()): string | null {
+  if (value === null) return null;
+  const t = typeof value;
+  if (t === "string" || t === "boolean") return null;
+  if (t === "number") return Number.isFinite(value) ? null : path + " non-finite-number";
+  if (t === "undefined") return path + " undefined";
+  if (t === "bigint") return path + " bigint";
+  if (t === "symbol") return path + " symbol";
+  if (t === "function") return path + " function";
+
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const bad = describeNonJsonValueForPreloadDebug(value[i], path + "[" + i + "]", seen);
+      if (bad) return bad;
+    }
+    return null;
+  }
+
+  if (t === "object") {
+    const obj = value as Record<string, unknown>;
+    if (seen.has(obj)) return path + " circular";
+    seen.add(obj);
+    for (const [key, child] of Object.entries(obj)) {
+      const bad = describeNonJsonValueForPreloadDebug(child, path + "." + key, seen);
+      if (bad) return bad;
+    }
+    seen.delete(obj);
+    return null;
+  }
+
+  return path + " " + t;
+}
+
 // -----------------------------------------------------------------------------
 // CORE JSON TYPES
 // -----------------------------------------------------------------------------
