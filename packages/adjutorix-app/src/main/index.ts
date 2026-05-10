@@ -796,6 +796,8 @@ function registerIpc(config: RuntimeConfig): void {
         workspacePath: workspaceState.currentPath,
         rootPath: workspaceState.currentPath,
         workspaceOpen: Boolean(workspaceState.currentPath),
+        workspaceTree: buildRendererWorkspaceTreeProjection(workspaceState.currentPath),
+        entries: buildRendererWorkspaceEntries(workspaceState.currentPath),
         agentUrl: agentState.url,
         agentHealthy: agentState.lastHealth.ok,
         configHash: appDiagnostics.configHash,
@@ -1109,6 +1111,19 @@ function buildRendererWorkspaceEntries(rootPath: string | null): RendererWorkspa
 
   visit(normalizedRoot, 1);
   return entries;
+}
+
+function buildRendererWorkspaceTreeProjection(rootPath: string | null): Json {
+  const entries = buildRendererWorkspaceEntries(rootPath);
+  return {
+    schema: 1,
+    rootPath,
+    entries,
+    total: entries.length,
+    truncated: entries.length >= RENDERER_WORKSPACE_TREE_MAX_ENTRIES,
+    maxEntries: RENDERER_WORKSPACE_TREE_MAX_ENTRIES,
+    maxDepth: RENDERER_WORKSPACE_TREE_MAX_DEPTH,
+  } as Json;
 }
 
 
