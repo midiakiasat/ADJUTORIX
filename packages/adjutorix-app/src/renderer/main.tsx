@@ -423,6 +423,68 @@ function initialState(): AppState {
   };
 }
 
+
+type OperationalGate = {
+  ok: boolean;
+  label: "HEALTHY" | "NOT OPERATIONAL";
+  workspaceRoot: string | null;
+  treeEntries: number;
+  selectedPath: string | null;
+  bufferMounted: boolean;
+  fileReadOk: boolean;
+  writableKnown: boolean;
+  failures: string[];
+};
+
+function deriveOperationalGate(input: {
+  workspaceRoot: string | null;
+  workspaceEntries: unknown[];
+  selectedPath: string | null;
+  activeEditorBuffer: any | null;
+  workspaceHealth: any | null;
+}): OperationalGate {
+  const failures: string[] = [];
+
+  const workspaceRoot = input.workspaceRoot ?? null;
+  const treeEntries = Array.isArray(input.workspaceEntries) ? input.workspaceEntries.length : 0;
+  const selectedPath = input.selectedPath ?? null;
+
+  const bufferMounted =
+    !!input.activeEditorBuffer &&
+    typeof input.activeEditorBuffer.path === "string" &&
+    input.activeEditorBuffer.path.length > 0 &&
+    typeof input.activeEditorBuffer.content === "string";
+
+  const fileReadOk =
+    bufferMounted &&
+    input.activeEditorBuffer.readOnly === true || bufferMounted;
+
+  const writableKnown =
+    typeof input.workspaceHealth?.writable === "boolean" ||
+    input.activeEditorBuffer?.readOnly === true;
+
+  if (!workspaceRoot) failures.push("workspace_root_missing");
+  if (treeEntries <= 0) failures.push("workspace_tree_empty");
+  if (!selectedPath) failures.push("file_selection_missing");
+  if (!bufferMounted) failures.push("editor_buffer_not_mounted");
+  if (!fileReadOk) failures.push("governed_file_read_not_proven");
+  if (!writableKnown) failures.push("write_posture_unknown");
+
+  const ok = failures.length === 0;
+
+  return {
+    ok,
+    label: ok ? "HEALTHY" : "NOT OPERATIONAL",
+    workspaceRoot,
+    treeEntries,
+    selectedPath,
+    bufferMounted,
+    fileReadOk,
+    writableKnown,
+    failures,
+  };
+}
+
 function deriveBootstrapHash(state: Pick<AppState, "manifest" | "runtimeSnapshot" | "workspaceHealth" | "agentHealth" | "diagnosticsRuntime" | "phase">): string {
   return createHashLike({
     phase: state.phase,
@@ -949,6 +1011,17 @@ const statusChips = [
   const [openedWorkspacePaths, setOpenedWorkspacePaths] = React.useState<string[]>([]);
   const [editorBuffers, dispatchEditorBuffers] = React.useReducer(editorBuffersReducer, undefined, createInitialEditorBuffersState);
   const activeEditorBuffer = editorBuffers.activePath ? editorBuffers.byPath[editorBuffers.activePath] ?? null : null;
+  const operationalGate = React.useMemo(
+    () =>
+      deriveOperationalGate({
+        workspaceRoot: surfaceWorkspaceRoot ?? workspaceRoot ?? null,
+        workspaceEntries,
+        selectedPath: selectedWorkspacePath,
+        activeEditorBuffer,
+        workspaceHealth: state.workspaceHealth,
+      }),
+    [surfaceWorkspaceRoot, workspaceRoot, workspaceEntries, selectedWorkspacePath, activeEditorBuffer, state.workspaceHealth],
+  );
 
   const workspaceEntries = React.useMemo(() => {
     const health = (state.workspaceHealth ?? {}) as any;
@@ -1217,7 +1290,7 @@ const statusChips = [
           id: "go-patch",
           label: "Go to Patch",
           description: "Open patch review surface.",
-          disabled: !surfaceWorkspaceBound,
+          disabled: !operationalGate.ok,
           onClick: () => selectInteractionView("patch", "Workspace posture accepted for patch review."),
         },
       ]}
@@ -1228,6 +1301,15 @@ const statusChips = [
         { label: "Issues", value: String(((state.workspaceHealth as any)?.issues ?? []).length ?? 0), tone: ((state.workspaceHealth as any)?.issues ?? []).length ? "warn" : "good" },
       ]}
     >
+      {!operationalGate.ok ? (
+        <div className="rounded-2xl border border-red-500/40 bg-red-950/30 p-4 text-sm text-red-100">
+          <div className="text-xs font-semibold uppercase tracking-[0.24em] text-red-300">Not operational</div>
+          <div className="mt-2 font-medium">Workspace is attached, but governed action has not been proven.</div>
+          <div className="mt-2 text-red-200/80">
+            Missing: {operationalGate.failures.join(", ")}
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-6 2xl:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.1fr)]">
         <FileTreePane
           rootPath={surfaceWorkspaceRoot ?? undefined}
@@ -1240,7 +1322,7 @@ const statusChips = [
           health={surfaceWorkspaceBound ? "healthy" : "unknown"}
           onFilterQueryChange={setWorkspaceTreeQuery}
           onSearchQueryChange={setWorkspaceTreeQuery}
-          onPathSelected={selectWorkspacePath}
+          onPathSelected={openWorkspacePath}
           onOpenPath={openWorkspacePath}
           onOpenPathRequested={openWorkspacePath}
           onRefreshRequested={refreshWorkspaceHealth}
@@ -1308,7 +1390,7 @@ const statusChips = [
           id: "open-verify",
           label: "Bind verification",
           description: "Move to verification surface.",
-          disabled: !surfaceWorkspaceBound,
+          disabled: !operationalGate.ok,
           onClick: () => selectInteractionView("verify", "Patch surface requested verification binding."),
         },
       ]}
@@ -1536,7 +1618,7 @@ const statusChips = [
               health={workspaceOpen ? "healthy" : "unknown"}
               onFilterQueryChange={setWorkspaceTreeQuery}
               onSearchQueryChange={setWorkspaceTreeQuery}
-              onPathSelected={selectWorkspacePath}
+              onPathSelected={openWorkspacePath}
               onOpenPath={openWorkspacePath}
               onOpenPathRequested={openWorkspacePath}
               onRefreshRequested={refreshWorkspaceHealth}
