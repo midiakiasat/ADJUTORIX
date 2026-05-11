@@ -434,15 +434,54 @@ function normalizeWorkspaceRevealRequest(input: unknown): WorkspaceRevealRequest
   };
 }
 
+function workspaceFileReadPathFromUnknown(input: unknown): string {
+  if (typeof input === "string" && input.trim()) return input.trim();
+
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const value = workspaceFileReadPathFromUnknown(item);
+      if (value) return value;
+    }
+    return "";
+  }
+
+  if (!input || typeof input !== "object") return "";
+  const obj = input as Record<string, unknown>;
+
+  for (const key of ["path", "targetPath", "relativePath", "relative_path", "workspacePath", "workspace_path", "filePath", "file_path"]) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  for (const key of ["payload", "request", "input", "data", "args", "body", "params"]) {
+    const value = workspaceFileReadPathFromUnknown(obj[key]);
+    if (value) return value;
+  }
+
+  return "";
+}
+
 function normalizeWorkspaceFileReadRequest(input: unknown): WorkspaceFileReadRequest {
   const obj = requireJsonRecord(input, "workspace_file_read_request");
-  const rawPath = obj.path !== undefined ? obj.path : obj.targetPath;
+  const readPath = workspaceFileReadPathFromUnknown(obj);
+
+  assert(readPath.length > 0, "workspace_file_read_path_required");
+
   return {
     schema: 1,
     actor: "renderer",
-    path: requireString(rawPath, "path"),
-  };
+    ...obj,
+    path: readPath,
+    targetPath: readPath,
+    relativePath: readPath,
+    relative_path: readPath,
+    workspacePath: readPath,
+    workspace_path: readPath,
+    filePath: readPath,
+    file_path: readPath,
+  } as WorkspaceFileReadRequest;
 }
+
 
 function normalizeWorkspaceTrustSetRequest(input: unknown): WorkspaceTrustSetRequest {
   const obj = requireJsonRecord(input, "workspace_trust_set_request");

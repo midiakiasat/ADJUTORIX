@@ -611,6 +611,18 @@ function scoreAutoOpenWorkspacePath(path: string, entry: WorkspaceTreeEntryLike)
   return score;
 }
 
+
+function workspacePathForReadRequest(pathValue: string, workspaceRoot: string | null): string {
+  const normalized = pathValue.trim().replace(/\\/g, "/").replace(/\/+/g, "/");
+  const root = workspaceRoot?.trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "") ?? "";
+
+  if (root && normalized === root) return "";
+  if (root && normalized.startsWith(root + "/")) return normalized.slice(root.length + 1);
+
+  return normalized.replace(/^\.\//, "");
+}
+
+
 function pickFirstOperationalWorkspacePath(entries: unknown[]): string | null {
   const candidates = flattenWorkspaceTreeEntries(entries)
     .map((entry) => ({ entry, path: workspaceTreeEntryPath(entry) }))
@@ -1269,7 +1281,21 @@ const statusChips = [
     dispatchEditorBuffers({ type: "BUFFER_OPEN_REQUESTED", payload: { path: next, readOnly: true, atMs: Date.now() } });
 
     try {
-      const envelope = await (api.workspace as any).readFile({ schema: 1, actor: "renderer", path: next });
+      const readPath = workspacePathForReadRequest(next, surfaceWorkspaceRoot ?? workspaceRoot ?? null) || next;
+      if (!readPath.trim()) throw new Error("workspace_file_open_path_empty");
+
+      const envelope = await (api.workspace as any).readFile({
+        schema: 1,
+        actor: "renderer",
+        path: readPath,
+        targetPath: readPath,
+        relativePath: readPath,
+        relative_path: readPath,
+        workspacePath: readPath,
+        workspace_path: readPath,
+        filePath: readPath,
+        file_path: readPath,
+      });
       if (!envelope?.ok) {
         const message = envelope?.error?.message ?? "Workspace file read failed.";
         dispatchEditorBuffers({ type: "BUFFER_OPEN_FAILED", path: next, error: message, atMs: Date.now() });
@@ -1302,7 +1328,7 @@ const statusChips = [
       notify("error", "File open failed", message);
       recordEvent("workspace.open", { kind: "workspace.file.open.threw", detail: { path: next, message } });
     }
-  }, [api.workspace, notify, recordEvent, selectWorkspacePath, workspaceEntries]);
+  }, [api.workspace, notify, recordEvent, selectWorkspacePath, surfaceWorkspaceRoot, workspaceRoot, workspaceEntries]);
 
   React.useEffect(() => {
     if (!surfaceWorkspaceBound) return;

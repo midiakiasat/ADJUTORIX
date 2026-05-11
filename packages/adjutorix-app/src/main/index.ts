@@ -760,9 +760,12 @@ function buildCompatAgentHealthProjection(): Record<string, Json> {
 }
 
 function registerIpc(config: RuntimeConfig): void {
-  const registerLegacyCompatHandler = (channel: string, handler: () => Promise<Json> | Json): void => {
+  const registerLegacyCompatHandler = (channel: string, handler: (payload?: unknown) => Promise<Json> | Json): void => {
     try {
-      ipcMain.handle(channel, async () => await handler());
+      ipcMain.handle(channel, async (_event, ...args: unknown[]) => {
+        const payload = args.length <= 1 ? args[0] : args;
+        return await handler(payload);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!/second handler|already.*handler/i.test(message)) {
@@ -772,10 +775,6 @@ function registerIpc(config: RuntimeConfig): void {
   };
 
   registerLegacyCompatHandler("adjutorix:agent:health", async () => {
-    return buildCompatAgentHealthProjection() as Json;
-  });
-
-  registerLegacyCompatHandler("adjutorix:agent:status", async () => {
     return buildCompatAgentHealthProjection() as Json;
   });
 
@@ -891,8 +890,7 @@ function registerIpc(config: RuntimeConfig): void {
   });
 
   registerLegacyCompatHandler("adjutorix:workspace:file:read", async (payload) => {
-    const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const requestedPath = obj.path ?? obj.targetPath;
+    const requestedPath = rendererWorkspaceReadPathFromPayload(payload);
     const currentPath =
       typeof workspaceState.currentPath === "string" && workspaceState.currentPath.length > 0
         ? workspaceState.currentPath
@@ -977,14 +975,45 @@ function assertTextBuffer(buffer: Buffer): void {
   }
 }
 
+function rendererWorkspaceReadPathFromPayload(payload: unknown): string {
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const value = rendererWorkspaceReadPathFromPayload(item);
+      if (value) return value;
+    }
+    return "";
+  }
+
+  if (!payload || typeof payload !== "object") return "";
+  const obj = payload as Record<string, unknown>;
+
+  for (const key of ["path", "targetPath", "relativePath", "relative_path", "workspacePath", "workspace_path", "filePath", "file_path"]) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  for (const key of ["payload", "request", "input", "data", "args", "body", "params"]) {
+    const value = rendererWorkspaceReadPathFromPayload(obj[key]);
+    if (value) return value;
+  }
+
+  return "";
+}
+
 function buildRendererWorkspaceFileSnapshot(rootPath: string | null, requestedPath: unknown): Json {
   if (!rootPath) throw new Error("workspace_file_read_requires_open_workspace");
-  if (typeof requestedPath !== "string" || requestedPath.trim().length === 0) {
+
+  const readPath = rendererWorkspaceReadPathFromPayload(requestedPath);
+  if (!readPath) {
     throw new Error("workspace_file_read_path_required");
   }
 
   const rootRealPath = fs.realpathSync(path.resolve(rootPath));
-  const targetResolvedPath = path.resolve(requestedPath);
+  const targetResolvedPath = path.isAbsolute(readPath)
+    ? path.resolve(readPath)
+    : path.resolve(rootRealPath, readPath);
   const lstat = fs.lstatSync(targetResolvedPath);
 
   if (lstat.isSymbolicLink()) throw new Error("workspace_file_read_symlink_rejected");
