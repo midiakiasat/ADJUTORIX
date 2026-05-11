@@ -602,7 +602,12 @@ function scoreAutoOpenWorkspacePath(path: string, entry: WorkspaceTreeEntryLike)
   if (lower.includes("/packages/")) score += 250;
   if (lower.includes("/src/")) score += 200;
 
-  if (entry.hidden === true || lower.includes("/.adjutorix/")) score -= 1200;
+  const pathSegments = lower.split("/").filter(Boolean);
+  const hiddenPath =
+    entry.hidden === true ||
+    pathSegments.some((segment) => segment.startsWith("."));
+
+  if (hiddenPath) score -= 5000;
   if (entry.ignored === true) score -= 1000;
   if (lower.includes("/logs/")) score -= 500;
 
