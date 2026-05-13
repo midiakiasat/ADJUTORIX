@@ -20,6 +20,7 @@ export default defineConfig({
       "tests/renderer/index_health_panel.test.tsx",
       "tests/renderer/interaction_contract.test.tsx",
       "tests/renderer/outline_panel.test.tsx",
+      "tests/renderer/provider_status.test.tsx",
       "tests/renderer/release_surface_guard.test.ts"
     ],
     coverage: {
