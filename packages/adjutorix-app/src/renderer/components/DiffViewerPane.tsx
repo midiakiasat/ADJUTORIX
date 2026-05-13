@@ -311,13 +311,19 @@ function HunkView(props: {
   hunk: DiffHunk;
   splitView: boolean;
   showWhitespace: boolean;
+  selected?: boolean;
   onSelect?: (file: DiffFile, hunk: DiffHunk) => void;
 }): ReactElement {
   const leftLines = props.hunk.lines.filter((line) => line.kind !== "added");
   const rightLines = props.hunk.lines.filter((line) => line.kind !== "removed");
 
   return (
-    <div className="rounded-[1.25rem] border border-zinc-800 bg-zinc-950/40 text-zinc-200 shadow-sm">
+    <div
+      className={cx(
+        "rounded-[1.25rem] border bg-zinc-950/40 text-zinc-200 shadow-sm",
+        props.selected ? "border-zinc-500 ring-1 ring-zinc-500/40" : "border-zinc-800",
+      )}
+    >
       <button
         type="button"
         onClick={() => props.onSelect?.(props.file, props.hunk)}
@@ -518,10 +524,11 @@ export default function DiffViewerPane(props: DiffViewerPaneProps): ReactElement
                   hunk={hunk}
                   splitView={Boolean(props.splitView)}
                   showWhitespace={Boolean(props.showWhitespace)}
+                  selected={hunk.id === selectedHunk?.id}
                   onSelect={(file, hunk) => {
-                  props.onSelectHunk?.(file, hunk);
-                  invoke(props.onSelectHunkRequested, file.path, hunk.id, hunk, file);
-                }}
+                    props.onSelectHunk?.(file, hunk);
+                    invoke(props.onSelectHunkRequested, file.path, hunk.id, hunk, file);
+                  }}
                 />
               ))
             ) : (

@@ -1169,6 +1169,7 @@ const statusChips = [
 
   const [workspaceTreeQuery, setWorkspaceTreeQuery] = React.useState("");
   const [selectedWorkspacePath, setSelectedWorkspacePath] = React.useState<string | null>(null);
+  const [selectedDiffHunkId, setSelectedDiffHunkId] = useState<string | null>(null);
   const [openedWorkspacePaths, setOpenedWorkspacePaths] = React.useState<string[]>([]);
   const [editorBuffers, dispatchEditorBuffers] = React.useReducer(editorBuffersReducer, undefined, createInitialEditorBuffersState);
   const activeEditorBuffer = editorBuffers.activePath ? editorBuffers.byPath[editorBuffers.activePath] ?? null : null;
@@ -1611,6 +1612,10 @@ const statusChips = [
     ];
   }, [activeEditorBuffer, operationalGate.ok, selectedWorkspacePath]);
 
+  React.useEffect(() => {
+    setSelectedDiffHunkId(null);
+  }, [activeEditorBuffer?.path]);
+
   const PatchSurface = () => (
     <SurfaceFrame
       eyebrow="Patch"
@@ -1651,6 +1656,7 @@ const statusChips = [
             subtitle="Governed baseline versus working-copy comparison for the selected workspace file."
             files={patchReviewFiles as any}
             selectedFileId={patchReviewFiles[0]?.id}
+            selectedHunkId={selectedDiffHunkId ?? patchReviewFiles[0]?.hunks?.[0]?.id}
             splitView={true}
             showWhitespace={false}
             canOpenFile={Boolean(activeEditorBuffer?.path)}
@@ -1670,9 +1676,11 @@ const statusChips = [
               selectInteractionView("workspace", "Diff viewer navigated to workspace editor.");
             }}
             onSelectFile={(file) => {
+              setSelectedDiffHunkId(file.hunks?.[0]?.id ?? null);
               recordEvent("workspace.diff", { kind: "diff.file.selected", detail: { path: file.path, status: file.status } });
             }}
             onSelectHunk={(file, hunk) => {
+              setSelectedDiffHunkId(hunk.id);
               recordEvent("workspace.diff", { kind: "diff.hunk.selected", detail: { path: file.path, hunkId: hunk.id } });
             }}
             onRefresh={refreshWorkspaceHealth}
