@@ -26,8 +26,8 @@ describe("active buffer diff review builder", () => {
   it("splits distant changes into bounded hunk windows", () => {
     const file = buildActiveBufferDiffReviewFile({
       path: "src/example.ts",
-      baseline: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"].join("\\n"),
-      working: ["a", "B", "c", "d", "e", "f", "g", "h", "i", "J", "k"].join("\\n"),
+      baseline: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"].join("\n"),
+      working: ["a", "B", "c", "d", "e", "f", "g", "h", "i", "J", "k"].join("\n"),
       hasBuffer: true,
       operational: true,
     });
@@ -35,6 +35,8 @@ describe("active buffer diff review builder", () => {
     expect(file.hunks).toHaveLength(2);
     expect(file.hunks[0]?.header).toBe("@@ -1,5 +1,5 @@");
     expect(file.hunks[1]?.header).toBe("@@ -7,5 +7,5 @@");
+    expect(file.hunks.flatMap((hunk) => hunk.lines).filter((line) => line.kind === "added")).toHaveLength(2);
+    expect(file.hunks.flatMap((hunk) => hunk.lines).filter((line) => line.kind === "removed")).toHaveLength(2);
   });
 
   it("preserves no-buffer posture", () => {

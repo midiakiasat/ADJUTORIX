@@ -1,4 +1,4 @@
-import type { DiffFile, DiffHunk, DiffLine } from "../components/DiffViewerPane";
+import type { DiffFile, DiffHunk, DiffLine } from "./diff_review_model";
 
 export type ActiveBufferDiffReviewInput = {
   path: string;
