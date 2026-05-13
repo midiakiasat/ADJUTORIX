@@ -460,7 +460,7 @@ export default function TerminalPanel(props: TerminalPanelProps): JSX.Element {
                   <div className="rounded-[1.5rem] border border-zinc-800 bg-zinc-950/50 p-4 shadow-sm">
                     <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Command</div>
                     <pre className="mt-3 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-zinc-800 bg-black/20 p-4 font-mono text-sm leading-7 text-zinc-100">
-{currentCommand?.commandText ?? localInput || "No command selected"}
+{currentCommand?.commandText ?? (localInput || "No command selected")}
                     </pre>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
