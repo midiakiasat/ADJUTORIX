@@ -15,6 +15,7 @@ import WelcomeScreen from "./components/WelcomeScreen";
 import ProviderStatus from "./components/ProviderStatus";
 import FileTreePane from "./components/FileTreePane";
 import MonacoEditorPane from "./components/MonacoEditorPane";
+import TerminalPanel from "./components/TerminalPanel";
 import { createInitialEditorBuffersState, editorBuffersReducer } from "./state/editor_buffers";
 import "./styles/theme.css";
 import "./styles/layout.css";
@@ -1841,7 +1842,40 @@ const statusChips = [
             }}
           />
         }
-        bottomPanel={<EventStreamCard />}
+        bottomPanel={
+          <TerminalPanel
+            title="Workbench terminal"
+            subtitle="Renderer-observed command and system transcript surface."
+            executionState={state.phase === "ready" ? "idle" : state.phase === "failed" ? "failed" : "degraded"}
+            trustLevel={String((state.workspaceHealth as any)?.trustLevel ?? "unknown") as any}
+            shellPath="governed renderer event bus"
+            cwd={workspaceRoot ?? undefined}
+            outputEntries={state.eventLog.slice().reverse().map((entry, index) => ({
+              seq: index + 1,
+              kind: "system",
+              text: `[${entry.source}] ${entry.payload.kind}\n${JSON.stringify(entry.payload.detail ?? {}, null, 2)}`,
+              atMs: entry.atMs,
+              severity: "info",
+            }))}
+            commandHistory={[]}
+            currentCommand={null}
+            showStdout={true}
+            showStderr={true}
+            showSystem={true}
+            showCommands={true}
+            autoScroll={true}
+            onClearRequested={() => recordEvent("renderer.terminal", { kind: "terminal.clear.requested", detail: { source: "bottom-panel" } })}
+            onCopyTranscriptRequested={() => {
+              const text = state.eventLog
+                .slice()
+                .reverse()
+                .map((entry) => `[${new Date(entry.atMs).toISOString()}] [${entry.source}] ${entry.payload.kind}\n${JSON.stringify(entry.payload.detail ?? {}, null, 2)}`)
+                .join("\n\n");
+              void navigator.clipboard?.writeText(text);
+              notify("info", "Transcript copied", "Workbench terminal transcript copied to clipboard.");
+            }}
+          />
+        }
         modalLayer={
           commandPaletteOpen ? (
             <div className="pointer-events-auto grid h-full place-items-start justify-center bg-black/40 p-10 backdrop-blur-sm">
