@@ -1570,6 +1570,105 @@ const statusChips = [
     const changedLineCount = Array.from({ length: maxLines }).filter((_, index) => baselineLines[index] !== workingLines[index]).length;
     const addedLines = working === baseline ? 0 : Math.max(1, workingLines.length - baselineLines.length, changedLineCount);
     const removedLines = working === baseline ? 0 : Math.max(0, baselineLines.length - workingLines.length, changedLineCount);
+    const changedIndexes = Array.from({ length: maxLines }, (_, index) => index).filter((index) => baselineLines[index] !== workingLines[index]);
+
+    const makeSyntheticLines = (startIndex: number, endIndex: number) => {
+      const lines: any[] = [];
+
+      for (let index = startIndex; index <= endIndex; index += 1) {
+        const oldLine = baselineLines[index];
+        const newLine = workingLines[index];
+
+        if (oldLine === newLine) {
+          lines.push({
+            id: `${path}:line:${index + 1}:context`,
+            kind: "context",
+            content: newLine ?? oldLine ?? "",
+            oldLineNumber: oldLine === undefined ? undefined : index + 1,
+            newLineNumber: newLine === undefined ? undefined : index + 1,
+          });
+          continue;
+        }
+
+        if (oldLine !== undefined) {
+          lines.push({
+            id: `${path}:line:${index + 1}:removed`,
+            kind: "removed",
+            content: oldLine,
+            oldLineNumber: index + 1,
+          });
+        }
+
+        if (newLine !== undefined) {
+          lines.push({
+            id: `${path}:line:${index + 1}:added`,
+            kind: "added",
+            content: newLine,
+            newLineNumber: index + 1,
+          });
+        }
+      }
+
+      return lines;
+    };
+
+    const syntheticHunks = (() => {
+      if (!buffer) {
+        return [
+          {
+            id: `${path}:synthetic-hunk:empty`,
+            header: `@@ active-buffer ${path} @@`,
+            summary: "Select a workspace file to hydrate diff review.",
+            decision: "needs-attention",
+            diagnosticsCount: 0,
+            diagnosticsSeverity: "none",
+            lines: makeSyntheticLines(0, Math.min(maxLines - 1, 79)),
+          },
+        ];
+      }
+
+      if (changedIndexes.length === 0) {
+        return [
+          {
+            id: `${path}:synthetic-hunk:unchanged`,
+            header: `@@ active-buffer ${path} @@`,
+            summary: "No working-copy changes detected for the active editor buffer.",
+            decision: "accepted",
+            diagnosticsCount: 0,
+            diagnosticsSeverity: "none",
+            lines: makeSyntheticLines(0, Math.min(maxLines - 1, 79)),
+          },
+        ];
+      }
+
+      const contextRadius = 3;
+      const ranges: Array<{ start: number; end: number }> = [];
+
+      for (const changedIndex of changedIndexes) {
+        const start = Math.max(0, changedIndex - contextRadius);
+        const end = Math.min(maxLines - 1, changedIndex + contextRadius);
+        const previous = ranges[ranges.length - 1];
+
+        if (previous && start <= previous.end + 1) {
+          previous.end = Math.max(previous.end, end);
+        } else {
+          ranges.push({ start, end });
+        }
+      }
+
+      return ranges.slice(0, 32).map((range, hunkIndex) => {
+        const lineCount = range.end - range.start + 1;
+        return {
+          id: `${path}:synthetic-hunk:${hunkIndex + 1}`,
+          header: `@@ -${range.start + 1},${lineCount} +${range.start + 1},${lineCount} @@`,
+          summary: `Changed line window ${range.start + 1}-${range.end + 1}.`,
+          decision: "needs-attention",
+          diagnosticsCount: 0,
+          diagnosticsSeverity: "none",
+          lines: makeSyntheticLines(range.start, range.end),
+        };
+      });
+    })();
 
     return [
       {
@@ -1586,28 +1685,7 @@ const statusChips = [
         verifyStatus: operationalGate.ok ? "ready" : "blocked",
         applyStatus: operationalGate.ok ? "guarded" : "blocked",
         healthStatus: operationalGate.ok ? "operational" : "not-operational",
-        hunks: [
-          {
-            id: `${path}:synthetic-hunk`,
-            header: `@@ active-buffer ${path} @@`,
-            summary: buffer ? "Baseline versus working copy for the active editor buffer." : "Select a workspace file to hydrate diff review.",
-            decision: working === baseline ? "accepted" : "needs-attention",
-            diagnosticsCount: 0,
-            diagnosticsSeverity: "none",
-            lines: Array.from({ length: Math.min(maxLines, 160) }).map((_, index) => {
-              const oldLine = baselineLines[index];
-              const newLine = workingLines[index];
-              const same = oldLine === newLine;
-              return {
-                id: `${path}:line:${index + 1}`,
-                kind: same ? "context" : "modified",
-                content: newLine ?? oldLine ?? "",
-                oldLineNumber: oldLine === undefined ? undefined : index + 1,
-                newLineNumber: newLine === undefined ? undefined : index + 1,
-              };
-            }),
-          },
-        ],
+        hunks: syntheticHunks,
       },
     ];
   }, [activeEditorBuffer, operationalGate.ok, selectedWorkspacePath]);
