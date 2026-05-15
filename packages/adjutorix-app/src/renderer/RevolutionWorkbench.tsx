@@ -105,15 +105,93 @@ function flattenTree(input: unknown): Any[] {
     .sort((a, b) => String(a.path).localeCompare(String(b.path)));
 }
 
-function realFiles(entries: Any[]): Any[] {
-  return entries.filter((e) => {
-    if (e.isDir) return false;
-    const p = clean(e.path).toLowerCase();
-    if (!p) return false;
-    if (p.includes("/node_modules/") || p.includes("/.git/") || p.includes("/dist/") || p.includes("/coverage/")) return false;
-    if (/\.(png|jpg|jpeg|gif|webp|icns|ico|woff2?|ttf|otf|zip|gz|tgz|mp4|mov|mp3|wav|pdf)$/i.test(p)) return false;
+
+function isWorkspaceNoisePath(path: unknown): boolean {
+  const raw = clean(path);
+  const p = `/${raw.toLowerCase()}/`;
+
+  if (!raw.trim()) return true;
+
+  if (
+    p.includes("/node_modules/") ||
+    p.includes("/.git/") ||
+    p.includes("/dist/") ||
+    p.includes("/build/") ||
+    p.includes("/coverage/") ||
+    p.includes("/__pycache__/") ||
+    p.includes("/.pytest_cache/") ||
+    p.includes("/.mypy_cache/") ||
+    p.includes("/.ruff_cache/") ||
+    p.includes("/.turbo/") ||
+    p.includes("/.cache/") ||
+    p.includes("/.vite/") ||
+    p.includes("/quarantine/")
+  ) {
     return true;
-  });
+  }
+
+  if (/(^|\/)\.adjutorix-release(\/|$)/i.test(raw)) return true;
+  if (/(^|\/)\.adjutorix(\/|$)/i.test(raw)) return true;
+
+  return false;
+}
+
+function isBinaryOrAssetPath(path: unknown): boolean {
+  const p = clean(path).toLowerCase();
+  return /\.(png|jpg|jpeg|gif|webp|icns|ico|woff|woff2|ttf|otf|zip|gz|tgz|pdf|mp4|mov|mp3|wav|sqlite|db|lock)$/i.test(p);
+}
+
+function liveFileScore(path: unknown): number {
+  const p = clean(path).toLowerCase();
+  const name = base(p).toLowerCase();
+
+  let score = 0;
+
+  if (p.endsWith("/packages/adjutorix-app/src/renderer/revolutionworkbench.tsx")) score += 100000;
+  if (p.endsWith("/packages/adjutorix-app/src/renderer/main.tsx")) score += 99000;
+  if (p.endsWith("/packages/adjutorix-app/src/renderer/app.tsx")) score += 97000;
+  if (p.endsWith("/packages/adjutorix-app/src/main/index.ts")) score += 95000;
+  if (name === "package.json") score += 90000;
+  if (name === "pnpm-workspace.yaml") score += 88000;
+  if (name === "readme.md") score += 82000;
+
+  if (p.includes("/src/")) score += 20000;
+  if (p.includes("/packages/")) score += 12000;
+  if (p.includes("/configs/")) score += 6000;
+  if (p.includes("/scripts/")) score += 4000;
+  if (p.includes("/tests/")) score += 1000;
+
+  if (p.endsWith(".tsx")) score += 900;
+  if (p.endsWith(".ts")) score += 800;
+  if (p.endsWith(".json")) score += 500;
+  if (p.endsWith(".md")) score += 300;
+  if (p.endsWith(".sh")) score += 250;
+  if (p.endsWith(".py")) score += 250;
+
+  score -= Math.min(p.length, 500);
+
+  return score;
+}
+
+function realFiles(entries: Any[]): Any[] {
+  return entries
+    .filter((e) => {
+      if (e.isDir) return false;
+      const p = clean(e.path);
+      if (!p) return false;
+      if (isWorkspaceNoisePath(p)) return false;
+      if (isBinaryOrAssetPath(p)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const byScore = liveFileScore(b.path) - liveFileScore(a.path);
+      if (byScore !== 0) return byScore;
+      return String(a.path).localeCompare(String(b.path));
+    });
+}
+
+function visibleEntryCount(entries: Any[]): number {
+  return entries.filter((e) => !isWorkspaceNoisePath(e.path)).length;
 }
 
 function chooseRoot(entries: Any[], snapshots: unknown[]): string | null {
@@ -185,13 +263,18 @@ export default function RevolutionWorkbench() {
     setEntries(flat);
 
     const files = realFiles(flat);
-    const preferred =
-      files.find((f) => /packages\/adjutorix-app\/src\/renderer\/main\.tsx$/.test(f.path)) ??
-      files.find((f) => /packages\/adjutorix-app\/src\/renderer\/RevolutionWorkbench\.tsx$/.test(f.path)) ??
-      files.find((f) => /package\.json$/.test(f.path)) ??
-      files[0];
+    const preferred = files[0];
+    const selectedInvalid = selected ? isWorkspaceNoisePath(selected) : false;
 
-    if (preferred && !selected) {
+    if (selectedInvalid) {
+      setSelected(null);
+      setTabs([]);
+      setBuffers({});
+      setDirty({});
+      addLog(`DROP JUNK BUFFER: ${selected}`);
+    }
+
+    if (preferred && (!selected || selectedInvalid)) {
       await openFile(preferred.path, r);
     }
 
@@ -206,7 +289,7 @@ export default function RevolutionWorkbench() {
       return;
     }
     try {
-      await call(a.workspace.open, { schema: 1, actor: "renderer", source: MARKER });
+      await call(a.workspace.open, { schema: 1, actor: "renderer", source: "ipc" });
       addLog("workspace.open completed");
       await refresh();
     } catch (e) {
@@ -318,7 +401,7 @@ export default function RevolutionWorkbench() {
             <div className="border-b border-zinc-800 p-3">
               <div className="mb-2 flex items-center justify-between text-xs">
                 <span className="font-semibold uppercase tracking-[0.18em] text-zinc-500">Files</span>
-                <span className="text-zinc-500">{files.length}/{entries.length}</span>
+                <span className="text-zinc-500">{files.length}/{visibleEntryCount(entries)}</span>
               </div>
               <input
                 value={query}
