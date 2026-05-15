@@ -1,21 +1,36 @@
 // @ts-nocheck
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useRef
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AppShell from "./components/AppShell";
+import CommandPalette from "./components/CommandPalette";
+import FileTreePane from "./components/FileTreePane";
+import MonacoEditorPane from "./components/MonacoEditorPane";
+import TerminalPanel from "./components/TerminalPanel";
 
-type AnyRecord = Record<string, unknown>;
-type LoadContext = "boot" | "restore" | "open" | "manual";
-type LoadOutcome = "attached" | "empty" | "error";
+type AnyRecord = Record<string, any>;
+type ActivityItem = {
+  id: string;
+  title: string;
+  message: string;
+  level: "info" | "success" | "warn" | "error";
+  atMs: number;
+};
+
+const ROOT_FILE_NAMES = new Set([
+  "README.md",
+  "LICENSE",
+  "FINALITY.md",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "turbo.json",
+  "tsconfig.base.json",
+]);
 
 function asRecord(value: unknown): AnyRecord | null {
   return value !== null && typeof value === "object" ? (value as AnyRecord) : null;
 }
 
-function isFn<T extends (...args: any[]) => any = (...args: any[]) => any>(value: unknown): value is T {
+function isFn(value: unknown): value is (...args: any[]) => any {
   return typeof value === "function";
 }
 
@@ -23,1369 +38,907 @@ function unwrapEnvelope(value: unknown): unknown {
   const record = asRecord(value);
   if (!record) return value;
   if (record.ok === true && "data" in record) return record.data;
+  if (record.ok === true && "snapshot" in record) return record.snapshot;
   return value;
 }
 
 function firstString(...values: unknown[]): string | null {
   for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value;
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
   return null;
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+function cleanPath(path: string): string {
+  return String(path ?? "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function basename(path: string | null | undefined): string {
+  const value = cleanPath(String(path ?? ""));
+  const parts = value.split("/").filter(Boolean);
+  return parts[parts.length - 1] || value || "Untitled";
+}
+
+function relativeToRoot(path: string | null | undefined, rootPath: string | null | undefined): string {
+  const pathValue = cleanPath(String(path ?? ""));
+  const rootValue = cleanPath(String(rootPath ?? ""));
+  if (!pathValue) return "";
+  if (rootValue && pathValue === rootValue) return ".";
+  if (rootValue && pathValue.startsWith(`${rootValue}/`)) return pathValue.slice(rootValue.length + 1);
+  return pathValue;
+}
+
+function looksLikeFilePath(value: string): boolean {
+  const path = cleanPath(value);
+  if (!path || /^https?:\/\//i.test(path) || /\s/.test(path)) return false;
+  const leaf = basename(path);
+  if (ROOT_FILE_NAMES.has(leaf)) return true;
+  if (!path.includes("/") && !path.includes("\\")) return false;
+  return /\.[A-Za-z0-9]{1,16}$/.test(leaf);
+}
+
+function looksLikeDirectoryPath(value: string): boolean {
+  const path = cleanPath(value);
+  if (!path || looksLikeFilePath(path)) return false;
+  return path.startsWith("/") || /^[A-Za-z]:\//.test(path) || path.includes("/");
+}
+
+function inferRootFromFile(path: string): string | null {
+  const value = cleanPath(path);
+  const markers = [
+    "/packages/",
+    "/configs/",
+    "/scripts/",
+    "/tests/",
+    "/docs/",
+    "/src/",
+    "/dist/",
+    "/node_modules/",
+    "/.github/",
+  ];
+  for (const marker of markers) {
+    const index = value.indexOf(marker);
+    if (index > 0) return value.slice(0, index);
+  }
+  return null;
 }
 
 function uniq(values: string[]): string[] {
-  return Array.from(new Set(values));
-}
-
-function basename(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const parts = normalized.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
-function looksLikeFilePath(path: string): boolean {
-  const base = basename(path);
-  return /\.[A-Za-z0-9]{1,12}$/i.test(base) || base.includes(".");
-}
-
-function looksLikeDirPath(path: string): boolean {
-  return !looksLikeFilePath(path);
-}
-
-function compactRecord(input: AnyRecord): AnyRecord {
-  const out: AnyRecord = {};
-  for (const [key, value] of Object.entries(input)) {
-    if (value === undefined || value === null) continue;
-    if (typeof value === "string" && value.trim().length === 0) continue;
-    if (Array.isArray(value) && value.length === 0) continue;
-    out[key] = value;
-  }
-  return out;
+  return Array.from(new Set(values.map(cleanPath).filter(Boolean)));
 }
 
 function currentBridge(): AnyRecord {
   const g = globalThis as AnyRecord;
-  const runtime =
-    asRecord(g.__adjutorixRendererRuntime) ??
-    asRecord(g.adjutorixRuntime) ??
-    asRecord(asRecord(g.__adjutorixRendererRuntime)?.runtime) ??
-    asRecord(asRecord(g.adjutorixRuntime)?.runtime);
-
-  return (
-    asRecord(g.adjutorix) ??
-    asRecord(runtime?.bridge) ??
-    asRecord(runtime?.api) ??
-    {}
-  );
+  const runtime = asRecord(g.__adjutorixRendererRuntime) ?? asRecord(g.adjutorixRuntime);
+  return asRecord(g.adjutorix) ?? asRecord(runtime?.bridge) ?? asRecord(runtime?.api) ?? {};
 }
 
-function deepMergeRecords(...inputs: unknown[]): AnyRecord {
-  let out: AnyRecord = {};
+function visitUnknown(value: unknown, visit: (value: unknown, key?: string) => void, key?: string, seen = new WeakSet<object>()) {
+  visit(value, key);
 
-  const visit = (value: unknown) => {
-    const unwrapped = unwrapEnvelope(value);
-    const record = asRecord(unwrapped);
-    if (!record) return;
+  const unwrapped = unwrapEnvelope(value);
+  if (unwrapped !== value) visitUnknown(unwrapped, visit, key, seen);
 
-    out = { ...out, ...record };
+  if (!unwrapped || typeof unwrapped !== "object") return;
+  if (seen.has(unwrapped as object)) return;
+  seen.add(unwrapped as object);
 
-    for (const nested of Object.values(record)) {
-      if (Array.isArray(nested)) {
-        for (const item of nested) visit(item);
-      } else {
-        visit(nested);
-      }
-    }
-  };
+  if (Array.isArray(unwrapped)) {
+    for (const item of unwrapped) visitUnknown(item, visit, key, seen);
+    return;
+  }
 
-  for (const input of inputs) visit(input);
-  return out;
+  for (const [childKey, child] of Object.entries(unwrapped as AnyRecord)) {
+    visitUnknown(child, visit, childKey, seen);
+  }
 }
 
 function collectFilePaths(...inputs: unknown[]): string[] {
-  const found = new Set<string>();
+  const found: string[] = [];
 
-  const visit = (value: unknown) => {
-    const unwrapped = unwrapEnvelope(value);
-
-    if (typeof unwrapped === "string") {
-      if (looksLikeFilePath(unwrapped)) found.add(unwrapped);
-      return;
-    }
-
-    if (Array.isArray(unwrapped)) {
-      for (const item of unwrapped) visit(item);
-      return;
-    }
-
-    const record = asRecord(unwrapped);
-    if (!record) return;
-
-    for (const nested of Object.values(record)) visit(nested);
-  };
-
-  for (const input of inputs) visit(input);
-  return Array.from(found);
-}
-
-function deriveLargePreview(...inputs: unknown[]): AnyRecord | null {
-  const suspiciousText =
-    /(large|too[ -]?large|oversiz|preview|read[ -]?only|degraded|guard|truncat|limit|exceed)/i;
-
-  const toNumber = (value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-      const parsed = Number(value.trim());
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-    return null;
-  };
-
-  const firstNumber = (...values: unknown[]): number | null => {
-    for (const value of values) {
-      const parsed = toNumber(value);
-      if (parsed != null) return parsed;
-    }
-    return null;
-  };
-
-  const seen = new Set<unknown>();
-  const records: AnyRecord[] = [];
-
-  const visit = (value: unknown): void => {
-    if (value == null || typeof value !== "object") return;
-    if (seen.has(value)) return;
-    seen.add(value);
-
-    const record = asRecord(unwrapEnvelope(value)) ?? asRecord(value);
-    if (!record) return;
-    records.push(record);
-
-    for (const nested of Object.values(record)) {
-      visit(nested);
-    }
-  };
-
-  for (const input of inputs) visit(input);
-
-  const normalize = (record: AnyRecord): AnyRecord | null => {
-    const workspace = asRecord(record.workspace) ?? {};
-    const nested =
-      asRecord(record.largePreview) ??
-      asRecord(record.large_file_preview) ??
-      asRecord(record.largeFilePreview) ??
-      asRecord(record.largeFile) ??
-      asRecord(record.filePreview) ??
-      asRecord(record.previewPayload) ??
-      asRecord(record.preview) ??
-      asRecord(workspace.largePreview) ??
-      asRecord(workspace.large_file_preview) ??
-      asRecord(workspace.largeFilePreview) ??
-      asRecord(workspace.largeFile) ??
-      asRecord(workspace.filePreview) ??
-      asRecord(workspace.previewPayload);
-
-    const source = nested ?? record;
-
-    const path = firstString(
-      source.path,
-      source.selectedPath,
-      source.filePath,
-      source.targetPath,
-      source.previewPath,
-      record.path,
-      record.selectedPath,
-      record.filePath,
-      workspace.path,
-      workspace.selectedPath,
-    );
-
-    const selectedPath = firstString(
-      source.selectedPath,
-      source.path,
-      record.selectedPath,
-      record.path,
-      workspace.selectedPath,
-      workspace.path,
-      path,
-    );
-
-    const previewText = firstString(
-      source.preview,
-      source.previewText,
-      source.text,
-      source.content,
-      source.snippet,
-      source.value,
-      source.body,
-      source.message,
-      record.preview,
-      record.previewText,
-      record.text,
-      record.content,
-      record.snippet,
-      record.message,
-      workspace.preview,
-      workspace.previewText,
-      workspace.text,
-      workspace.content,
-      workspace.snippet,
-      workspace.message,
-    );
-
-    const reason = firstString(
-      source.reason,
-      source.guardReason,
-      source.guardMode,
-      source.previewMode,
-      source.status,
-      source.mode,
-      source.kind,
-      source.type,
-      source.code,
-      source.message,
-      record.reason,
-      record.guardReason,
-      record.guardMode,
-      record.previewMode,
-      record.status,
-      record.mode,
-      record.kind,
-      record.type,
-      record.code,
-      record.message,
-      workspace.reason,
-      workspace.guardReason,
-      workspace.guardMode,
-      workspace.previewMode,
-      workspace.status,
-      workspace.mode,
-      workspace.kind,
-      workspace.type,
-      workspace.code,
-      workspace.message,
-    );
-
-    const workspaceId = firstString(
-      source.workspaceId,
-      source.diagnosticsWorkspaceId,
-      record.workspaceId,
-      record.diagnosticsWorkspaceId,
-      workspace.workspaceId,
-      workspace.diagnosticsWorkspaceId,
-    );
-
-    const diagnosticsWorkspaceId = firstString(
-      source.diagnosticsWorkspaceId,
-      source.workspaceId,
-      record.diagnosticsWorkspaceId,
-      record.workspaceId,
-      workspace.diagnosticsWorkspaceId,
-      workspace.workspaceId,
-    );
-
-    const textSignal = suspiciousText.test(
-      [
-        reason,
-        previewText,
-        firstString(source.mode, record.mode, workspace.mode),
-        firstString(source.status, record.status, workspace.status),
-        firstString(source.code, record.code, workspace.code),
-      ]
-        .filter((value): value is string => typeof value === "string" && value.length > 0)
-        .join(" "),
-    );
-
-    const boolSignal = [
-      source.previewOnly,
-      source.readOnly,
-      source.readonly,
-      source.degraded,
-      source.oversized,
-      source.oversize,
-      source.tooLarge,
-      source.isTooLarge,
-      source.large,
-      source.largeFile,
-      source.isLargeFile,
-      source.fileTooLarge,
-      source.guard,
-      source.truncated,
-      record.previewOnly,
-      record.readOnly,
-      record.readonly,
-      record.degraded,
-      record.oversized,
-      record.oversize,
-      record.tooLarge,
-      record.isTooLarge,
-      record.large,
-      record.largeFile,
-      record.isLargeFile,
-      record.fileTooLarge,
-      record.guard,
-      record.truncated,
-      workspace.previewOnly,
-      workspace.readOnly,
-      workspace.readonly,
-      workspace.degraded,
-      workspace.oversized,
-      workspace.oversize,
-      workspace.tooLarge,
-      workspace.isTooLarge,
-      workspace.large,
-      workspace.largeFile,
-      workspace.isLargeFile,
-      workspace.fileTooLarge,
-      workspace.guard,
-      workspace.truncated,
-    ].some((value) => value === true);
-
-    const size = firstNumber(
-      source.size,
-      source.bytes,
-      source.byteLength,
-      source.sizeBytes,
-      source.fileSize,
-      source.fileSizeBytes,
-      record.size,
-      record.bytes,
-      record.byteLength,
-      record.sizeBytes,
-      record.fileSize,
-      record.fileSizeBytes,
-      workspace.size,
-      workspace.bytes,
-      workspace.byteLength,
-      workspace.sizeBytes,
-      workspace.fileSize,
-      workspace.fileSizeBytes,
-    );
-
-    const limit = firstNumber(
-      source.limit,
-      source.maxBytes,
-      source.byteLimit,
-      source.previewLimit,
-      source.maxPreviewBytes,
-      source.sizeLimit,
-      record.limit,
-      record.maxBytes,
-      record.byteLimit,
-      record.previewLimit,
-      record.maxPreviewBytes,
-      record.sizeLimit,
-      workspace.limit,
-      workspace.maxBytes,
-      workspace.byteLimit,
-      workspace.previewLimit,
-      workspace.maxPreviewBytes,
-      workspace.sizeLimit,
-    );
-
-    const sizeSignal =
-      (size != null && limit != null && size > limit) ||
-      (size != null && firstString(reason, previewText) != null && size > 1024 * 1024);
-
-    const guardSignal =
-      nested != null ||
-      boolSignal ||
-      textSignal ||
-      sizeSignal;
-
-    if (!guardSignal) return null;
-
-    return compactRecord({
-      path: path ?? selectedPath ?? "Large file preview",
-      selectedPath: selectedPath ?? path ?? "Large file preview",
-      workspaceId,
-      diagnosticsWorkspaceId,
-      preview: previewText,
-      reason,
-      previewOnly:
-        source.previewOnly === true ||
-        record.previewOnly === true ||
-        workspace.previewOnly === true
-          ? true
-          : undefined,
-      readOnly:
-        source.readOnly === true ||
-        source.readonly === true ||
-        record.readOnly === true ||
-        record.readonly === true ||
-        workspace.readOnly === true ||
-        workspace.readonly === true
-          ? true
-          : undefined,
-      degraded:
-        source.degraded === true ||
-        record.degraded === true ||
-        workspace.degraded === true ||
-        sizeSignal
-          ? true
-          : undefined,
-      large:
-        source.large === true ||
-        source.largeFile === true ||
-        source.isLargeFile === true ||
-        source.tooLarge === true ||
-        source.isTooLarge === true ||
-        record.large === true ||
-        record.largeFile === true ||
-        record.isLargeFile === true ||
-        record.tooLarge === true ||
-        record.isTooLarge === true ||
-        workspace.large === true ||
-        workspace.largeFile === true ||
-        workspace.isLargeFile === true ||
-        workspace.tooLarge === true ||
-        workspace.isTooLarge === true ||
-        sizeSignal
-          ? true
-          : undefined,
+  for (const input of inputs) {
+    visitUnknown(input, (value) => {
+      if (typeof value === "string" && looksLikeFilePath(value)) found.push(value);
     });
-  };
-
-  for (const record of records) {
-    const normalized = normalize(record);
-    if (normalized) return normalized;
   }
 
-  return null;
+  return uniq(found);
 }
 
-function deriveDiagnosticsSummary(...inputs: unknown[]): AnyRecord | null {
-  const merged = deepMergeRecords(...inputs);
-
-  return (
-    asRecord(merged.summary) ??
-    asRecord(asRecord(merged.diagnostics)?.summary) ??
-    null
-  );
-}
-
-function deriveWorkspaceSeed(...inputs: unknown[]): AnyRecord {
-  const merged = deepMergeRecords(...inputs);
-  const session = asRecord(merged.session);
-
-  const genericPath = firstString(
-    merged.path,
-    merged.root,
-    merged.rootPath,
-    merged.workspaceRoot,
-    merged.workspacePath,
-    merged.repoPath,
-    merged.directory,
-    merged.location,
-    session?.rootPath,
-  );
-
-  const inferredRootPath =
-    genericPath && looksLikeDirPath(genericPath) ? genericPath : null;
-
-  const inferredSelectedPath = firstString(
-    merged.selectedPath,
-    merged.filePath,
-    merged.targetPath,
-    merged.previewPath,
-    session?.selectedPath,
-  ) ?? (genericPath && looksLikeFilePath(genericPath) ? genericPath : null);
-
-  const openedPaths = uniq([
-    ...collectFilePaths(merged.openedPaths),
-    ...collectFilePaths(session?.openedPaths),
-    ...collectFilePaths(merged.files),
-    ...collectFilePaths(merged.items),
-    ...(inferredSelectedPath ? [inferredSelectedPath] : []),
+function collectRootPath(...inputs: unknown[]): string | null {
+  const preferredKeys = new Set([
+    "rootPath",
+    "workspaceRoot",
+    "workspacePath",
+    "currentPath",
+    "repoPath",
+    "directory",
+    "folderPath",
+    "path",
   ]);
 
-  const expandedPaths = uniq([
-    ...toStringArray(merged.expandedPaths),
-    ...toStringArray(session?.expandedPaths),
-  ]).filter(looksLikeDirPath);
+  const candidates: string[] = [];
 
-  return compactRecord({
-    restored: merged.restored === true ? true : undefined,
-    attached: merged.attached === true ? true : undefined,
-    sessionId: firstString(merged.sessionId, session?.sessionId) ?? undefined,
-    workspaceId: firstString(merged.workspaceId, session?.workspaceId) ?? undefined,
-    rootPath:
-      firstString(
-        merged.rootPath,
-        merged.workspaceRoot,
-        merged.workspacePath,
-        merged.repoPath,
-        merged.directory,
-        session?.rootPath,
-        inferredRootPath,
-      ) ?? undefined,
-    trustLevel: firstString(merged.trustLevel, session?.trustLevel) ?? undefined,
-    selectedPath: inferredSelectedPath ?? undefined,
-    openedPaths: openedPaths.length > 0 ? openedPaths : undefined,
-    expandedPaths: expandedPaths.length > 0 ? expandedPaths : undefined,
-    verifyId: firstString(merged.verifyId, session?.verifyId) ?? undefined,
-    ledgerId: firstString(merged.ledgerId, session?.ledgerId) ?? undefined,
-    patchId: firstString(merged.patchId, session?.patchId) ?? undefined,
-    diagnosticsWorkspaceId:
-      firstString(
-        merged.diagnosticsWorkspaceId,
-        session?.diagnosticsWorkspaceId,
-        merged.workspaceId,
-        session?.workspaceId,
-      ) ?? undefined,
-  });
-}
+  for (const input of inputs) {
+    visitUnknown(input, (value, key) => {
+      if (typeof value !== "string" || !value.trim()) return;
+      if (key && !preferredKeys.has(key)) return;
 
-function hasMeaningfulSeed(seed: AnyRecord, preview: AnyRecord | null, paths: string[]): boolean {
-  return Boolean(
-    seed.attached === true ||
-    seed.restored === true ||
-    seed.rootPath ||
-    seed.workspaceId ||
-    seed.selectedPath ||
-    seed.verifyId ||
-    seed.ledgerId ||
-    seed.patchId ||
-    seed.diagnosticsWorkspaceId ||
-    (Array.isArray(seed.openedPaths) && seed.openedPaths.length > 0) ||
-    (Array.isArray(seed.expandedPaths) && seed.expandedPaths.length > 0) ||
-    preview ||
-    paths.length > 0
-  );
-}
+      const clean = cleanPath(value);
+      if (looksLikeDirectoryPath(clean)) candidates.push(clean);
 
-function isExplicitCancel(value: unknown): boolean {
-  const record = asRecord(unwrapEnvelope(value)) ?? asRecord(value);
-  if (!record) return false;
-
-  if (record.cancelled === true || record.canceled === true) {
-    return true;
+      if (looksLikeFilePath(clean)) {
+        const inferred = inferRootFromFile(clean);
+        if (inferred) candidates.push(inferred);
+      }
+    });
   }
 
-  const status =
-    typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
-  const disposition =
-    typeof record.disposition === "string" ? record.disposition.trim().toLowerCase() : "";
-  const reason =
-    typeof record.reason === "string" ? record.reason.trim().toLowerCase() : "";
-  const code =
-    typeof record.code === "string" ? record.code.trim().toUpperCase() : "";
-
-  return (
-    status === "cancelled" ||
-    status === "canceled" ||
-    disposition === "cancelled" ||
-    disposition === "canceled" ||
-    reason === "cancelled" ||
-    reason === "canceled" ||
-    code === "CANCELLED" ||
-    code === "CANCELED" ||
-    code === "USER_CANCELLED" ||
-    code === "USER_CANCELED"
-  );
+  return uniq(candidates)[0] ?? null;
 }
 
-function normalizeUnsubscribe(value: unknown): (() => void) | null {
-  if (isFn(value)) return value;
+function collectSelectedPath(...inputs: unknown[]): string | null {
+  const keys = new Set(["selectedPath", "activePath", "currentPath", "filePath", "targetPath", "previewPath", "path"]);
+  const candidates: string[] = [];
+
+  for (const input of inputs) {
+    visitUnknown(input, (value, key) => {
+      if (typeof value === "string" && (!key || keys.has(key)) && looksLikeFilePath(value)) candidates.push(value);
+    });
+  }
+
+  return uniq(candidates)[0] ?? null;
+}
+
+function collectStatus(...inputs: unknown[]): { health: string; trust: string; phase: string } {
+  let health: string | null = null;
+  let trust: string | null = null;
+  let phase: string | null = null;
+
+  for (const input of inputs) {
+    visitUnknown(input, (value, key) => {
+      if (typeof value !== "string") return;
+      const lowered = value.toLowerCase();
+      if (!health && key && /health|status|level/.test(key) && /healthy|degraded|unhealthy|ready|unknown|failed/.test(lowered)) health = value;
+      if (!trust && key && /trust/.test(key) && /trusted|restricted|untrusted|unknown/.test(lowered)) trust = value;
+      if (!phase && key && /phase/.test(key)) phase = value;
+    });
+  }
+
+  return {
+    health: health ?? "unknown",
+    trust: trust ?? "unknown",
+    phase: phase ?? "ready",
+  };
+}
+
+function toWorkspaceEntries(rootPath: string | null, paths: string[]) {
+  const entries: AnyRecord[] = [];
+
+  if (rootPath) {
+    entries.push({
+      path: rootPath,
+      name: basename(rootPath),
+      type: "directory",
+    });
+  }
+
+  for (const path of paths) {
+    const absolute = rootPath && !cleanPath(path).startsWith("/") ? cleanPath(`${rootPath}/${path}`) : cleanPath(path);
+    entries.push({
+      path: absolute,
+      relativePath: relativeToRoot(absolute, rootPath),
+      name: basename(absolute),
+      type: looksLikeFilePath(absolute) ? "file" : "directory",
+    });
+  }
+
+  return entries;
+}
+
+function extractReadableContent(value: unknown): string | null {
+  const priorityKeys = [
+    "content",
+    "contents",
+    "text",
+    "source",
+    "buffer",
+    "preview",
+    "previewText",
+    "body",
+    "snippet",
+    "value",
+  ];
+
+  const root = unwrapEnvelope(value);
+  if (typeof root === "string") return root;
+
+  const scan = (input: unknown, seen = new WeakSet<object>()): string | null => {
+    const unwrapped = unwrapEnvelope(input);
+    if (typeof unwrapped === "string") return unwrapped;
+    if (!unwrapped || typeof unwrapped !== "object") return null;
+    if (seen.has(unwrapped as object)) return null;
+    seen.add(unwrapped as object);
+
+    if (Array.isArray(unwrapped)) {
+      for (const item of unwrapped) {
+        const found = scan(item, seen);
+        if (found !== null) return found;
+      }
+      return null;
+    }
+
+    const record = unwrapped as AnyRecord;
+    for (const key of priorityKeys) {
+      const valueAtKey = record[key];
+      if (typeof valueAtKey === "string") return valueAtKey;
+      const nested = scan(valueAtKey, seen);
+      if (nested !== null) return nested;
+    }
+
+    return null;
+  };
+
+  return scan(root);
+}
+
+function languageFromPath(path: string | null): string {
+  const p = cleanPath(String(path ?? "")).toLowerCase();
+  if (p.endsWith(".tsx") || p.endsWith(".ts")) return "typescript";
+  if (p.endsWith(".jsx") || p.endsWith(".js") || p.endsWith(".mjs") || p.endsWith(".cjs")) return "javascript";
+  if (p.endsWith(".json")) return "json";
+  if (p.endsWith(".md")) return "markdown";
+  if (p.endsWith(".py")) return "python";
+  if (p.endsWith(".css")) return "css";
+  if (p.endsWith(".html")) return "html";
+  if (p.endsWith(".yml") || p.endsWith(".yaml")) return "yaml";
+  if (p.endsWith(".sql")) return "sql";
+  if (p.endsWith(".sh")) return "shell";
+  return "plaintext";
+}
+
+function summarizeResult(value: unknown): string {
   const record = asRecord(value);
-  if (record && isFn(record.unsubscribe)) return () => record.unsubscribe();
-  return null;
+  if (record?.ok === false) {
+    return firstString(record.error?.message, record.error?.code, "blocked") ?? "blocked";
+  }
+
+  const data = unwrapEnvelope(value);
+  const dataRecord = asRecord(data);
+  const status = firstString(dataRecord?.status, dataRecord?.state, dataRecord?.phase, dataRecord?.health);
+  if (status) return status;
+
+  if (Array.isArray(data)) return `${data.length} items`;
+  if (dataRecord) return `${Object.keys(dataRecord).length} fields`;
+  return "completed";
 }
 
-function describeLoadError(context: LoadContext, error: unknown): string {
-  const message =
-    error instanceof Error ? error.message :
-    typeof error === "string" ? error :
-    "unknown error";
-
-  if (context === "restore") return `Workspace restore failed: ${message}`;
-  if (context === "open") return `Workspace open failed: ${message}`;
-  return `Workspace load failed: ${message}`;
+function WorkbenchCard(props: { title: string; eyebrow?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-[2rem] border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl">
+      {props.eyebrow ? <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">{props.eyebrow}</div> : null}
+      <h2 className="mt-1 text-xl font-semibold text-zinc-50">{props.title}</h2>
+      <div className="mt-5">{props.children}</div>
+    </section>
+  );
 }
 
 export default function App(): React.JSX.Element {
+  const [currentView, setCurrentView] = useState("workspace");
   const [rootPath, setRootPath] = useState<string | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [paths, setPaths] = useState<string[]>([]);
-  const [diagnosticsSummary, setDiagnosticsSummary] = useState<AnyRecord | null>(null);
-  const [largePreview, setLargePreview] = useState<AnyRecord | null>(null);
-  const largePreviewRef = useRef<AnyRecord | null>(null);
-  const manualOpenRef = useRef(false);
-  const manualOpenSyncRef = useRef(false);
-  const applyWorkspaceStateRef = useRef<((...inputs: unknown[]) => Promise<LoadOutcome>) | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [openedPaths, setOpenedPaths] = useState<string[]>([]);
+  const [fileContents, setFileContents] = useState<Record<string, string>>({});
+  const [health, setHealth] = useState("unknown");
+  const [trust, setTrust] = useState("unknown");
+  const [phase, setPhase] = useState("ready");
+  const [treeQuery, setTreeQuery] = useState("");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [actionStatus, setActionStatus] = useState("No governed action has run yet.");
+  const [terminalInput, setTerminalInput] = useState("");
+  const [lastError, setLastError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    largePreviewRef.current = largePreview;
-  }, [largePreview]);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [workspaceIdentity, setWorkspaceIdentity] = useState<string | null>(null);
-
-  const fileButtons = useMemo(() => {
-    const byLabel = new Map<string, string>();
-    const candidates = uniq([
-      ...paths,
-      ...collectFilePaths(largePreview),
-      ...(selectedPath ? [selectedPath] : []),
-    ]).filter(looksLikeFilePath);
-
-    for (const path of candidates) {
-      const label = basename(path);
-      if (!byLabel.has(label) || path === selectedPath) {
-        byLabel.set(label, path);
-      }
-    }
-
-    return Array.from(byLabel.entries()).map(([label, path]) => ({ label, path }));
-  }, [largePreview, paths, selectedPath]);
-
-  const subscribeStreams = useCallback(() => {
-    const bridge = currentBridge();
-    const workspaceApi = asRecord(bridge.workspace);
-    const diagnosticsApi = asRecord(bridge.diagnostics);
-    const cleanups: Array<() => void> = [];
-
-    if (isFn(workspaceApi?.subscribe)) {
-      const unsub = normalizeUnsubscribe(
-        workspaceApi.subscribe((signal: unknown) => {
-          if (!manualOpenRef.current) return;
-          if (manualOpenSyncRef.current) return;
-
-          manualOpenSyncRef.current = true;
-
-          void (async () => {
-            try {
-              const signalSeed = deriveWorkspaceSeed(signal);
-              const signalPreview = deriveLargePreview(signal);
-
-              const loadArg = compactRecord({
-                attached: true,
-                rootPath: firstString(
-                  signalSeed.rootPath,
-                  signalPreview?.workspacePath,
-                  signalPreview?.rootPath,
-                ),
-                path: firstString(
-                  signalSeed.rootPath,
-                  signalPreview?.workspacePath,
-                  signalPreview?.rootPath,
-                ),
-                workspacePath: firstString(
-                  signalSeed.rootPath,
-                  signalPreview?.workspacePath,
-                  signalPreview?.rootPath,
-                ),
-                directory: firstString(
-                  signalSeed.rootPath,
-                  signalPreview?.workspacePath,
-                  signalPreview?.rootPath,
-                ),
-                folderPath: firstString(
-                  signalSeed.rootPath,
-                  signalPreview?.workspacePath,
-                  signalPreview?.rootPath,
-                ),
-                selectedPath: firstString(
-                  signalSeed.selectedPath,
-                  signalPreview?.selectedPath,
-                  signalPreview?.path,
-                ),
-                workspaceId: firstString(
-                  signalSeed.workspaceId,
-                  signalSeed.diagnosticsWorkspaceId,
-                  signalPreview?.workspaceId,
-                  signalPreview?.diagnosticsWorkspaceId,
-                ),
-                diagnosticsWorkspaceId: firstString(
-                  signalSeed.diagnosticsWorkspaceId,
-                  signalSeed.workspaceId,
-                  signalPreview?.diagnosticsWorkspaceId,
-                  signalPreview?.workspaceId,
-                ),
-              });
-
-              const loaded =
-                isFn(workspaceApi?.load)
-                  ? await workspaceApi.load(
-                      Object.keys(loadArg).length > 0 ? loadArg : { attached: true },
-                    )
-                  : signal;
-
-              const outcome =
-                applyWorkspaceStateRef.current
-                  ? await applyWorkspaceStateRef.current(loadArg, loaded, signal, signalPreview)
-                  : "empty";
-
-              if (outcome === "attached") {
-                manualOpenRef.current = false;
-              }
-            } catch {
-              // authority stream reconciliation is best-effort
-            } finally {
-              manualOpenSyncRef.current = false;
-            }
-          })();
-        }),
-      );
-      if (unsub) cleanups.push(unsub);
-    }
-
-    if (isFn(diagnosticsApi?.subscribe)) {
-      const unsub = normalizeUnsubscribe(diagnosticsApi.subscribe(() => undefined));
-      if (unsub) cleanups.push(unsub);
-    }
-
-    return () => {
-      for (const cleanup of cleanups) cleanup();
-    };
+  const appendActivity = useCallback((title: string, message: string, level: ActivityItem["level"] = "info") => {
+    setActivity((items) => [
+      { id: `${Date.now()}-${Math.random()}`, title, message, level, atMs: Date.now() },
+      ...items,
+    ].slice(0, 80));
   }, []);
 
-  const hydrateGovernedSurfaces = useCallback(async (seed: AnyRecord) => {
-    const bridge = currentBridge();
+  const mergeWorkspaceState = useCallback((...inputs: unknown[]) => {
+    const nextRoot = collectRootPath(...inputs);
+    const nextPaths = collectFilePaths(...inputs);
+    const nextSelected = collectSelectedPath(...inputs);
+    const status = collectStatus(...inputs);
 
-    const diagnosticsApi = asRecord(bridge.diagnostics);
-    const verifyApi = asRecord(bridge.verify);
-    const ledgerApi = asRecord(bridge.ledger);
-    const patchApi = asRecord(bridge.patch);
-    const shellApi = asRecord(bridge.shell);
-    const agentApi = asRecord(bridge.agent);
-
-    if (isFn(diagnosticsApi?.load)) {
-      const diagnosticsArg = compactRecord({
-        workspaceId: firstString(seed.diagnosticsWorkspaceId, seed.workspaceId) ?? undefined,
-      });
-      const diagnostics = await diagnosticsApi.load(
-        Object.keys(diagnosticsArg).length > 0 ? diagnosticsArg : {},
-      );
-      setDiagnosticsSummary(deriveDiagnosticsSummary(diagnostics));
-    } else {
-      setDiagnosticsSummary(null);
-    }
-
-    if (seed.verifyId && isFn(verifyApi?.load)) {
-      await verifyApi.load({ verifyId: seed.verifyId });
-    }
-
-    if (seed.ledgerId && isFn(ledgerApi?.load)) {
-      await ledgerApi.load({ ledgerId: seed.ledgerId });
-    }
-
-    if (seed.patchId && isFn(patchApi?.load)) {
-      await patchApi.load({ patchId: seed.patchId });
-    }
-
-    if (isFn(shellApi?.status)) {
-      await shellApi.status();
-    }
-
-    if (isFn(agentApi?.connect)) {
-      await agentApi.connect();
-    }
+    setRootPath((existing) => nextRoot ?? existing);
+    setPaths((existing) => uniq([...existing, ...nextPaths]));
+    setSelectedPath((existing) => nextSelected ?? existing ?? nextPaths[0] ?? null);
+    setHealth(status.health);
+    setTrust(status.trust);
+    setPhase(status.phase);
   }, []);
 
-  const applyWorkspaceState = useCallback(async (...inputs: unknown[]) => {
-    const seed = deriveWorkspaceSeed(...inputs);
-    const directPreview = deriveLargePreview(...inputs);
-
-    const rememberedPreviewRecord =
-      asRecord(unwrapEnvelope(largePreviewRef.current)) ??
-      asRecord(largePreviewRef.current) ??
-      null;
-
-    const rememberedPreview =
-      deriveLargePreview(rememberedPreviewRecord) ??
-      rememberedPreviewRecord;
-
-    const harvestedPaths = uniq([
-      ...collectFilePaths(...inputs),
-      ...toStringArray(seed.openedPaths),
-      ...(seed.selectedPath ? [String(seed.selectedPath)] : []),
-    ]).filter(looksLikeFilePath);
-
-    const selectedPath =
-      typeof seed.selectedPath === "string" ? seed.selectedPath : null;
-
-    const rememberedPreviewPath = firstString(
-      rememberedPreview?.path,
-      rememberedPreview?.selectedPath,
-    );
-
-    const previewPathMatchesSelection =
-      typeof rememberedPreviewPath === "string" &&
-      (
-        rememberedPreviewPath === selectedPath ||
-        harvestedPaths.includes(rememberedPreviewPath) ||
-        (typeof seed.rootPath === "string" &&
-          rememberedPreviewPath.startsWith(String(seed.rootPath)))
-      );
-
-    const serializedInputs = inputs
-      .map((input) => {
-        try {
-          return JSON.stringify(unwrapEnvelope(input) ?? input);
-        } catch {
-          return "";
-        }
-      })
-      .join(" ")
-      .toLowerCase();
-
-    const rawGuardSignal =
-      /large|preview|read-?only|guard|oversiz|truncat|degrad/.test(serializedInputs);
-
-    const stickyPreview =
-      directPreview ??
-      (previewPathMatchesSelection
-        ? compactRecord({
-            path: firstString(
-              rememberedPreview?.path,
-              rememberedPreview?.selectedPath,
-              selectedPath,
-              "Large file preview",
-            ),
-            selectedPath: firstString(
-              rememberedPreview?.selectedPath,
-              rememberedPreview?.path,
-              selectedPath,
-              "Large file preview",
-            ),
-            preview: firstString(
-              rememberedPreview?.preview,
-              rememberedPreview?.text,
-              rememberedPreview?.content,
-              rememberedPreview?.snippet,
-            ),
-            reason: firstString(
-              rememberedPreview?.reason,
-              rememberedPreview?.message,
-              "Large file preview",
-            ),
-            workspaceId: firstString(
-              seed.workspaceId,
-              seed.diagnosticsWorkspaceId,
-              rememberedPreview?.workspaceId,
-              rememberedPreview?.diagnosticsWorkspaceId,
-            ),
-            diagnosticsWorkspaceId: firstString(
-              seed.diagnosticsWorkspaceId,
-              seed.workspaceId,
-              rememberedPreview?.diagnosticsWorkspaceId,
-              rememberedPreview?.workspaceId,
-            ),
-            previewOnly: true,
-            readOnly: true,
-            degraded: true,
-          })
-        : null) ??
-      (rawGuardSignal && selectedPath
-        ? compactRecord({
-            path: firstString(selectedPath, "Large file preview"),
-            selectedPath: firstString(selectedPath, "Large file preview"),
-            preview: firstString(
-              rememberedPreview?.preview,
-              rememberedPreview?.text,
-              rememberedPreview?.content,
-              rememberedPreview?.snippet,
-            ),
-            reason: firstString(
-              directPreview?.reason,
-              rememberedPreview?.reason,
-              "Large file preview",
-            ),
-            workspaceId: firstString(
-              seed.workspaceId,
-              seed.diagnosticsWorkspaceId,
-              rememberedPreview?.workspaceId,
-              rememberedPreview?.diagnosticsWorkspaceId,
-            ),
-            diagnosticsWorkspaceId: firstString(
-              seed.diagnosticsWorkspaceId,
-              seed.workspaceId,
-              rememberedPreview?.diagnosticsWorkspaceId,
-              rememberedPreview?.workspaceId,
-            ),
-            previewOnly: true,
-            readOnly: true,
-            degraded: true,
-          })
-        : null);
-
-    const normalizedSelectedPath =
-      seed.rootPath &&
-      selectedPath &&
-      !String(selectedPath).startsWith(String(seed.rootPath))
-        ? null
-        : selectedPath;
-
-    const meaningful = hasMeaningfulSeed(seed, stickyPreview, harvestedPaths);
-
-    setRootPath(typeof seed.rootPath === "string" ? seed.rootPath : null);
-    setSelectedPath(normalizedSelectedPath);
-    setPaths(harvestedPaths);
-    setLargePreview(stickyPreview);
-
-    if (!meaningful) {
-      setDiagnosticsSummary(null);
-      return "empty" as const;
-    }
-
-    const governedSeed =
-      stickyPreview == null
-        ? seed
-        : compactRecord({
-            ...seed,
-            attached: true,
-            workspaceId: firstString(
-              seed.workspaceId,
-              seed.diagnosticsWorkspaceId,
-              stickyPreview.workspaceId,
-              stickyPreview.diagnosticsWorkspaceId,
-            ),
-            diagnosticsWorkspaceId: firstString(
-              seed.diagnosticsWorkspaceId,
-              seed.workspaceId,
-              stickyPreview.diagnosticsWorkspaceId,
-              stickyPreview.workspaceId,
-            ),
-            selectedPath: firstString(
-              seed.selectedPath,
-              stickyPreview.selectedPath,
-              stickyPreview.path,
-            ),
-          });
-
-    await hydrateGovernedSurfaces(governedSeed);
-    setErrorMessage(null);
-    return "attached" as const;
-  }, [hydrateGovernedSurfaces]);
-  useEffect(() => {
-    applyWorkspaceStateRef.current = applyWorkspaceState;
-  }, [applyWorkspaceState]);
-
-  const loadWorkspace = useCallback(async (
-    context: LoadContext,
-    seedInputs: unknown[],
-    explicitArg?: AnyRecord,
-  ): Promise<LoadOutcome> => {
+  const refreshWorkspace = useCallback(async () => {
     const bridge = currentBridge();
-    const workspaceApi = asRecord(bridge.workspace);
-
-    const seed = deriveWorkspaceSeed(explicitArg, ...seedInputs);
-    const preview = deriveLargePreview(explicitArg, ...seedInputs);
-    const harvestedPaths = collectFilePaths(explicitArg, ...seedInputs);
-    const arg =
-      explicitArg ??
-      (hasMeaningfulSeed(seed, preview, harvestedPaths) ? seed : {});
-
-    if (!isFn(workspaceApi?.load)) {
-      try {
-        const resolvedWorkspaceIdentity = firstString(
-          seed.workspaceId,
-          seed.diagnosticsWorkspaceId,
-          preview?.workspaceId,
-          preview?.diagnosticsWorkspaceId,
-        );
-        setWorkspaceIdentity(resolvedWorkspaceIdentity ?? null);
-        return await applyWorkspaceState(arg, preview, ...seedInputs);
-      } catch (error) {
-        setWorkspaceIdentity(null);
-        setErrorMessage(describeLoadError(context, error));
-        return "error";
-      }
-    }
+    const snapshots: unknown[] = [];
 
     try {
-      const loaded = await workspaceApi.load(arg);
-      const loadedSeed = deriveWorkspaceSeed(arg, loaded, ...seedInputs);
-      const loadedPreview = deriveLargePreview(arg, loaded, preview, ...seedInputs);
-      const resolvedWorkspaceIdentity = firstString(
-        loadedSeed.workspaceId,
-        loadedSeed.diagnosticsWorkspaceId,
-        seed.workspaceId,
-        seed.diagnosticsWorkspaceId,
-        loadedPreview?.workspaceId,
-        loadedPreview?.diagnosticsWorkspaceId,
-        preview?.workspaceId,
-        preview?.diagnosticsWorkspaceId,
-      );
-      setWorkspaceIdentity(resolvedWorkspaceIdentity ?? null);
-      return await applyWorkspaceState(arg, loaded, preview, ...seedInputs);
+      if (isFn(bridge.runtime?.snapshot)) snapshots.push(await bridge.runtime.snapshot());
+      if (isFn(bridge.workspace?.health)) snapshots.push(await bridge.workspace.health());
+      mergeWorkspaceState(...snapshots);
+      appendActivity("Workspace refreshed", "Runtime and workspace posture updated.", "success");
+      setLastError(null);
     } catch (error) {
-      setWorkspaceIdentity(null);
-      setRootPath(null);
-      setSelectedPath(null);
-      setPaths([]);
-      setLargePreview(null);
-      setDiagnosticsSummary(null);
-      setErrorMessage(describeLoadError(context, error));
-      return "error";
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+      appendActivity("Workspace refresh failed", message, "error");
     }
-  }, [applyWorkspaceState]);
-
-  const boot = useCallback(async () => {
-    if (manualOpenRef.current) return;
-
-    const bridge = currentBridge();
-    const sessionApi = asRecord(bridge.session);
-    const runtimeApi = asRecord(bridge.runtime);
-
-    if (isFn(sessionApi?.restore)) {
-      const restored = await sessionApi.restore();
-      if (manualOpenRef.current) return;
-
-      if (restored && !isExplicitCancel(restored)) {
-        const outcome = await loadWorkspace("restore", [restored]);
-        if (outcome === "attached" || outcome === "error") return;
-      }
-    }
-
-    if (manualOpenRef.current) return;
-
-    if (isFn(runtimeApi?.snapshot)) {
-      const runtimeSnapshot = await runtimeApi.snapshot();
-      if (manualOpenRef.current) return;
-
-      const runtimeSeed = deriveWorkspaceSeed(runtimeSnapshot);
-      const runtimePreview = deriveLargePreview(runtimeSnapshot);
-      const runtimePaths = collectFilePaths(runtimeSnapshot);
-
-      if (hasMeaningfulSeed(runtimeSeed, runtimePreview, runtimePaths)) {
-        const outcome = await loadWorkspace("boot", [runtimeSnapshot]);
-        if (outcome === "attached" || outcome === "error") return;
-      }
-    }
-
-    if (manualOpenRef.current) return;
-    await loadWorkspace("boot", [{}], {});
-  }, [loadWorkspace]);
+  }, [appendActivity, mergeWorkspaceState]);
 
   const openWorkspace = useCallback(async () => {
-    const initialBridge = currentBridge();
-    const initialWorkspaceApi = asRecord(initialBridge.workspace);
-    if (!isFn(initialWorkspaceApi?.open)) return;
+    const bridge = currentBridge();
+    if (!isFn(bridge.workspace?.open)) {
+      appendActivity("Open workspace unavailable", "The preload bridge does not expose workspace.open.", "warn");
+      return;
+    }
 
-    manualOpenRef.current = true;
+    const candidateRoot = rootPath;
+    if (!candidateRoot) {
+      appendActivity("Workspace path required", "Open a root from startup/env first, then the renderer can bind it through the governed bridge.", "warn");
+      return;
+    }
 
     try {
-      const opened = await initialWorkspaceApi.open();
-      const openedRecord = asRecord(unwrapEnvelope(opened)) ?? asRecord(opened);
-
-      const explicitlyCancelled =
-        openedRecord?.cancelled === true ||
-        openedRecord?.canceled === true ||
-        openedRecord?.aborted === true ||
-        openedRecord?.dismissed === true;
-
-      if (explicitlyCancelled) return;
-
-      await Promise.resolve();
-
-      const refreshedBridge = currentBridge();
-      const refreshedWorkspaceApi = asRecord(refreshedBridge.workspace);
-      const loadFn =
-        isFn(refreshedWorkspaceApi?.load)
-          ? refreshedWorkspaceApi.load.bind(refreshedWorkspaceApi)
-          : isFn(initialWorkspaceApi?.load)
-            ? initialWorkspaceApi.load.bind(initialWorkspaceApi)
-            : null;
-
-      const openedRoot = firstString(
-        typeof opened === "string" ? opened : null,
-        openedRecord?.rootPath,
-        openedRecord?.workspacePath,
-        openedRecord?.directory,
-        openedRecord?.folderPath,
-        openedRecord?.path,
-      );
-
-      const openedSelectedPath = firstString(
-        openedRecord?.selectedPath,
-        openedRecord?.path,
-      );
-
-      const openedWorkspaceId = firstString(
-        openedRecord?.workspaceId,
-        openedRecord?.diagnosticsWorkspaceId,
-      );
-
-      const openedDiagnosticsWorkspaceId = firstString(
-        openedRecord?.diagnosticsWorkspaceId,
-        openedRecord?.workspaceId,
-      );
-
-      const openedSnapshot = compactRecord({
-        attached: true,
-        rootPath: openedRoot,
-        path: openedRoot,
-        workspacePath: openedRoot,
-        directory: openedRoot,
-        folderPath: openedRoot,
-        selectedPath: openedSelectedPath,
-        workspaceId: openedWorkspaceId,
-        diagnosticsWorkspaceId: openedDiagnosticsWorkspaceId,
+      const opened = await bridge.workspace.open({
+        schema: 1,
+        actor: "renderer",
+        source: "ipc",
+        rootPath: candidateRoot,
+        workspacePath: candidateRoot,
       });
-
-      const loaded = loadFn ? await loadFn(openedSnapshot) : undefined;
-
-      const seed = deriveWorkspaceSeed(openedSnapshot, loaded, opened);
-      const preview = deriveLargePreview(openedSnapshot, loaded, opened) ?? null;
-
-      const rootPath = firstString(
-        seed.rootPath,
-        openedSnapshot.rootPath,
-        openedRoot,
-      );
-
-      const selectedPath = firstString(
-        seed.selectedPath,
-        preview?.selectedPath,
-        preview?.path,
-        openedSnapshot.selectedPath,
-      );
-
-      const workspaceId = firstString(
-        seed.workspaceId,
-        seed.diagnosticsWorkspaceId,
-        openedSnapshot.workspaceId,
-        openedSnapshot.diagnosticsWorkspaceId,
-        preview?.workspaceId,
-        preview?.diagnosticsWorkspaceId,
-      );
-
-      const diagnosticsWorkspaceId = firstString(
-        seed.diagnosticsWorkspaceId,
-        seed.workspaceId,
-        openedSnapshot.diagnosticsWorkspaceId,
-        openedSnapshot.workspaceId,
-        preview?.diagnosticsWorkspaceId,
-        preview?.workspaceId,
-      );
-
-      const harvestedPaths = uniq([
-        ...collectFilePaths(openedSnapshot, loaded, opened, preview),
-        ...toStringArray(seed.openedPaths),
-        ...(selectedPath ? [selectedPath] : []),
-      ]).filter(looksLikeFilePath);
-
-      const normalizedSelectedPath =
-        rootPath &&
-        selectedPath &&
-        !String(selectedPath).startsWith(String(rootPath))
-          ? null
-          : selectedPath;
-
-      const normalizedPreview =
-        preview == null
-          ? null
-          : compactRecord({
-              ...preview,
-              path: firstString(
-                preview.path,
-                preview.selectedPath,
-                normalizedSelectedPath,
-                "Large file preview",
-              ),
-              selectedPath: firstString(
-                preview.selectedPath,
-                preview.path,
-                normalizedSelectedPath,
-                "Large file preview",
-              ),
-              workspaceId: firstString(
-                preview.workspaceId,
-                preview.diagnosticsWorkspaceId,
-                workspaceId,
-                diagnosticsWorkspaceId,
-              ),
-              diagnosticsWorkspaceId: firstString(
-                preview.diagnosticsWorkspaceId,
-                preview.workspaceId,
-                diagnosticsWorkspaceId,
-                workspaceId,
-              ),
-            });
-
-      const governedSeed = compactRecord({
-        ...seed,
-        attached: true,
-        rootPath,
-        selectedPath: normalizedSelectedPath,
-        workspaceId,
-        diagnosticsWorkspaceId,
-      });
-
-      if (!hasMeaningfulSeed(governedSeed, normalizedPreview, harvestedPaths)) {
-        throw new Error("workspace open returned no attached workspace");
-      }
-
-      setWorkspaceIdentity(firstString(workspaceId, diagnosticsWorkspaceId) ?? null);
-      setRootPath(typeof rootPath === "string" ? rootPath : null);
-      setSelectedPath(normalizedSelectedPath);
-      setPaths(harvestedPaths);
-      setLargePreview(normalizedPreview);
-      await hydrateGovernedSurfaces(governedSeed);
-      setErrorMessage(null);
+      mergeWorkspaceState(opened);
+      await refreshWorkspace();
+      appendActivity("Workspace opened", candidateRoot, "success");
     } catch (error) {
-      setWorkspaceIdentity(null);
-      setRootPath(null);
-      setSelectedPath(null);
-      setPaths([]);
-      setLargePreview(null);
-      setDiagnosticsSummary(null);
-      setErrorMessage(describeLoadError("open", error));
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+      appendActivity("Workspace open failed", message, "error");
     }
-  }, [hydrateGovernedSurfaces]);
+  }, [appendActivity, mergeWorkspaceState, refreshWorkspace, rootPath]);
 
-  const selectFile = useCallback(async (path: string) => {
-    setSelectedPath(path);
+  const openFile = useCallback(async (path: string) => {
+    if (!path) return;
+    const clean = cleanPath(path);
+    setSelectedPath(clean);
+    setOpenedPaths((existing) => uniq([...existing, clean]));
+    appendActivity("File opened", relativeToRoot(clean, rootPath), "success");
 
     const bridge = currentBridge();
     const workspaceApi = asRecord(bridge.workspace);
 
-    const previewRecord = asRecord(unwrapEnvelope(largePreview)) ?? asRecord(largePreview) ?? {};
-    const previewWorkspace = asRecord(previewRecord.workspace) ?? {};
+    if (isFn(workspaceApi?.readFile)) {
+      try {
+        const read = await workspaceApi.readFile({ schema: 1, actor: "renderer", path: clean });
+        const text = extractReadableContent(read);
+        setFileContents((existing) => ({
+          ...existing,
+          [clean]: text ?? "Preview unavailable: workspace.readFile returned no renderer-readable text payload.",
+        }));
+        setLastError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setFileContents((existing) => ({ ...existing, [clean]: `Read failed: ${message}` }));
+        setLastError(message);
+      }
+      return;
+    }
 
-    const resolvedWorkspaceIdentity = firstString(
-      workspaceIdentity,
-      previewRecord.workspaceId,
-      previewRecord.diagnosticsWorkspaceId,
-      previewWorkspace.workspaceId,
-      previewWorkspace.diagnosticsWorkspaceId,
-    );
+    setFileContents((existing) => ({
+      ...existing,
+      [clean]: "Preview unavailable: this bridge has no workspace.readFile capability.",
+    }));
+  }, [appendActivity, rootPath]);
 
-    const selectionArg = compactRecord({
-      path,
-      workspaceId: resolvedWorkspaceIdentity,
-    });
-
-    const stickyPreview = deriveLargePreview(largePreview) ?? compactRecord({
-      path,
-      selectedPath: path,
-      workspaceId: resolvedWorkspaceIdentity,
-      diagnosticsWorkspaceId: resolvedWorkspaceIdentity,
-      previewOnly: true,
-      readOnly: true,
-      degraded: true,
-      reason: "Large file preview",
-    });
+  const revealSelected = useCallback(async () => {
+    if (!selectedPath) return;
+    const bridge = currentBridge();
+    if (!isFn(bridge.workspace?.reveal)) {
+      appendActivity("Reveal unavailable", "The preload bridge does not expose workspace.reveal.", "warn");
+      return;
+    }
 
     try {
-      const result =
-        isFn(workspaceApi?.selectPath)
-          ? await workspaceApi.selectPath(selectionArg)
-          : isFn(workspaceApi?.reveal)
-            ? await workspaceApi.reveal(selectionArg)
-            : undefined;
-
-      const nextSeed = deriveWorkspaceSeed(result, selectionArg, stickyPreview);
-      const nextPreview = deriveLargePreview(result, stickyPreview) ?? stickyPreview;
-      const nextPaths = uniq([
-        ...paths,
-        path,
-        ...collectFilePaths(result),
-        ...toStringArray(nextSeed.openedPaths),
-      ]).filter(looksLikeFilePath);
-
-      const nextRootPath =
-        typeof nextSeed.rootPath === "string"
-          ? nextSeed.rootPath
-          : rootPath;
-
-      const nextSelectedPath =
-        nextRootPath &&
-        typeof nextSeed.selectedPath === "string" &&
-        !String(nextSeed.selectedPath).startsWith(String(nextRootPath))
-          ? path
-          : firstString(nextSeed.selectedPath, path) ?? path;
-
-      const nextIdentity = firstString(
-        nextSeed.workspaceId,
-        nextSeed.diagnosticsWorkspaceId,
-        nextPreview?.workspaceId,
-        nextPreview?.diagnosticsWorkspaceId,
-        resolvedWorkspaceIdentity,
-      );
-
-      setWorkspaceIdentity(nextIdentity ?? null);
-      setRootPath(nextRootPath);
-      setSelectedPath(nextSelectedPath);
-      setPaths(nextPaths);
-      setLargePreview(nextPreview);
-      setErrorMessage(null);
-    } catch {
-      setLargePreview(stickyPreview);
+      await bridge.workspace.reveal({ schema: 1, actor: "renderer", targetPath: selectedPath });
+      appendActivity("Revealed in Finder", relativeToRoot(selectedPath, rootPath), "success");
+    } catch (error) {
+      appendActivity("Reveal failed", error instanceof Error ? error.message : String(error), "error");
     }
-  }, [largePreview, paths, rootPath, workspaceIdentity]);
+  }, [appendActivity, rootPath, selectedPath]);
+
+  const runGovernedAction = useCallback(async (label: string, action: () => Promise<unknown>) => {
+    setActionStatus(`${label}: running`);
+    appendActivity(label, "Started governed bridge action.", "info");
+
+    try {
+      const result = await action();
+      const summary = summarizeResult(result);
+      setActionStatus(`${label}: ${summary}`);
+      appendActivity(label, summary, asRecord(result)?.ok === false ? "warn" : "success");
+      await refreshWorkspace();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setActionStatus(`${label}: ${message}`);
+      appendActivity(label, message, "error");
+    }
+  }, [appendActivity, refreshWorkspace]);
 
   useEffect(() => {
-    void boot();
-  }, [boot]);
+    void refreshWorkspace();
+  }, [refreshWorkspace]);
 
-  useEffect(() => subscribeStreams(), [subscribeStreams]);
+  useEffect(() => {
+    const bridge = currentBridge();
+    const subscriptions: Array<() => void> = [];
+
+    const bind = (api: any, title: string) => {
+      const subscribe = api?.events?.subscribe ?? api?.subscribe;
+      if (!isFn(subscribe)) return;
+
+      const subscription = subscribe((payload: unknown) => {
+        mergeWorkspaceState(payload);
+        appendActivity(title, "Renderer event received and folded into the workbench.", "info");
+      });
+
+      if (isFn(subscription)) subscriptions.push(subscription);
+      else if (isFn(subscription?.unsubscribe)) subscriptions.push(() => subscription.unsubscribe());
+    };
+
+    bind(bridge.workspace, "Workspace event");
+    bind(bridge.patch, "Patch event");
+    bind(bridge.verify, "Verify event");
+    bind(bridge.agent, "Agent event");
+    bind(bridge.diagnostics, "Diagnostics event");
+
+    return () => {
+      for (const unsubscribe of subscriptions) unsubscribe();
+    };
+  }, [appendActivity, mergeWorkspaceState]);
+
+  const filteredPaths = useMemo(() => {
+    const query = treeQuery.trim().toLowerCase();
+    if (!query) return paths;
+    return paths.filter((path) => relativeToRoot(path, rootPath).toLowerCase().includes(query));
+  }, [paths, rootPath, treeQuery]);
+
+  const workspaceEntries = useMemo(() => toWorkspaceEntries(rootPath, filteredPaths), [filteredPaths, rootPath]);
+  const activeContent = selectedPath ? fileContents[selectedPath] ?? "Select a file to load its governed preview." : "No file selected.";
+  const capabilities = useMemo(() => {
+    const bridge = currentBridge();
+    const listed = isFn(bridge.compatibility?.listCapabilities)
+      ? bridge.compatibility.listCapabilities()
+      : Array.isArray(bridge.manifest?.capabilities)
+        ? bridge.manifest.capabilities
+        : [];
+    return Array.isArray(listed) ? listed : [];
+  }, [activity.length, phase]);
+
+  const shellAvailable = capabilities.some((capability: string) => /shell|terminal|command/.test(capability));
+
+  const commands = useMemo(() => [
+    {
+      id: "open-workspace",
+      title: "Open governed workspace",
+      subtitle: rootPath ? relativeToRoot(rootPath, rootPath) || rootPath : "No root path currently bound",
+      category: "workspace",
+      scope: "workspace",
+      risk: "safe",
+      enabled: Boolean(rootPath),
+      enabledReason: rootPath ? "Root path available" : "No root path",
+      icon: "folder",
+      keywords: ["open", "workspace"],
+    },
+    {
+      id: "refresh-workspace",
+      title: "Refresh workspace",
+      subtitle: "Reload runtime and workspace posture",
+      category: "workspace",
+      scope: "workspace",
+      risk: "safe",
+      enabled: true,
+      icon: "system",
+      keywords: ["refresh", "workspace"],
+    },
+    {
+      id: "focus-search",
+      title: "Focus workspace search",
+      subtitle: "Filter file tree and open visible results",
+      category: "navigation",
+      scope: "workspace",
+      risk: "safe",
+      enabled: true,
+      icon: "search",
+      keywords: ["search", "file"],
+    },
+    {
+      id: "reveal-selected",
+      title: "Reveal selected file",
+      subtitle: selectedPath ? relativeToRoot(selectedPath, rootPath) : "No selected file",
+      category: "workspace",
+      scope: "selection",
+      risk: "safe",
+      enabled: Boolean(selectedPath),
+      icon: "file",
+      keywords: ["reveal", "finder"],
+    },
+    {
+      id: "run-verify",
+      title: "Run verify on selected target",
+      subtitle: selectedPath ? relativeToRoot(selectedPath, rootPath) : "Workspace-level verification",
+      category: "verify",
+      scope: "verify",
+      risk: "guarded",
+      enabled: isFn(currentBridge().verify?.run),
+      icon: "verify",
+      keywords: ["verify", "test"],
+    },
+    {
+      id: "terminal-unavailable",
+      title: shellAvailable ? "Open terminal" : "Terminal unavailable",
+      subtitle: shellAvailable ? "Shell capability detected" : "No shell command bridge is exposed; no fake terminal is mounted",
+      category: "terminal",
+      scope: "job",
+      risk: "guarded",
+      enabled: shellAvailable,
+      icon: "terminal",
+      keywords: ["terminal", "shell", "command"],
+    },
+  ], [rootPath, selectedPath, shellAvailable]);
+
+  const runCommand = useCallback((command: any) => {
+    setCommandPaletteOpen(false);
+
+    if (command.id === "open-workspace") void openWorkspace();
+    if (command.id === "refresh-workspace") void refreshWorkspace();
+    if (command.id === "focus-search") searchRef.current?.focus();
+    if (command.id === "reveal-selected") void revealSelected();
+    if (command.id === "run-verify") {
+      const bridge = currentBridge();
+      void runGovernedAction("Verify run", () => bridge.verify.run({
+        schema: 1,
+        actor: "renderer",
+        targets: selectedPath ? [selectedPath] : [],
+      }));
+    }
+    if (command.id === "terminal-unavailable") {
+      appendActivity("Terminal unavailable", "No shell command capability is exposed by the bridge, so this surface remains disabled instead of fake.", "warn");
+    }
+  }, [appendActivity, openWorkspace, refreshWorkspace, revealSelected, runGovernedAction, selectedPath]);
+
+  const workspaceContent = (
+    <div className="grid h-full min-h-[42rem] grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] gap-5">
+      <FileTreePane
+        rootPath={rootPath}
+        entries={workspaceEntries}
+        selectedPath={selectedPath}
+        openedPaths={openedPaths}
+        filterQuery={treeQuery}
+        health={health}
+        showHidden
+        showIgnored={false}
+        onFilterQueryChange={setTreeQuery}
+        onRefreshRequested={refreshWorkspace}
+        onPathSelected={(path: string) => setSelectedPath(cleanPath(path))}
+        onOpenPath={(path: string) => void openFile(path)}
+        onRevealPathRequested={(path: string) => {
+          setSelectedPath(cleanPath(path));
+          void revealSelected();
+        }}
+      />
+
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-[1.5rem] border border-zinc-800 bg-zinc-900/70 px-4 py-3">
+          <input
+            ref={searchRef}
+            aria-label="Workspace search"
+            className="min-w-[18rem] flex-1 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-600"
+            placeholder="Search workspace files"
+            value={treeQuery}
+            onChange={(event) => setTreeQuery(event.currentTarget.value)}
+          />
+          <button
+            type="button"
+            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900"
+            onClick={() => {
+              const first = filteredPaths[0];
+              if (first) void openFile(first);
+            }}
+          >
+            Open first result
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-900"
+            onClick={revealSelected}
+            disabled={!selectedPath}
+          >
+            Reveal selected
+          </button>
+        </div>
+
+        <MonacoEditorPane
+          path={selectedPath}
+          title={selectedPath ? basename(selectedPath) : "No file selected"}
+          language={languageFromPath(selectedPath)}
+          baselineContent={activeContent}
+          workingContent={activeContent}
+          currentValue={activeContent}
+          value={activeContent}
+          readOnly
+          modified={false}
+          trustLevel={trust}
+          reviewState="none"
+          contentSource="working"
+          showMinimap
+          wordWrap="off"
+          fontSize={13}
+          diagnostics={[]}
+          onSearchRequested={() => searchRef.current?.focus()}
+        />
+      </div>
+    </div>
+  );
+
+  const rightRail = (
+    <div className="space-y-4 p-5">
+      <WorkbenchCard title="Operator context" eyebrow="Selected">
+        <div className="space-y-3 text-sm text-zinc-300">
+          <div>
+            <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Workspace</div>
+            <div className="mt-1 break-words text-zinc-100">{rootPath ?? "No workspace root bound"}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">File</div>
+            <div className="mt-1 break-words text-zinc-100">{selectedPath ? relativeToRoot(selectedPath, rootPath) : "No file selected"}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Files</div>
+              <div className="mt-1 text-lg font-semibold text-zinc-50">{paths.length}</div>
+            </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Opened</div>
+              <div className="mt-1 text-lg font-semibold text-zinc-50">{openedPaths.length}</div>
+            </div>
+          </div>
+        </div>
+      </WorkbenchCard>
+
+      <WorkbenchCard title="Action state" eyebrow="Live">
+        <p className="text-sm leading-7 text-zinc-300">{actionStatus}</p>
+        {lastError ? <p className="mt-3 rounded-2xl border border-rose-800 bg-rose-500/10 p-3 text-sm text-rose-200">{lastError}</p> : null}
+      </WorkbenchCard>
+
+      <WorkbenchCard title="Recent activity" eyebrow="Stream">
+        <div className="max-h-72 space-y-2 overflow-auto">
+          {activity.length === 0 ? (
+            <p className="text-sm text-zinc-400">No activity yet.</p>
+          ) : (
+            activity.slice(0, 8).map((item) => (
+              <div key={item.id} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <div className="text-sm font-semibold text-zinc-100">{item.title}</div>
+                <div className="mt-1 text-xs leading-5 text-zinc-400">{item.message}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </WorkbenchCard>
+    </div>
+  );
+
+  const actionWorkflow = (view: string) => {
+    const bridge = currentBridge();
+
+    if (view === "patch") {
+      return (
+        <WorkbenchCard title="Patch workflow" eyebrow="Action surface">
+          <div className="space-y-4">
+            <p className="text-sm leading-7 text-zinc-400">Patch preview is explicit. Approval and apply remain blocked until a real preview hash is returned.</p>
+            <button
+              type="button"
+              className="rounded-2xl border border-emerald-700/50 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200"
+              disabled={!selectedPath || !isFn(bridge.patch?.preview)}
+              onClick={() => runGovernedAction("Patch preview", () => bridge.patch.preview({
+                schema: 1,
+                actor: "renderer",
+                prompt: "Review selected file and propose a governed patch.",
+                targetPaths: selectedPath ? [selectedPath] : [],
+              }))}
+            >
+              Preview patch for selected file
+            </button>
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    if (view === "verify") {
+      return (
+        <WorkbenchCard title="Verification workflow" eyebrow="Action surface">
+          <div className="space-y-4">
+            <p className="text-sm leading-7 text-zinc-400">Run verification through the governed bridge. Evidence is summarized, not dumped as raw payload.</p>
+            <button
+              type="button"
+              className="rounded-2xl border border-emerald-700/50 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200"
+              disabled={!isFn(bridge.verify?.run)}
+              onClick={() => runGovernedAction("Verify run", () => bridge.verify.run({
+                schema: 1,
+                actor: "renderer",
+                targets: selectedPath ? [selectedPath] : [],
+              }))}
+            >
+              Run verify
+            </button>
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    if (view === "ledger") {
+      return (
+        <WorkbenchCard title="Ledger workflow" eyebrow="Action surface">
+          <div className="space-y-4">
+            <p className="text-sm leading-7 text-zinc-400">Ledger is a navigable history surface. Raw event payloads stay out of the default UI.</p>
+            <button
+              type="button"
+              className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-medium text-zinc-100"
+              disabled={!isFn(bridge.ledger?.timeline)}
+              onClick={() => runGovernedAction("Ledger timeline", () => bridge.ledger.timeline({ limit: 50, reverse: true }))}
+            >
+              Refresh timeline
+            </button>
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    if (view === "agent") {
+      return (
+        <WorkbenchCard title="Agent control" eyebrow="Action surface">
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Agent health", () => bridge.agent.health())}>Health</button>
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Agent start", () => bridge.agent.start({ schema: 1, actor: "renderer", reason: "operator requested start" }))}>Start</button>
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Agent stop", () => bridge.agent.stop({ schema: 1, actor: "renderer", reason: "operator requested stop" }))}>Stop</button>
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    if (view === "diagnostics") {
+      return (
+        <WorkbenchCard title="Diagnostics workflow" eyebrow="Action surface">
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Diagnostics runtime", () => bridge.diagnostics.runtime())}>Runtime</button>
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Diagnostics startup", () => bridge.diagnostics.startup())}>Startup</button>
+            <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => runGovernedAction("Diagnostics log tail", () => bridge.diagnostics.logTail({ target: "main", lines: 80 }))}>Tail logs</button>
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    if (view === "activity") {
+      return (
+        <WorkbenchCard title="Activity stream" eyebrow="Events">
+          <div className="space-y-3">
+            {activity.length === 0 ? <p className="text-sm text-zinc-400">No activity has been recorded.</p> : activity.map((item) => (
+              <div key={item.id} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+                <div className="text-sm font-semibold text-zinc-100">{item.title}</div>
+                <div className="mt-1 text-sm text-zinc-400">{item.message}</div>
+              </div>
+            ))}
+          </div>
+        </WorkbenchCard>
+      );
+    }
+
+    return workspaceContent;
+  };
 
   return (
-    <div className="adjutorix-app">
-      <header className="app-header">
-        <div>
-          <h1>ADJUTORIX</h1>
-          <p>Deterministic operator workspace for governed patching, replay, verification, and authority-aware execution.</p>
+    <AppShell
+      appTitle="Adjutorix"
+      subtitle="Live governed workspace"
+      health={/healthy|ready/i.test(health) ? "healthy" : /degraded|restricted|warning/i.test(health) ? "degraded" : /failed|error|unhealthy/i.test(health) ? "unhealthy" : "unknown"}
+      currentView={currentView}
+      commandPaletteOpen={commandPaletteOpen}
+      leftRailCollapsed
+      rightRailCollapsed={false}
+      bottomPanelVisible={currentView === "workspace"}
+      statusChips={[
+        { label: "Phase", value: phase, tone: /ready/i.test(phase) ? "good" : "neutral" },
+        { label: "Workspace", value: rootPath ? basename(rootPath) : "none", tone: rootPath ? "good" : "warn" },
+        { label: "Files", value: String(paths.length), tone: paths.length > 0 ? "good" : "warn" },
+        { label: "Trust", value: trust, tone: /trusted/i.test(trust) ? "good" : /restricted|unknown/i.test(trust) ? "warn" : "bad" },
+      ]}
+      navItems={[
+        { key: "workspace", label: "Workspace" },
+        { key: "patch", label: "Patch" },
+        { key: "verify", label: "Verify" },
+        { key: "ledger", label: "Ledger" },
+        { key: "agent", label: "Agent" },
+        { key: "diagnostics", label: "Diagnostics" },
+        { key: "activity", label: "Activity", badge: activity.length || null },
+      ]}
+      onSelectView={(view) => setCurrentView(view)}
+      onToggleCommandPalette={() => setCommandPaletteOpen((open) => !open)}
+      headerActions={
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={openWorkspace}>Open workspace</button>
+          <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={refreshWorkspace}>Refresh</button>
+          <button type="button" className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100" onClick={() => setCommandPaletteOpen(true)}>Commands</button>
         </div>
-        <div className="app-header-meta">
-          <button type="button" onClick={openWorkspace}>
-            Open Command Surface
-          </button>
-          <button type="button">Provider Online</button>
+      }
+      primaryContent={currentView === "workspace" ? workspaceContent : actionWorkflow(currentView)}
+      rightRail={rightRail}
+      bottomPanel={
+        <div className="h-full p-4">
+          <TerminalPanel
+            title="Terminal"
+            subtitle={shellAvailable ? "Governed shell bridge detected" : "No shell bridge exposed; disabled rather than fake"}
+            health={shellAvailable ? "healthy" : "degraded"}
+            trustLevel={trust}
+            shellStatus={shellAvailable ? "ready" : "unavailable"}
+            runState="idle"
+            cwd={rootPath}
+            commandInput={terminalInput}
+            onCommandInputChange={setTerminalInput}
+            canRun={false}
+            canCancel={false}
+            canClear
+            onClearRequested={() => setTerminalInput("")}
+            history={[
+              {
+                id: "terminal-boundary",
+                kind: "system",
+                text: shellAvailable
+                  ? "Shell capability detected. Bind command runner before enabling execution."
+                  : "Terminal execution is unavailable because the exposed bridge has no shell/terminal/command capability.",
+                atMs: Date.now(),
+                severity: shellAvailable ? "info" : "warn",
+              },
+            ]}
+          />
         </div>
-      </header>
-
-      <main className="app-main">
-        <section className="app-panel">
-          <h2>Workspace Command Surface</h2>
-
-          {errorMessage ? (
-            <p>{errorMessage}</p>
-          ) : rootPath ? (
-            <p>Attached workspace: {rootPath}</p>
-          ) : (
-            <p>No workspace attached.</p>
-          )}
-
-          {selectedPath ? <p>Selected path: {selectedPath}</p> : null}
-
-          {fileButtons.length > 0 ? (
-            <section>
-              <h2>Open Files</h2>
-              <ul>
-                {fileButtons.map(({ label, path }) => (
-                  <li key={label}>
-                    <button type="button" onClick={() => void selectFile(path)}>
-                      {label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {diagnosticsSummary ? (
-            <p>
-              Diagnostics — error: {Number(diagnosticsSummary.error ?? 0)}, warn: {Number(diagnosticsSummary.warn ?? 0)}, info: {Number(diagnosticsSummary.info ?? 0)}, hint: {Number(diagnosticsSummary.hint ?? 0)}
-            </p>
-          ) : null}
-
-          {largePreview ? (
-            <section>
-              <h2>Large File Guard</h2>
-              <p>Preview only / degraded editor state is active.</p>
-              <p>{selectedPath ?? firstString(largePreview.path, largePreview.selectedPath, "Large file preview")}</p>
-            </section>
-          ) : null}
-        </section>
-      </main>
-    </div>
+      }
+      overlayLayer={
+        <CommandPalette
+          isOpen={commandPaletteOpen}
+          query={commandQuery}
+          commands={commands}
+          health="healthy"
+          trustLevel={trust}
+          metrics={[
+            { id: "files", label: "Files", value: String(paths.length), tone: paths.length > 0 ? "good" : "warn" },
+            { id: "opened", label: "Opened", value: String(openedPaths.length), tone: openedPaths.length > 0 ? "good" : "neutral" },
+          ]}
+          onQueryChange={setCommandQuery}
+          onClose={() => setCommandPaletteOpen(false)}
+          onRunCommand={runCommand}
+          onSelectCommand={runCommand}
+        />
+      }
+      footer={
+        <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+          <span>workspace-first</span>
+          <span>raw-json-hidden</span>
+          <span>file-click-opens-editor</span>
+          <span>{shellAvailable ? "terminal-capability-detected" : "terminal-disabled-no-fake"}</span>
+        </div>
+      }
+    />
   );
 }
