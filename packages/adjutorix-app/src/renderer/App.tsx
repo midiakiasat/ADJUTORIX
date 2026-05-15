@@ -850,12 +850,12 @@ export default function App(): React.JSX.Element {
 
   return (
     <AppShell
-      appTitle="Adjutorix"
+      appTitle="Adjutorix Workbench"
       subtitle="Live governed workspace"
       health={/healthy|ready/i.test(health) ? "healthy" : /degraded|restricted|warning/i.test(health) ? "degraded" : /failed|error|unhealthy/i.test(health) ? "unhealthy" : "unknown"}
       currentView={currentView}
       commandPaletteOpen={commandPaletteOpen}
-      leftRailCollapsed
+      leftRailCollapsed={false}
       rightRailCollapsed={false}
       bottomPanelVisible={currentView === "workspace"}
       statusChips={[
