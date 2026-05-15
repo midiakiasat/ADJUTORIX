@@ -1,22 +1,24 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import AppShell from "./components/AppShell";
-import FileTreePane from "./components/FileTreePane";
-import MonacoEditorPane from "./components/MonacoEditorPane";
-import TerminalPanel from "./components/TerminalPanel";
+import Editor from "@monaco-editor/react";
 
 type AnyRecord = Record<string, any>;
 
-type ActivityItem = {
-  id: string;
-  title: string;
-  message: string;
-  level: "info" | "success" | "warn" | "error";
-  atMs: number;
+type FileRow = {
+  path: string;
+  label: string;
 };
 
-const ROOT_FILE_NAMES = new Set([
+type Toast = {
+  id: string;
+  kind: "info" | "ok" | "warn" | "error";
+  title: string;
+  detail: string;
+};
+
+const ROOT_FILES = new Set([
   "README.md",
+  "FINALITY.md",
   "LICENSE",
   "package.json",
   "pnpm-lock.yaml",
@@ -27,35 +29,45 @@ const ROOT_FILE_NAMES = new Set([
 ]);
 
 function asRecord(value: unknown): AnyRecord | null {
-  return value !== null && typeof value === "object" ? (value as AnyRecord) : null;
+  return value && typeof value === "object" ? (value as AnyRecord) : null;
 }
 
 function isFn(value: unknown): value is (...args: any[]) => any {
   return typeof value === "function";
 }
 
-function unwrapEnvelope(value: unknown): unknown {
+function unwrap(value: unknown): unknown {
   const record = asRecord(value);
   if (!record) return value;
   if (record.ok === true && "data" in record) return record.data;
   if (record.ok === true && "snapshot" in record) return record.snapshot;
+  if (record.ok === true && "result" in record) return record.result;
   return value;
 }
 
-function currentBridge(): AnyRecord {
+function bridge(): AnyRecord {
   const g = globalThis as AnyRecord;
   const runtime = asRecord(g.__adjutorixRendererRuntime) ?? asRecord(g.adjutorixRuntime);
   return asRecord(g.adjutorix) ?? asRecord(runtime?.bridge) ?? asRecord(runtime?.api) ?? {};
 }
 
-function cleanPath(value: string | null | undefined): string {
-  return String(value ?? "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+function cleanPath(input: unknown): string {
+  return String(input ?? "")
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
 }
 
-function basename(path: string | null | undefined): string {
-  const value = cleanPath(path);
-  const parts = value.split("/").filter(Boolean);
-  return parts[parts.length - 1] || value || "Untitled";
+function basename(path: unknown): string {
+  const clean = cleanPath(path);
+  return clean.split("/").filter(Boolean).pop() || clean || "Untitled";
+}
+
+function dirname(path: string): string {
+  const clean = cleanPath(path);
+  const parts = clean.split("/").filter(Boolean);
+  parts.pop();
+  return clean.startsWith("/") ? `/${parts.join("/")}` : parts.join("/");
 }
 
 function firstString(...values: unknown[]): string | null {
@@ -65,113 +77,32 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
-function looksLikeFilePath(value: string): boolean {
-  const path = cleanPath(value);
+function looksLikeFilePath(input: unknown): boolean {
+  const path = cleanPath(input);
   if (!path || /^https?:\/\//i.test(path) || /\s/.test(path)) return false;
+
   const leaf = basename(path);
-  if (ROOT_FILE_NAMES.has(leaf)) return true;
-  return path.includes("/") && /\.[A-Za-z0-9]{1,16}$/.test(leaf);
+
+  if (ROOT_FILES.has(leaf)) return true;
+
+  // Hidden directories like .adjutorix and .github are NOT files.
+  if (/^\.[A-Za-z0-9_-]+$/.test(leaf)) return false;
+
+  return path.includes("/") && /\.[A-Za-z0-9][A-Za-z0-9_-]{0,15}$/.test(leaf);
 }
 
-function looksLikeDirectoryPath(value: string): boolean {
-  const path = cleanPath(value);
-  if (!path || looksLikeFilePath(path)) return false;
-  return path.startsWith("/") || /^[A-Za-z]:\//i.test(path) || path.includes("/");
+function rel(path: string, root: string | null): string {
+  const p = cleanPath(path);
+  const r = cleanPath(root);
+  if (r && p === r) return ".";
+  if (r && p.startsWith(`${r}/`)) return p.slice(r.length + 1);
+  return p;
 }
 
-function inferRootFromFile(path: string): string | null {
-  const value = cleanPath(path);
-  const markers = [
-    "/packages/",
-    "/configs/",
-    "/scripts/",
-    "/tests/",
-    "/docs/",
-    "/src/",
-    "/dist/",
-    "/node_modules/",
-    "/.github/",
-    "/assets/",
-  ];
-
-  for (const marker of markers) {
-    const index = value.indexOf(marker);
-    if (index > 0) return value.slice(0, index);
-  }
-
-  return null;
-}
-
-function visitUnknown(value: unknown, visit: (value: unknown, key?: string) => void, key?: string, seen = new WeakSet<object>()): void {
-  visit(value, key);
-
-  const unwrapped = unwrapEnvelope(value);
-  if (unwrapped !== value) visitUnknown(unwrapped, visit, key, seen);
-
-  if (!unwrapped || typeof unwrapped !== "object") return;
-  if (seen.has(unwrapped as object)) return;
-  seen.add(unwrapped as object);
-
-  if (Array.isArray(unwrapped)) {
-    for (const item of unwrapped) visitUnknown(item, visit, key, seen);
-    return;
-  }
-
-  for (const [childKey, child] of Object.entries(unwrapped as AnyRecord)) {
-    visitUnknown(child, visit, childKey, seen);
-  }
-}
-
-function collectFilePaths(...inputs: unknown[]): string[] {
-  const found = new Set<string>();
-
-  for (const input of inputs) {
-    visitUnknown(input, (value) => {
-      if (typeof value === "string" && looksLikeFilePath(value)) found.add(cleanPath(value));
-    });
-  }
-
-  return Array.from(found).sort((a, b) => a.localeCompare(b));
-}
-
-function findRootPath(inputs: unknown[], paths: string[]): string | null {
-  const keys = new Set(["rootPath", "workspaceRoot", "workspacePath", "currentPath", "repoPath", "directory", "folderPath"]);
-  const candidates: string[] = [];
-
-  for (const input of inputs) {
-    visitUnknown(input, (value, key) => {
-      if (typeof value !== "string" || !key || !keys.has(key)) return;
-      const clean = cleanPath(value);
-      if (looksLikeDirectoryPath(clean)) candidates.push(clean);
-      if (looksLikeFilePath(clean)) {
-        const inferred = inferRootFromFile(clean);
-        if (inferred) candidates.push(inferred);
-      }
-    });
-  }
-
-  if (candidates.length > 0) return candidates[0];
-
-  for (const path of paths) {
-    const inferred = inferRootFromFile(path);
-    if (inferred) return inferred;
-  }
-
-  return null;
-}
-
-function relativePath(path: string, rootPath: string | null): string {
-  const clean = cleanPath(path);
-  const root = cleanPath(rootPath);
-  if (root && clean === root) return ".";
-  if (root && clean.startsWith(`${root}/`)) return clean.slice(root.length + 1);
-  return clean;
-}
-
-function inferLanguage(path: string | null): string {
+function languageFor(path: string | null): string {
   const p = cleanPath(path).toLowerCase();
   if (p.endsWith(".tsx") || p.endsWith(".ts")) return "typescript";
-  if (p.endsWith(".jsx") || p.endsWith(".js")) return "javascript";
+  if (p.endsWith(".jsx") || p.endsWith(".js") || p.endsWith(".mjs") || p.endsWith(".cjs")) return "javascript";
   if (p.endsWith(".json")) return "json";
   if (p.endsWith(".md")) return "markdown";
   if (p.endsWith(".py")) return "python";
@@ -179,15 +110,104 @@ function inferLanguage(path: string | null): string {
   if (p.endsWith(".html")) return "html";
   if (p.endsWith(".yml") || p.endsWith(".yaml")) return "yaml";
   if (p.endsWith(".sh")) return "shell";
+  if (p.endsWith(".sql")) return "sql";
   return "plaintext";
 }
 
-function extractTextForPath(path: string, ...inputs: unknown[]): string | null {
+function walk(value: unknown, fn: (value: unknown, key?: string) => void, key?: string, seen = new WeakSet<object>()): void {
+  fn(value, key);
+
+  const unwrapped = unwrap(value);
+  if (unwrapped !== value) walk(unwrapped, fn, key, seen);
+
+  if (!unwrapped || typeof unwrapped !== "object") return;
+  if (seen.has(unwrapped as object)) return;
+  seen.add(unwrapped as object);
+
+  if (Array.isArray(unwrapped)) {
+    for (const item of unwrapped) walk(item, fn, key, seen);
+    return;
+  }
+
+  for (const [childKey, child] of Object.entries(unwrapped as AnyRecord)) {
+    walk(child, fn, childKey, seen);
+  }
+}
+
+function collectFiles(...inputs: unknown[]): FileRow[] {
+  const paths = new Set<string>();
+
+  for (const input of inputs) {
+    walk(input, (value) => {
+      if (typeof value === "string" && looksLikeFilePath(value)) {
+        paths.add(cleanPath(value));
+      }
+
+      const record = asRecord(unwrap(value)) ?? asRecord(value);
+      if (!record) return;
+
+      const explicitType = String(record.type ?? record.kind ?? "").toLowerCase();
+      const directory =
+        explicitType.includes("dir") ||
+        record.isDirectory === true ||
+        record.directory === true ||
+        record.children != null;
+
+      if (directory) return;
+
+      const path = firstString(
+        record.path,
+        record.filePath,
+        record.fullPath,
+        record.absolutePath,
+        record.selectedPath,
+      );
+
+      if (path && looksLikeFilePath(path)) paths.add(cleanPath(path));
+    });
+  }
+
+  return Array.from(paths)
+    .sort((a, b) => a.localeCompare(b))
+    .map((path) => ({ path, label: basename(path) }));
+}
+
+function inferRoot(files: FileRow[], ...inputs: unknown[]): string | null {
+  const keys = new Set([
+    "rootPath",
+    "workspaceRoot",
+    "workspacePath",
+    "repoPath",
+    "directory",
+    "folderPath",
+    "cwd",
+  ]);
+
+  for (const input of inputs) {
+    let found: string | null = null;
+    walk(input, (value, key) => {
+      if (found || !key || !keys.has(key)) return;
+      if (typeof value === "string" && value.trim()) found = cleanPath(value);
+    });
+    if (found) return found;
+  }
+
+  const paths = files.map((file) => file.path);
+  for (const marker of ["/packages/", "/configs/", "/scripts/", "/tests/", "/docs/", "/src/"]) {
+    for (const path of paths) {
+      const index = path.indexOf(marker);
+      if (index > 0) return path.slice(0, index);
+    }
+  }
+
+  return paths.length ? dirname(paths[0]) : null;
+}
+
+function extractText(path: string, ...inputs: unknown[]): string | null {
   const target = cleanPath(path);
-  let fallback: string | null = null;
   let exact: string | null = null;
 
-  const contentKeys = new Set([
+  const textKeys = new Set([
     "content",
     "contents",
     "text",
@@ -201,32 +221,54 @@ function extractTextForPath(path: string, ...inputs: unknown[]): string | null {
   ]);
 
   for (const input of inputs) {
-    visitUnknown(input, (value) => {
-      const record = asRecord(unwrapEnvelope(value)) ?? asRecord(value);
+    walk(input, (value) => {
+      if (exact != null) return;
+
+      if (typeof value === "string" && value.length > 0 && !looksLikeFilePath(value)) {
+        return;
+      }
+
+      const record = asRecord(unwrap(value)) ?? asRecord(value);
       if (!record) return;
 
-      const recordPath = cleanPath(firstString(record.path, record.filePath, record.selectedPath, record.fullPath, record.relativePath));
-      const matched = recordPath === target || recordPath.endsWith(`/${relativePath(target, null)}`) || target.endsWith(`/${recordPath}`);
+      const recordPath = cleanPath(firstString(
+        record.path,
+        record.filePath,
+        record.fullPath,
+        record.absolutePath,
+        record.selectedPath,
+      ));
+
+      if (!recordPath) return;
+
+      const matches =
+        recordPath === target ||
+        target.endsWith(`/${recordPath}`) ||
+        recordPath.endsWith(`/${basename(target)}`);
+
+      if (!matches) return;
 
       for (const [key, candidate] of Object.entries(record)) {
-        if (!contentKeys.has(key) || typeof candidate !== "string") continue;
-        if (matched && candidate.length > 0) exact = candidate;
-        if (!fallback && candidate.length > 0 && !looksLikeFilePath(candidate)) fallback = candidate;
+        if (textKeys.has(key) && typeof candidate === "string") {
+          exact = candidate;
+          return;
+        }
       }
     });
   }
 
-  return exact ?? fallback;
+  return exact;
 }
 
-async function callAny(api: AnyRecord | null, names: string[], arg?: AnyRecord): Promise<unknown> {
+async function callMethod(api: AnyRecord | null, names: string[], arg: AnyRecord = {}): Promise<unknown> {
   if (!api) return null;
 
   let lastError: unknown = null;
+
   for (const name of names) {
     if (!isFn(api[name])) continue;
     try {
-      return await api[name](arg ?? {});
+      return await api[name](arg);
     } catch (error) {
       lastError = error;
     }
@@ -236,419 +278,393 @@ async function callAny(api: AnyRecord | null, names: string[], arg?: AnyRecord):
   return null;
 }
 
-function coercePath(value: unknown): string | null {
-  if (typeof value === "string") return cleanPath(value);
-  const record = asRecord(value);
-  return firstString(record?.path, record?.filePath, record?.selectedPath, record?.fullPath, record?.relativePath);
+function nowId(): string {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export default function App(): React.JSX.Element {
   const [rootPath, setRootPath] = useState<string | null>(null);
-  const [entries, setEntries] = useState<AnyRecord[]>([]);
+  const [files, setFiles] = useState<FileRow[]>([]);
+  const [query, setQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [openedPaths, setOpenedPaths] = useState<string[]>([]);
+  const [tabs, setTabs] = useState<string[]>([]);
   const [buffers, setBuffers] = useState<Record<string, string>>({});
-  const [treeQuery, setTreeQuery] = useState("");
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [rawPayload, setRawPayload] = useState<unknown>(null);
-  const [rawVisible, setRawVisible] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  const [bottom, setBottom] = useState<"closed" | "terminal" | "problems" | "activity">("closed");
   const [terminalInput, setTerminalInput] = useState("");
-  const [terminalLines, setTerminalLines] = useState<any[]>([]);
+  const [terminalLines, setTerminalLines] = useState<string[]>([]);
+  const [activity, setActivity] = useState<Toast[]>([]);
+  const [raw, setRaw] = useState<unknown>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
-  const appendActivity = useCallback((title: string, message: string, level: ActivityItem["level"] = "info") => {
-    setActivity((items) => [
-      { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, title, message, level, atMs: Date.now() },
-      ...items,
-    ].slice(0, 20));
+  const push = useCallback((kind: Toast["kind"], title: string, detail: string) => {
+    setActivity((items) => [{ id: nowId(), kind, title, detail }, ...items].slice(0, 50));
   }, []);
 
-  const shellAvailable = (() => {
-    const bridge = currentBridge();
-    const shell = asRecord(bridge.shell) ?? asRecord(bridge.terminal);
-    return Boolean(shell && (isFn(shell.run) || isFn(shell.execute) || isFn(shell.start)));
-  })();
+  const shellApi = useMemo(() => {
+    const b = bridge();
+    return asRecord(b.shell) ?? asRecord(b.terminal);
+  }, []);
 
-  const openFile = useCallback(async (pathLike: unknown, ...seedInputs: unknown[]) => {
-    const path = coercePath(pathLike);
-    if (!path || !looksLikeFilePath(path)) return;
+  const shellReady = Boolean(shellApi && (isFn(shellApi.run) || isFn(shellApi.execute) || isFn(shellApi.start)));
 
-    setSelectedPath(path);
-    setOpenedPaths((current) => Array.from(new Set([...current, path])));
-
-    const bridge = currentBridge();
-    const workspace = asRecord(bridge.workspace);
-    const outputs: unknown[] = [];
-
-    for (const [method, arg] of [
-      ["read", { path, filePath: path, selectedPath: path }],
-      ["readFile", { path, filePath: path, selectedPath: path }],
-      ["preview", { path, filePath: path, selectedPath: path }],
-      ["file", { path, filePath: path, selectedPath: path }],
-      ["load", { path, filePath: path, selectedPath: path }],
-    ] as Array<[string, AnyRecord]>) {
-      if (!isFn(workspace?.[method])) continue;
-      try {
-        outputs.push(await workspace[method](arg));
-      } catch {
-        // Keep trying alternate bridge names.
-      }
-    }
-
-    const text = extractTextForPath(path, ...outputs, ...seedInputs, rawPayload) ?? "";
-    setBuffers((current) => ({ ...current, [path]: text }));
-    appendActivity("File opened", relativePath(path, rootPath), "success");
-  }, [appendActivity, rawPayload, rootPath]);
-
-  const refreshWorkspace = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
-    setErrorMessage(null);
 
-    const bridge = currentBridge();
-    const workspace = asRecord(bridge.workspace);
-    const runtime = asRecord(bridge.runtime);
-    const diagnostics = asRecord(bridge.diagnostics);
+    const b = bridge();
+    const workspace = asRecord(b.workspace);
+    const runtime = asRecord(b.runtime);
+    const diagnostics = asRecord(b.diagnostics);
+
     const outputs: unknown[] = [];
 
     for (const [api, methods] of [
-      [runtime, ["snapshot", "load", "status"]],
-      [workspace, ["load", "health", "status", "current"]],
-      [diagnostics, ["runtime", "load", "observability"]],
+      [runtime, ["snapshot", "status", "load"]],
+      [workspace, ["load", "tree", "list", "scan", "current", "status"]],
+      [diagnostics, ["load", "runtime", "status"]],
     ] as Array<[AnyRecord | null, string[]]>) {
       try {
-        const output = await callAny(api, methods, {});
+        const output = await callMethod(api, methods, {});
         if (output) outputs.push(output);
       } catch (error) {
         outputs.push({ error: error instanceof Error ? error.message : String(error) });
       }
     }
 
-    const paths = collectFilePaths(...outputs);
-    const root = findRootPath(outputs, paths);
-    const nextEntries = paths.map((path) => ({
-      id: path,
-      path,
-      relativePath: relativePath(path, root),
-      name: basename(path),
-      type: "file",
-    }));
+    const nextFiles = collectFiles(...outputs);
+    const nextRoot = inferRoot(nextFiles, ...outputs);
 
-    setRawPayload(outputs);
-    setRootPath(root);
-    setEntries(nextEntries);
+    setRaw(outputs);
+    setFiles(nextFiles);
+    setRootPath(nextRoot);
 
     const preferred =
-      paths.find((path) => /configs\/runtime\/limits\.json$/i.test(path)) ??
-      paths.find((path) => /package\.json$/i.test(path)) ??
-      paths.find((path) => /README\.md$/i.test(path)) ??
-      paths[0] ??
-      null;
+      nextFiles.find((file) => /packages\/adjutorix-app\/src\/renderer\/App\.tsx$/i.test(file.path)) ??
+      nextFiles.find((file) => /configs\/runtime\/limits\.json$/i.test(file.path)) ??
+      nextFiles.find((file) => /package\.json$/i.test(file.path)) ??
+      nextFiles[0];
 
     if (preferred) {
-      await openFile(preferred, ...outputs);
+      setSelectedPath(preferred.path);
+      setTabs((current) => Array.from(new Set([...current, preferred.path])));
     }
 
-    appendActivity("Workspace refreshed", `${paths.length} files surfaced`, "success");
+    push("ok", "Workspace indexed", `${nextFiles.length} files`);
     setLoading(false);
-  }, [appendActivity, openFile]);
+  }, [push]);
 
-  useEffect(() => {
-    void refreshWorkspace();
-  }, [refreshWorkspace]);
+  const openFile = useCallback(async (path: string) => {
+    const clean = cleanPath(path);
 
-  const openWorkspace = useCallback(async () => {
-    const workspace = asRecord(currentBridge().workspace);
-    if (!isFn(workspace?.open)) {
-      setErrorMessage("workspace.open is not exposed by preload bridge.");
-      appendActivity("Open workspace unavailable", "No workspace.open bridge method.", "warn");
+    if (!looksLikeFilePath(clean)) {
+      push("warn", "Directory ignored", rel(clean, rootPath));
       return;
     }
+
+    const b = bridge();
+    const workspace = asRecord(b.workspace);
+    const fileApi = asRecord(workspace?.file);
+
+    const arg = { path: clean, filePath: clean, selectedPath: clean };
+    const outputs: unknown[] = [];
 
     try {
-      const output = await workspace.open({});
-      setRawPayload(output);
-      await refreshWorkspace();
+      const output =
+        (await callMethod(fileApi, ["read", "load", "open", "preview"], arg)) ??
+        (await callMethod(workspace, ["readFile", "read", "fileRead", "openFile", "previewFile", "preview"], arg));
+
+      if (output) outputs.push(output);
+
+      const text = extractText(clean, ...outputs) ?? (typeof output === "string" ? output : "");
+
+      setSelectedPath(clean);
+      setTabs((current) => Array.from(new Set([...current, clean])));
+      setBuffers((current) => ({ ...current, [clean]: text }));
+      setDirty((current) => ({ ...current, [clean]: false }));
+      push("ok", "File opened", rel(clean, rootPath));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      push("error", "File open failed", error instanceof Error ? error.message : String(error));
     }
-  }, [appendActivity, refreshWorkspace]);
+  }, [push, rootPath]);
 
-  const revealPath = useCallback(async (pathLike: unknown) => {
-    const path = coercePath(pathLike) ?? selectedPath;
-    if (!path) return;
+  const saveFile = useCallback(async () => {
+    if (!selectedPath) return;
 
-    const workspace = asRecord(currentBridge().workspace);
-    if (!isFn(workspace?.reveal)) {
-      appendActivity("Reveal unavailable", "No workspace.reveal bridge method.", "warn");
-      return;
+    const b = bridge();
+    const workspace = asRecord(b.workspace);
+    const fileApi = asRecord(workspace?.file);
+    const content = buffers[selectedPath] ?? "";
+
+    const arg = {
+      path: selectedPath,
+      filePath: selectedPath,
+      selectedPath,
+      content,
+      text: content,
+      value: content,
+    };
+
+    try {
+      const output =
+        (await callMethod(fileApi, ["write", "save", "update"], arg)) ??
+        (await callMethod(workspace, ["writeFile", "saveFile", "save", "updateFile", "write"], arg));
+
+      setDirty((current) => ({ ...current, [selectedPath]: false }));
+      setRaw(output ?? raw);
+      push("ok", "Saved", rel(selectedPath, rootPath));
+    } catch (error) {
+      push("error", "Save failed", error instanceof Error ? error.message : String(error));
     }
-
-    await workspace.reveal({ path, filePath: path, selectedPath: path });
-  }, [appendActivity, selectedPath]);
+  }, [buffers, push, raw, rootPath, selectedPath]);
 
   const runTerminal = useCallback(async () => {
     const command = terminalInput.trim();
     if (!command) return;
 
-    const bridge = currentBridge();
-    const shell = asRecord(bridge.shell) ?? asRecord(bridge.terminal);
-
-    if (!shellAvailable || !shell) {
-      setTerminalLines((lines) => [
-        ...lines,
-        { kind: "system", text: "Terminal unavailable: no real shell bridge is exposed.", atMs: Date.now() },
-      ]);
+    if (!shellReady || !shellApi) {
+      setTerminalLines((lines) => [...lines, "$ " + command, "Terminal bridge unavailable."]);
+      setTerminalInput("");
       return;
     }
 
-    setTerminalLines((lines) => [...lines, { kind: "command", text: command, atMs: Date.now() }]);
+    setTerminalLines((lines) => [...lines, "$ " + command]);
 
     try {
-      const output = await callAny(shell, ["run", "execute", "start"], { command, cwd: rootPath });
-      const text = typeof output === "string" ? output : extractTextForPath(selectedPath ?? "", output) ?? JSON.stringify(output ?? {}, null, 2);
-      setTerminalLines((lines) => [...lines, { kind: "stdout", text, atMs: Date.now() }]);
+      const output = await callMethod(shellApi, ["run", "execute", "start"], {
+        command,
+        cwd: rootPath,
+      });
+
+      const text =
+        typeof output === "string"
+          ? output
+          : JSON.stringify(output ?? {}, null, 2);
+
+      setTerminalLines((lines) => [...lines, text]);
       setTerminalInput("");
     } catch (error) {
       setTerminalLines((lines) => [
         ...lines,
-        { kind: "stderr", text: error instanceof Error ? error.message : String(error), atMs: Date.now() },
+        error instanceof Error ? error.message : String(error),
       ]);
     }
-  }, [rootPath, selectedPath, shellAvailable, terminalInput]);
+  }, [rootPath, shellApi, shellReady, terminalInput]);
 
-  const activeContent = selectedPath ? buffers[selectedPath] ?? "" : "";
-  const matchedPaths = useMemo(() => {
-    const query = globalSearch.trim().toLowerCase();
-    if (!query) return [];
-    return entries
-      .map((entry) => String(entry.path ?? ""))
-      .filter((path) => path.toLowerCase().includes(query) || (buffers[path] ?? "").toLowerCase().includes(query))
-      .slice(0, 25);
-  }, [buffers, entries, globalSearch]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-  const diagnostics = errorMessage
-    ? [{ id: "app-error", severity: "error", message: errorMessage, line: 1, column: 1, source: "renderer" }]
-    : [];
+  const visibleFiles = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return files;
+    return files.filter((file) => {
+      const label = rel(file.path, rootPath).toLowerCase();
+      const content = (buffers[file.path] ?? "").toLowerCase();
+      return label.includes(q) || content.includes(q);
+    });
+  }, [buffers, files, query, rootPath]);
 
-  const leftRail = (
-    <div className="h-full min-h-0 p-2">
-      <FileTreePane
-        title="Files"
-        subtitle={rootPath ? relativePath(rootPath, null) : "Open a workspace"}
-        health={errorMessage ? "degraded" : "healthy"}
-        loading={loading}
-        rootPath={rootPath ?? "workspace"}
-        entries={entries}
-        files={entries}
-        selectedPath={selectedPath}
-        openedPaths={openedPaths}
-        filterQuery={treeQuery}
-        showHidden={false}
-        showIgnored={false}
-        onFilterQueryChange={setTreeQuery}
-        onSelectPath={openFile}
-        onPathSelected={openFile}
-        onOpenPath={openFile}
-        onOpenFile={openFile}
-        onFileOpen={openFile}
-        onRevealPath={revealPath}
-        onRefreshRequested={refreshWorkspace}
-        onRefresh={refreshWorkspace}
-      />
-    </div>
-  );
+  const selectedValue = selectedPath ? buffers[selectedPath] ?? "" : "";
 
-  const primaryContent = (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-        <div>
-          <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Workbench</div>
-          <div className="mt-1 text-sm font-semibold text-zinc-100">
-            {selectedPath ? relativePath(selectedPath, rootPath) : "No file selected"}
+  return (
+    <div className="h-screen w-screen overflow-hidden bg-[#09090b] text-zinc-100">
+      <header className="flex h-12 items-center justify-between border-b border-zinc-800 bg-black px-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="rounded-md border border-emerald-800/60 px-2 py-1 text-xs font-semibold text-emerald-300">
+            ADJUTORIX REAL WORKBENCH CUT
+          </div>
+          <div className="truncate text-xs text-zinc-500">
+            {rootPath ?? "No workspace root"}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={globalSearch}
-            onChange={(event) => setGlobalSearch(event.target.value)}
-            placeholder="Search files"
-            className="h-10 w-64 rounded-xl border border-zinc-800 bg-black/30 px-3 text-sm text-zinc-100 outline-none focus:border-emerald-700"
-          />
-          <button type="button" onClick={refreshWorkspace} className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+
+        <div className="flex items-center gap-2">
+          <button onClick={refresh} className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs hover:bg-zinc-800">
             Refresh
           </button>
-          <button type="button" onClick={openWorkspace} className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
-            Open
+          <button
+            onClick={saveFile}
+            disabled={!selectedPath || !dirty[selectedPath]}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs enabled:hover:bg-zinc-800 disabled:opacity-40"
+          >
+            Save
           </button>
           <button
-            type="button"
-            onClick={() => setTerminalOpen((value) => !value)}
-            disabled={!shellAvailable}
-            className={`rounded-xl border px-3 py-2 text-sm ${
-              shellAvailable
-                ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                : "cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-500"
-            }`}
+            onClick={() => setShowRaw((value) => !value)}
+            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs hover:bg-zinc-800"
           >
-            {shellAvailable ? "Terminal" : "Terminal unavailable"}
-          </button>
-          <button type="button" onClick={() => setRawVisible((value) => !value)} className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-400">
             Inspect raw
           </button>
         </div>
-      </div>
+      </header>
 
-      {errorMessage && (
-        <div className="rounded-2xl border border-rose-800/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
-          {errorMessage}
-        </div>
-      )}
+      <main className="grid h-[calc(100vh-48px)] grid-cols-[52px_340px_minmax(0,1fr)]">
+        <aside className="flex flex-col items-center gap-2 border-r border-zinc-800 bg-black py-3">
+          <button title="Explorer" className="h-9 w-9 rounded-lg bg-zinc-800 text-sm">F</button>
+          <button title="Search" onClick={() => document.getElementById("global-file-search")?.focus()} className="h-9 w-9 rounded-lg bg-zinc-950 text-sm text-zinc-400">S</button>
+          <button title="Problems" onClick={() => setBottom("problems")} className="h-9 w-9 rounded-lg bg-zinc-950 text-sm text-zinc-400">P</button>
+          <button title="Terminal" onClick={() => setBottom(bottom === "terminal" ? "closed" : "terminal")} className="h-9 w-9 rounded-lg bg-zinc-950 text-sm text-zinc-400">T</button>
+        </aside>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70">
-        <div className="flex min-h-11 items-center gap-2 border-b border-zinc-800 px-3">
-          {openedPaths.length === 0 ? (
-            <span className="text-sm text-zinc-500">No open tabs</span>
-          ) : (
-            openedPaths.map((path) => (
-              <button
-                key={path}
-                type="button"
-                onClick={() => openFile(path)}
-                className={`rounded-lg px-3 py-1.5 text-xs ${
-                  path === selectedPath ? "bg-emerald-500/10 text-emerald-200" : "bg-zinc-900 text-zinc-400"
-                }`}
-              >
-                {basename(path)}
-              </button>
-            ))
-          )}
-        </div>
+        <aside className="min-h-0 overflow-hidden border-r border-zinc-800 bg-[#111113]">
+          <div className="border-b border-zinc-800 p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Explorer</div>
+                <div className="mt-1 text-sm font-semibold">{files.length} files</div>
+              </div>
+              <div className={`rounded-md px-2 py-1 text-xs ${loading ? "bg-amber-950 text-amber-200" : "bg-emerald-950 text-emerald-300"}`}>
+                {loading ? "indexing" : "ready"}
+              </div>
+            </div>
 
-        <div className="min-h-0 flex-1">
-          <MonacoEditorPane
-            path={selectedPath}
-            title={basename(selectedPath)}
-            language={inferLanguage(selectedPath)}
-            baselineContent={activeContent}
-            workingContent={activeContent}
-            currentValue={activeContent}
-            value={activeContent}
-            diagnostics={diagnostics}
-            readOnly={!selectedPath}
-            loading={loading}
-            trustLevel="trusted"
-            reviewState="none"
-            contentSource="working"
-            showMinimap={true}
-            wordWrap="off"
-            onChangeWorkingContent={(next) => {
-              if (!selectedPath) return;
-              setBuffers((current) => ({ ...current, [selectedPath]: next }));
-            }}
-            onSaveRequested={() => appendActivity("Save requested", "Save bridge is not wired in this renderer cut.", "warn")}
-            onRevealRequested={() => void revealPath(selectedPath)}
-            onRefreshRequested={() => selectedPath && void openFile(selectedPath)}
-          />
-        </div>
-      </div>
+            <input
+              id="global-file-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Find file or text"
+              className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm outline-none focus:border-emerald-700"
+            />
+          </div>
 
-      <div className="grid h-40 min-h-40 grid-cols-1 gap-3 lg:grid-cols-3">
-        <section className="overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Search</div>
-          {matchedPaths.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">No active search results.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {matchedPaths.map((path) => (
-                <button key={path} type="button" onClick={() => openFile(path)} className="block w-full truncate rounded-lg bg-zinc-900 px-3 py-2 text-left text-sm text-zinc-200">
-                  {relativePath(path, rootPath)}
+          <div className="h-[calc(100%-94px)] overflow-auto p-2">
+            {visibleFiles.map((file) => {
+              const active = file.path === selectedPath;
+              const changed = dirty[file.path] === true;
+
+              return (
+                <button
+                  key={file.path}
+                  onClick={() => void openFile(file.path)}
+                  className={`mb-1 block w-full truncate rounded-md px-2 py-1.5 text-left text-xs ${
+                    active ? "bg-emerald-950/70 text-emerald-200" : "text-zinc-300 hover:bg-zinc-900"
+                  }`}
+                  title={file.path}
+                >
+                  <span className="mr-2 text-zinc-600">{changed ? "●" : "·"}</span>
+                  {rel(file.path, rootPath)}
                 </button>
-              ))}
-            </div>
-          )}
-        </section>
+              );
+            })}
+          </div>
+        </aside>
 
-        <section className="overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Problems</div>
-          {diagnostics.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">No renderer problems surfaced.</p>
-          ) : (
-            diagnostics.map((item) => <p key={item.id} className="mt-3 text-sm text-rose-200">{item.message}</p>)
-          )}
-        </section>
+        <section className="grid min-h-0 grid-rows-[42px_minmax(0,1fr)_auto] bg-[#0b0b0d]">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto border-b border-zinc-800 bg-[#111113] px-2">
+            {tabs.length === 0 ? (
+              <div className="text-xs text-zinc-500">No open files</div>
+            ) : (
+              tabs.map((path) => (
+                <button
+                  key={path}
+                  onClick={() => setSelectedPath(path)}
+                  className={`h-8 max-w-64 truncate rounded-md px-3 text-xs ${
+                    path === selectedPath ? "bg-zinc-800 text-zinc-100" : "bg-zinc-950 text-zinc-400"
+                  }`}
+                  title={path}
+                >
+                  {dirty[path] ? "● " : ""}
+                  {basename(path)}
+                </button>
+              ))
+            )}
+          </div>
 
-        <section className="overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Activity</div>
-          {activity.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-500">No activity yet.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {activity.slice(0, 5).map((item) => (
-                <div key={item.id} className="rounded-lg bg-zinc-900 px-3 py-2">
-                  <div className="text-sm font-medium text-zinc-100">{item.title}</div>
-                  <div className="text-xs text-zinc-500">{item.message}</div>
+          <div className="min-h-0">
+            {selectedPath ? (
+              <Editor
+                height="100%"
+                theme="vs-dark"
+                language={languageFor(selectedPath)}
+                path={selectedPath}
+                value={selectedValue}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: 13,
+                  lineNumbers: "on",
+                  wordWrap: "off",
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  renderWhitespace: "selection",
+                }}
+                onChange={(value) => {
+                  if (!selectedPath) return;
+                  setBuffers((current) => ({ ...current, [selectedPath]: value ?? "" }));
+                  setDirty((current) => ({ ...current, [selectedPath]: true }));
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                Select a file.
+              </div>
+            )}
+          </div>
+
+          {bottom !== "closed" && (
+            <div className="h-56 border-t border-zinc-800 bg-[#111113]">
+              <div className="flex h-9 items-center justify-between border-b border-zinc-800 px-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <button onClick={() => setBottom("terminal")} className={bottom === "terminal" ? "text-emerald-300" : "text-zinc-500"}>Terminal</button>
+                  <button onClick={() => setBottom("problems")} className={bottom === "problems" ? "text-emerald-300" : "text-zinc-500"}>Problems</button>
+                  <button onClick={() => setBottom("activity")} className={bottom === "activity" ? "text-emerald-300" : "text-zinc-500"}>Activity</button>
                 </div>
-              ))}
+                <button onClick={() => setBottom("closed")} className="text-xs text-zinc-500">Close</button>
+              </div>
+
+              {bottom === "terminal" && (
+                <div className="grid h-[calc(100%-36px)] grid-rows-[1fr_42px]">
+                  <pre className="overflow-auto p-3 font-mono text-xs leading-5 text-zinc-300">
+                    {terminalLines.join("\n")}
+                  </pre>
+                  <div className="flex items-center gap-2 border-t border-zinc-800 p-2">
+                    <span className="text-xs text-zinc-500">$</span>
+                    <input
+                      value={terminalInput}
+                      onChange={(event) => setTerminalInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void runTerminal();
+                      }}
+                      placeholder={shellReady ? "Run command through real bridge" : "Terminal bridge unavailable"}
+                      className="flex-1 rounded-md border border-zinc-800 bg-black px-3 py-1.5 font-mono text-xs outline-none focus:border-emerald-700"
+                    />
+                    <button onClick={runTerminal} className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs">Run</button>
+                  </div>
+                </div>
+              )}
+
+              {bottom === "problems" && (
+                <div className="p-3 text-xs text-zinc-400">
+                  {selectedPath ? "No renderer problem surfaced for selected file." : "No file selected."}
+                </div>
+              )}
+
+              {bottom === "activity" && (
+                <div className="h-full overflow-auto p-3">
+                  {activity.map((item) => (
+                    <div key={item.id} className="mb-2 rounded-md border border-zinc-800 bg-black p-2 text-xs">
+                      <div className="font-semibold text-zinc-100">{item.title}</div>
+                      <div className="mt-1 text-zinc-500">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showRaw && (
+            <div className="absolute bottom-4 right-4 top-16 z-50 w-[520px] overflow-auto rounded-xl border border-zinc-700 bg-black p-4 shadow-2xl">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs uppercase tracking-[0.22em] text-zinc-500">Raw bridge payload</div>
+                <button onClick={() => setShowRaw(false)} className="text-xs text-zinc-500">Close</button>
+              </div>
+              <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-zinc-300">
+                {JSON.stringify(raw ?? {}, null, 2)}
+              </pre>
             </div>
           )}
         </section>
-      </div>
-
-      {rawVisible && (
-        <div className="max-h-64 overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4">
-          <div className="mb-3 text-xs uppercase tracking-[0.24em] text-zinc-500">Inspect raw</div>
-          <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-zinc-300">
-            {JSON.stringify(rawPayload ?? {}, null, 2)}
-          </pre>
-        </div>
-      )}
+      </main>
     </div>
-  );
-
-  const bottomPanel = terminalOpen ? (
-    <TerminalPanel
-      title="Terminal"
-      subtitle={shellAvailable ? "Real shell bridge detected." : "No fake terminal: bridge unavailable."}
-      trustLevel="trusted"
-      shellStatus={shellAvailable ? "ready" : "failed"}
-      runState="idle"
-      shellLabel={shellAvailable ? "bridge shell" : "unavailable"}
-      cwd={rootPath}
-      commandInput={terminalInput}
-      history={terminalLines}
-      canRun={shellAvailable}
-      canClear={true}
-      onCommandInputChange={setTerminalInput}
-      onRunRequested={runTerminal}
-      onClearRequested={() => setTerminalLines([])}
-    />
-  ) : null;
-
-  return (
-    <AppShell
-      appTitle="Adjutorix Workbench"
-      subtitle={rootPath ? `Workspace · ${basename(rootPath)}` : "Workspace"}
-      health={errorMessage ? "degraded" : "healthy"}
-      currentView="workspace"
-      navItems={[{ key: "workspace", label: "Workspace", active: true }]}
-      onSelectView={() => undefined}
-      leftRailCollapsed={false}
-      rightRailCollapsed={true}
-      bottomPanelVisible={terminalOpen}
-      statusChips={[
-        { label: "Root", value: rootPath ? basename(rootPath) : "none", tone: rootPath ? "good" : "warn" },
-        { label: "Files", value: String(entries.length), tone: entries.length > 0 ? "good" : "warn" },
-        { label: "Tabs", value: String(openedPaths.length), tone: openedPaths.length > 0 ? "good" : "neutral" },
-        { label: "Terminal", value: shellAvailable ? "available" : "disabled", tone: shellAvailable ? "good" : "warn" },
-      ]}
-      banners={errorMessage ? [{ id: "error", level: "error", title: "Workbench error", message: errorMessage }] : []}
-      leftRail={leftRail}
-      primaryContent={primaryContent}
-      bottomPanel={bottomPanel}
-      rightRail={null}
-    />
   );
 }
