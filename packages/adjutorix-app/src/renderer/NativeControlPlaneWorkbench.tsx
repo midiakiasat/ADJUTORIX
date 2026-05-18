@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Editor from "@monaco-editor/react";
 import "./native-workbench.css";
 
-const MARKER = "ADJUTORIX_NATIVE_ALL_TOOLS_WORKBENCH_V15";
+const MARKER = "ADJUTORIX_NATIVE_MULTIROOT_WORKBENCH_V16";
 
 const COMMAND_PATHS = [
   "shell.execute",
@@ -167,6 +167,10 @@ function api() {
     agent: { ...(b.agent ?? {}), ...(a.agent ?? {}) },
     compatibility: { ...(b.compatibility ?? {}), ...(a.compatibility ?? {}) },
   };
+}
+
+function externalWorkspaceV16() {
+  return (window as any).adjutorixExternalWorkspaceV16 ?? null;
 }
 
 function pathGet(obj: any, path: string) {
@@ -591,6 +595,9 @@ export default function NativeControlPlaneWorkbench() {
   const [palette, setPalette] = useState(false);
   const [paletteQ, setPaletteQ] = useState("");
   const [agentText, setAgentText] = useState("Inspect the full ADJUTORIX system. Use all tools. Produce the next concrete patch. Run build, verify, and gates.");
+  const [recentRoots, setRecentRoots] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("adjutorix.v16.recentRoots") ?? "[]"); } catch { return []; }
+  });
 
   const current = selected ? buffers[selected] : null;
   const dirtyBuffers = Object.values(buffers).filter((b: any) => b.dirty);
@@ -652,6 +659,20 @@ export default function NativeControlPlaneWorkbench() {
     addLog(`RUN ${command}`);
 
     try {
+      const external = externalWorkspaceV16();
+      if (external?.execute) {
+        const started = Date.now();
+        const response = await external.execute({ root, command, timeoutMs: 300000 });
+        const result = { ...resultOf(response, command), durationMs: Date.now() - started, command };
+        setLastResult(result);
+        setTerminal(terminalText(result));
+        const parsed = parseProblems(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
+        setProblems(parsed);
+        if (parsed.length) setBottom("problems");
+        addLog(`DONE ${result.status ?? result.exitCode ?? "ok"}`);
+        return result;
+      }
+
       const started = Date.now();
       const response = await callAny(COMMAND_PATHS, [
         { schema: 1, actor: "renderer", command, intent: command, cwd: root || undefined, timeoutMs: 300000 },
@@ -685,6 +706,36 @@ export default function NativeControlPlaneWorkbench() {
   const indexWorkspace = useCallback(async () => {
     setBusy(true);
     addLog("INDEX start");
+
+    const external = externalWorkspaceV16();
+    if (external?.scan) {
+      try {
+        const scan = await external.scan({ root: root || undefined, maxEntries: 30000, includeGenerated });
+        const nextEntries = (scan.entries ?? []).map((e: any) => ({
+          path: norm(e.path ?? e.relativePath ?? e.absolutePath),
+          isDir: e.isDir === true || e.isDirectory === true,
+          size: e.size,
+          mtimeMs: e.mtimeMs,
+        }));
+        const nextRoot = norm(scan.root || root);
+        setSnapshots([scan]);
+        setEntries(nextEntries);
+        setRoot(nextRoot);
+        setBridgeFns(Array.from(new Set([
+          ...functionsOf(api()),
+          "externalWorkspaceV16.openFolder",
+          "externalWorkspaceV16.scan",
+          "externalWorkspaceV16.readFile",
+          "externalWorkspaceV16.writeFile",
+          "externalWorkspaceV16.execute",
+        ])).sort());
+        addLog(`V16 external workspace scan ${nextEntries.length} entries / ${sourceFiles(nextEntries, includeGenerated).length} product files`);
+        setBusy(false);
+        return;
+      } catch (e) {
+        addLog(`V16 external workspace scan fallback ${String((e as any)?.message ?? e)}`);
+      }
+    }
 
     const bridge = api();
     const collected: any[] = [];
@@ -721,6 +772,30 @@ export default function NativeControlPlaneWorkbench() {
     }
 
     try {
+      const external = externalWorkspaceV16();
+      if (external?.readFile) {
+        try {
+          const response = await external.readFile({ root, path: r });
+          const content = contentOf(response);
+          const actual = norm(response?.path ?? full);
+          const buf = {
+            path: actual,
+            content,
+            original: content,
+            language: lang(actual),
+            dirty: false,
+            openedAt: Date.now(),
+          };
+          setBuffers((old) => ({ ...old, [actual]: buf }));
+          setOpenFiles((old) => Array.from(new Set([...old, actual])));
+          setSelected(actual);
+          addLog(`OPEN ${actual}`);
+          return;
+        } catch (e) {
+          addLog(`V16 OPEN FALLBACK ${r} :: ${String((e as any)?.message ?? e)}`);
+        }
+      }
+
       const response = await callAny(READ_PATHS, [
         { schema: 1, actor: "renderer", path: r, targetPath: r, relativePath: r, filePath: r, workspacePath: r },
         { path: r },
@@ -754,6 +829,14 @@ export default function NativeControlPlaneWorkbench() {
     const r = relative(path, root);
 
     try {
+      const external = externalWorkspaceV16();
+      if (external?.writeFile) {
+        await external.writeFile({ root, path: r, content: b.content });
+        setBuffers((old) => ({ ...old, [path]: { ...b, original: b.content, dirty: false, savedAt: Date.now() } }));
+        addLog(`SAVE ${r}`);
+        return;
+      }
+
       await callAny(WRITE_PATHS, [
         { schema: 1, actor: "renderer", path: r, targetPath: r, relativePath: r, filePath: r, workspacePath: r, content: b.content, text: b.content, value: b.content },
         { path: r, content: b.content },
@@ -772,6 +855,57 @@ export default function NativeControlPlaneWorkbench() {
   const saveAll = useCallback(async () => {
     for (const b of dirtyBuffers) await saveFile(b.path);
   }, [dirtyBuffers, saveFile]);
+
+  const openAnyFolder = useCallback(async () => {
+    const external = externalWorkspaceV16();
+    if (!external?.openFolder) {
+      addLog("OPEN FOLDER FAILED externalWorkspaceV16 bridge missing");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const scan = await external.openFolder();
+      if (scan?.canceled) {
+        addLog("OPEN FOLDER cancelled");
+        return;
+      }
+
+      const nextRoot = norm(scan.root);
+      const nextEntries = (scan.entries ?? []).map((e: any) => ({
+        path: norm(e.path ?? e.relativePath ?? e.absolutePath),
+        isDir: e.isDir === true || e.isDirectory === true,
+        size: e.size,
+        mtimeMs: e.mtimeMs,
+      }));
+
+      setRoot(nextRoot);
+      setEntries(nextEntries);
+      setSnapshots([scan]);
+      setBuffers({});
+      setOpenFiles([]);
+      setSelected("");
+      setQuery("");
+      setRecentRoots((old) => {
+        const next = Array.from(new Set([nextRoot, ...old])).slice(0, 12);
+        localStorage.setItem("adjutorix.v16.recentRoots", JSON.stringify(next));
+        return next;
+      });
+      setBridgeFns(Array.from(new Set([
+        ...functionsOf(api()),
+        "externalWorkspaceV16.openFolder",
+        "externalWorkspaceV16.scan",
+        "externalWorkspaceV16.readFile",
+        "externalWorkspaceV16.writeFile",
+        "externalWorkspaceV16.execute",
+      ])).sort());
+      addLog(`OPEN FOLDER ${nextRoot} / ${nextEntries.length} entries`);
+    } catch (e) {
+      addLog(`OPEN FOLDER FAILED ${String((e as any)?.message ?? e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [addLog]);
 
   const openCoreSurfaces = useCallback(async () => {
     const wanted = [
@@ -1031,6 +1165,7 @@ export default function NativeControlPlaneWorkbench() {
         <div className="v15-spacer" />
         <label className="v15-check"><input type="checkbox" checked={includeGenerated} onChange={(e) => setIncludeGenerated(e.target.checked)} /> generated</label>
         <span className={busy ? "v15-live busy" : "v15-live"}>{busy ? "BUSY" : "LIVE"}</span>
+        <button onClick={openAnyFolder}>Open folder</button>
         <button onClick={indexWorkspace}>Index</button>
         <button onClick={openCoreSurfaces}>Core</button>
         <button disabled={!current?.dirty} onClick={() => current && saveFile(current.path)}>Save</button>

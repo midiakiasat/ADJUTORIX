@@ -814,3 +814,22 @@ try {
 } catch {
   // already exposed in this renderer context
 }
+
+
+// ADJUTORIX_NATIVE_EXTERNAL_WORKSPACE_V16_PRELOAD
+if (!(globalThis as any).__ADJUTORIX_NATIVE_EXTERNAL_WORKSPACE_V16_PRELOAD__) {
+  (globalThis as any).__ADJUTORIX_NATIVE_EXTERNAL_WORKSPACE_V16_PRELOAD__ = true;
+
+  const invokeExternalWorkspaceV16 = (channel: string, payload: unknown = {}) =>
+    ipcRenderer.invoke(channel, payload);
+
+  contextBridge.exposeInMainWorld("adjutorixExternalWorkspaceV16", Object.freeze({
+    marker: "ADJUTORIX_NATIVE_EXTERNAL_WORKSPACE_V16",
+    openFolder: () => invokeExternalWorkspaceV16("adjutorix:v16:dialog:openFolder", {}),
+    scan: (payload: unknown = {}) => invokeExternalWorkspaceV16("adjutorix:v16:workspace:scan", payload),
+    readFile: (payload: unknown = {}) => invokeExternalWorkspaceV16("adjutorix:v16:file:read", payload),
+    writeFile: (payload: unknown = {}) => invokeExternalWorkspaceV16("adjutorix:v16:file:write", payload),
+    execute: (payload: unknown = {}) => invokeExternalWorkspaceV16("adjutorix:v16:shell:execute", payload),
+  }));
+}
+

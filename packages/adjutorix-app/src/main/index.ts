@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { registerNativeExternalWorkspaceV16 } from "./native-external-workspace-v16.js";
 import { registerNativeControlPlaneV13 } from "./native-control-plane-v13.js";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from "electron";
 import path from "node:path";
@@ -1583,3 +1584,4 @@ ipcMain.handle(ADJUTORIX_AGENT_STATUS_CHANNEL_V8, async () => {
 
 // ADJUTORIX_NATIVE_CONTROL_PLANE_V13_BOOTSTRAP
 registerNativeControlPlaneV13();
+registerNativeExternalWorkspaceV16();
