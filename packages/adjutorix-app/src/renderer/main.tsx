@@ -3,10 +3,7 @@ import { createRoot } from "react-dom/client";
 import NativeControlPlaneWorkbench from "./NativeControlPlaneWorkbench";
 import "./native-workbench.css";
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("ADJUTORIX_RENDERER_ROOT_MISSING");
-
-createRoot(rootElement).render(
+createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <NativeControlPlaneWorkbench />
   </React.StrictMode>,
