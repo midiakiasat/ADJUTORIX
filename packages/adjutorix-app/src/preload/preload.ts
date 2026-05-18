@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { contextBridge as __adjutorixContextBridgeV13, ipcRenderer as __adjutorixIpcRendererV13 } from "electron";
 import { contextBridge, ipcRenderer } from "electron";
 import { BRIDGE_CHANNELS } from "./bridge.js";
 import { createExposedApi } from "./exposed_api.js";
@@ -796,3 +797,20 @@ declare global {
 
 export type AdjutorixPreloadBridge = typeof bridge;
 export type AdjutorixExposedApi = typeof exposedApi;
+
+
+// ADJUTORIX_NATIVE_PRELOAD_V13
+const __adjutorixNativeV13 = {
+  marker: "ADJUTORIX_NATIVE_PRELOAD_V13",
+  snapshot: () => __adjutorixIpcRendererV13.invoke("adjutorix:v13:snapshot", {}),
+  listWorkspace: () => __adjutorixIpcRendererV13.invoke("adjutorix:v13:workspace:list", {}),
+  readFile: (payload: any) => __adjutorixIpcRendererV13.invoke("adjutorix:v13:file:read", payload),
+  writeFile: (payload: any) => __adjutorixIpcRendererV13.invoke("adjutorix:v13:file:write", payload),
+  runCommand: (payload: any) => __adjutorixIpcRendererV13.invoke("adjutorix:v13:command:run", payload),
+};
+
+try {
+  __adjutorixContextBridgeV13.exposeInMainWorld("adjutorixNativeV13", __adjutorixNativeV13);
+} catch {
+  // already exposed in this renderer context
+}

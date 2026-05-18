@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { registerNativeControlPlaneV13 } from "./native-control-plane-v13";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from "electron";
 import path from "node:path";
 import fs from "node:fs";
@@ -1578,3 +1579,7 @@ ipcMain.handle(ADJUTORIX_AGENT_STATUS_CHANNEL_V8, async () => {
     }
   };
 });
+
+
+// ADJUTORIX_NATIVE_CONTROL_PLANE_V13_BOOTSTRAP
+registerNativeControlPlaneV13();
