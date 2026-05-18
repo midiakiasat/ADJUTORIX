@@ -1,47 +1,9 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
-
 import "./native-workbench.css";
 
-const MARKER = "ADJUTORIX_NATIVE_PRODUCT_WORKBENCH_V14";
-
-type Any = any;
-
-type FileEntry = {
-  path: string;
-  isDir?: boolean;
-  size?: number;
-  score?: number;
-};
-
-type BufferState = {
-  path: string;
-  content: string;
-  original: string;
-  language: string;
-  dirty: boolean;
-  openedAt: number;
-  savedAt?: number;
-};
-
-type Problem = {
-  file?: string;
-  line?: number;
-  column?: number;
-  severity: "error" | "warning" | "info";
-  message: string;
-};
-
-type RunResult = {
-  ok?: boolean;
-  status?: string;
-  exitCode?: number;
-  command?: string;
-  stdout?: string;
-  stderr?: string;
-  durationMs?: number;
-};
+const MARKER = "ADJUTORIX_NATIVE_ALL_TOOLS_WORKBENCH_V15";
 
 const COMMAND_PATHS = [
   "shell.execute",
@@ -74,38 +36,119 @@ const INDEX_PATHS = [
   "diagnostics.runtime",
 ];
 
-const TASKS = [
-  ["doctor", "Doctor", "doctor", "echo ADJUTORIX_DOCTOR && pwd && node -v && pnpm -v && git branch --show-current && git rev-parse --short HEAD && git status --short | head -160"],
-  ["build", "Build app", "build", "pnpm --filter @adjutorix/app run build"],
-  ["typecheck", "Typecheck app", "build", "pnpm --filter @adjutorix/app exec tsc -p tsconfig.json --noEmit --pretty false"],
-  ["verify", "Verify repository", "quality", "pnpm run verify"],
-  ["test", "Run tests", "quality", "pnpm test"],
-  ["debt", "Debt scan", "quality", "rg -n \"TODO|FIXME|HACK|throw new Error|bridge_missing|not implemented|placeholder|mock|stub|toy\" packages configs scripts src 2>/dev/null | head -400"],
-  ["status", "SCM status", "scm", "git status --short && echo && git branch --show-current && git rev-parse --short HEAD"],
-  ["diff", "SCM diff", "scm", "git diff --stat && echo && git diff --name-only && echo && git diff | head -800"],
-  ["timeline", "Timeline", "scm", "git log --oneline --decorate --graph --max-count=120"],
-  ["branches", "Branches", "scm", "git branch --all --verbose --no-abbrev | head -160"],
-  ["files", "Source inventory", "index", "find . -type f | sed 's#^./##' | grep -Ev '(^|/)(node_modules|.git|dist|build|coverage|__pycache__|.pytest_cache|.mypy_cache|.ruff_cache|.cache|.vite|.turbo)/' | head -2000"],
-  ["repo-map", "Write repo map", "index", "python3 - <<'PY'\nfrom pathlib import Path\nroot=Path.cwd()\nout=root/'.adjutorix'/'repo-map.md'\nout.parent.mkdir(parents=True,exist_ok=True)\nskip={'node_modules','.git','dist','build','coverage','__pycache__','.pytest_cache','.mypy_cache','.ruff_cache','.cache','.vite','.turbo'}\nrows=[]\nfor p in sorted(root.rglob('*')):\n    rel=p.relative_to(root)\n    if any(x in skip for x in rel.parts):\n        continue\n    if p.is_file():\n        rows.append(f'- `{rel}`')\nout.write_text('# ADJUTORIX Repository Map\\n\\n'+'\\n'.join(rows[:5000])+'\\n')\nprint(out)\nPY"],
-  ["symbol-index", "Symbol index", "index", "rg -n \"^(export default function|export function|function|class|const|def|class ) \" packages src configs scripts 2>/dev/null | head -700"],
-  ["health", "Workspace health", "doctor", "find . -maxdepth 4 \\( -name package.json -o -name tsconfig.json -o -name pnpm-workspace.yaml -o -name vite.config.* \\) | sort | head -300"],
-];
-
 const NAV = [
   ["explorer", "EX"],
-  ["search", "SE"],
-  ["commands", "CM"],
-  ["scm", "SC"],
-  ["tasks", "TK"],
+  ["tools", "TL"],
   ["agent", "AG"],
-  ["graph", "GR"],
+  ["verify", "VF"],
+  ["patch", "PT"],
+  ["ledger", "LG"],
+  ["transaction", "TX"],
+  ["governance", "GV"],
+  ["workspace", "WS"],
+  ["diagnostics", "DG"],
+  ["recovery", "RC"],
+  ["performance", "PF"],
+  ["ci", "CI"],
+  ["surfaces", "UI"],
   ["runtime", "RT"],
 ];
 
-const RIGHT = ["inspector", "outline", "problems", "patch", "graph", "agent", "runtime"];
+const RIGHT = ["inspector", "outline", "problems", "patch", "graph", "agent", "runtime", "surfaces"];
+
+const TOOL_SEEDS = [
+  ["doctor", "Doctor", "doctor", "echo ADJUTORIX_DOCTOR && pwd && node -v && pnpm -v && git branch --show-current && git rev-parse --short HEAD && git status --short | head -200"],
+  ["build-app", "Build app", "build", "pnpm --filter @adjutorix/app run build"],
+  ["typecheck-app", "Typecheck app", "build", "pnpm --filter @adjutorix/app exec tsc -p tsconfig.json --noEmit --pretty false"],
+  ["verify-root", "Verify root", "verify", "pnpm run verify"],
+  ["test-root", "Run root tests", "verify", "pnpm test"],
+  ["smoke-root", "Root smoke", "verify", "bash scripts/smoke.sh"],
+  ["package-macos", "Package macOS", "release", "bash scripts/package-macos.sh"],
+
+  ["agent-doctor", "Agent doctor", "agent", "bash scripts/agent/doctor.sh"],
+  ["agent-status", "Agent status", "agent", "bash scripts/agent/status.sh"],
+  ["agent-start", "Agent start", "agent", "bash scripts/agent/start.sh"],
+  ["agent-stop", "Agent stop", "agent", "bash scripts/agent/stop.sh"],
+  ["agent-restart", "Agent restart", "agent", "bash scripts/agent/restart.sh"],
+  ["agent-logs", "Agent logs", "agent", "bash scripts/agent/logs.sh"],
+
+  ["verify-run", "Verify run", "verify", "bash scripts/verify/run.sh"],
+  ["verify-status", "Verify status", "verify", "bash scripts/verify/status.sh"],
+  ["verify-rerun", "Verify rerun", "verify", "bash scripts/verify/rerun.sh"],
+  ["verify-artifacts", "Verify artifacts", "verify", "bash scripts/verify/artifacts.sh"],
+  ["verify-summary", "Verify summary", "verify", "bash scripts/verify/summary.sh"],
+
+  ["patch-preview", "Patch preview", "patch", "bash scripts/patch/preview.sh"],
+  ["patch-validate", "Patch validate", "patch", "bash scripts/patch/validate.sh"],
+  ["patch-apply", "Patch apply", "patch", "bash scripts/patch/apply.sh"],
+  ["patch-rebase", "Patch rebase", "patch", "bash scripts/patch/rebase.sh"],
+  ["patch-rollback", "Patch rollback", "patch", "bash scripts/patch/rollback.sh"],
+  ["patch-reject", "Patch reject", "patch", "bash scripts/patch/reject.sh"],
+
+  ["ledger-current", "Ledger current", "ledger", "bash scripts/ledger/current.sh"],
+  ["ledger-graph", "Ledger graph", "ledger", "bash scripts/ledger/graph.sh"],
+  ["ledger-inspect", "Ledger inspect", "ledger", "bash scripts/ledger/inspect.sh"],
+  ["ledger-range", "Ledger range", "ledger", "bash scripts/ledger/range.sh"],
+  ["ledger-replay", "Ledger replay", "ledger", "bash scripts/ledger/replay.sh"],
+  ["ledger-at", "Ledger at", "ledger", "bash scripts/ledger/at.sh"],
+
+  ["transaction-status", "Transaction status", "transaction", "bash scripts/transaction/status.sh"],
+  ["transaction-submit", "Transaction submit", "transaction", "bash scripts/transaction/submit.sh"],
+  ["transaction-cancel", "Transaction cancel", "transaction", "bash scripts/transaction/cancel.sh"],
+  ["transaction-inspect", "Transaction inspect", "transaction", "bash scripts/transaction/inspect.sh"],
+  ["transaction-graph", "Transaction graph", "transaction", "bash scripts/transaction/graph.sh"],
+  ["transaction-logs", "Transaction logs", "transaction", "bash scripts/transaction/logs.sh"],
+
+  ["governance-audit", "Governance audit", "governance", "bash scripts/governance/audit.sh"],
+  ["governance-check", "Governance check", "governance", "bash scripts/governance/check.sh"],
+  ["governance-explain", "Governance explain", "governance", "bash scripts/governance/explain.sh"],
+  ["governance-policies", "Governance policies", "governance", "bash scripts/governance/policies.sh"],
+  ["governance-deny-reasons", "Governance denial reasons", "governance", "bash scripts/governance/deny-reasons.sh"],
+
+  ["workspace-open", "Workspace open", "workspace", "bash scripts/workspace/open.sh"],
+  ["workspace-scan", "Workspace scan", "workspace", "bash scripts/workspace/scan.sh"],
+  ["workspace-health", "Workspace health", "workspace", "bash scripts/workspace/health.sh"],
+  ["workspace-reindex", "Workspace reindex", "workspace", "bash scripts/workspace/reindex.sh"],
+  ["workspace-trust", "Workspace trust", "workspace", "bash scripts/workspace/trust.sh"],
+
+  ["diagnostics-parse", "Diagnostics parse", "diagnostics", "bash scripts/diagnostics/parse.sh"],
+  ["diagnostics-problems", "Diagnostics problems", "diagnostics", "bash scripts/diagnostics/problems.sh"],
+  ["diagnostics-link", "Diagnostics link", "diagnostics", "bash scripts/diagnostics/link.sh"],
+
+  ["recovery-cleanup", "Recovery cleanup", "recovery", "bash scripts/recovery/cleanup.sh"],
+  ["recovery-resume", "Recovery resume", "recovery", "bash scripts/recovery/resume.sh"],
+  ["recovery-rollback", "Recovery rollback", "recovery", "bash scripts/recovery/rollback.sh"],
+  ["recovery-ledger", "Repair ledger", "recovery", "bash scripts/recovery/repair-ledger.sh"],
+  ["recovery-verify", "Recover verify", "recovery", "bash scripts/recovery/recover-verify.sh"],
+
+  ["performance-benchmark", "Benchmark", "performance", "bash scripts/performance/benchmark.sh"],
+  ["performance-profile", "Profile", "performance", "bash scripts/performance/profile.sh"],
+  ["performance-compare", "Compare performance", "performance", "bash scripts/performance/compare.sh"],
+  ["performance-report", "Performance report", "performance", "bash scripts/performance/report.sh"],
+
+  ["contracts-diff", "Contracts diff", "contracts", "bash scripts/contracts/diff.sh"],
+  ["contracts-freeze", "Contracts freeze", "contracts", "bash scripts/contracts/freeze.sh"],
+  ["contracts-validate", "Contracts validate", "contracts", "bash scripts/contracts/validate.sh"],
+
+  ["ci-check", "CI check", "ci", "bash configs/ci/check.sh"],
+  ["ci-smoke", "CI smoke", "ci", "bash configs/ci/smoke.sh"],
+  ["ci-verify", "CI verify", "ci", "bash configs/ci/verify.sh"],
+  ["ci-guard-generated", "Guard generated artifacts", "ci", "bash configs/ci/guard_generated_artifacts.sh"],
+  ["ci-guard-renderer", "Guard renderer authority", "ci", "bash configs/ci/guard_renderer_authority.sh"],
+  ["ci-guard-ipc", "Guard IPC registry", "ci", "bash configs/ci/guard_ipc_channel_registry.sh"],
+  ["ci-guard-verify-bypass", "Guard verify bypass", "ci", "bash configs/ci/guard_verify_gate_bypass.sh"],
+  ["ci-guard-apply-bypass", "Guard apply bypass", "ci", "bash configs/ci/guard_apply_gate_bypass.sh"],
+
+  ["app-vitest", "App tests", "app", "pnpm --dir packages/adjutorix-app exec vitest run"],
+  ["app-smoke", "App smoke", "app", "pnpm --dir packages/adjutorix-app exec vitest run -c vitest.smoke.config.ts"],
+  ["agent-tests", "Agent tests", "agent", "cd packages/adjutorix-agent && python -m pytest"],
+  ["cli-tests", "CLI tests", "cli", "cd packages/adjutorix-cli && python -m pytest"],
+  ["shared-build", "Shared build", "shared", "pnpm --filter @adjutorix/shared run build"],
+  ["orchestrator-build", "Orchestrator build", "orchestrator", "pnpm --filter @adjutorix/orchestrator run build"],
+];
 
 function api() {
-  const w = window as Any;
+  const w = window as any;
   const a = w.adjutorix ?? {};
   const b = w.adjutorixApi ?? {};
   return {
@@ -122,19 +165,20 @@ function api() {
     patch: { ...(b.patch ?? {}), ...(a.patch ?? {}) },
     ledger: { ...(b.ledger ?? {}), ...(a.ledger ?? {}) },
     agent: { ...(b.agent ?? {}), ...(a.agent ?? {}) },
+    compatibility: { ...(b.compatibility ?? {}), ...(a.compatibility ?? {}) },
   };
 }
 
-function pathGet(obj: Any, dot: string) {
+function pathGet(obj: any, path: string) {
   let x = obj;
-  for (const part of dot.split(".")) {
+  for (const p of path.split(".")) {
     if (!x || typeof x !== "object") return null;
-    x = x[part];
+    x = x[p];
   }
   return x;
 }
 
-function unwrap(x: Any) {
+function unwrap(x: any) {
   if (x && typeof x === "object") {
     if (x.ok === true && "data" in x) return x.data;
     if (x.ok === true && "result" in x) return x.result;
@@ -143,15 +187,16 @@ function unwrap(x: Any) {
   return x;
 }
 
-async function callAny(paths: string[], payloads: Any[] = [{}]) {
+async function callAny(paths: string[], payloads: any[] = [{}]) {
   const bridge = api();
   let found = false;
-  let last: Any = null;
+  let last: any = null;
 
-  for (const path of paths) {
-    const fn = pathGet(bridge, path);
+  for (const p of paths) {
+    const fn = pathGet(bridge, p);
     if (typeof fn !== "function") continue;
     found = true;
+
     for (const payload of payloads) {
       try {
         return unwrap(await fn(payload));
@@ -164,32 +209,34 @@ async function callAny(paths: string[], payloads: Any[] = [{}]) {
   throw new Error(found ? String(last?.message ?? last ?? "bridge_call_failed") : `bridge_missing:${paths.join("|")}`);
 }
 
-function functionsOf(obj: Any) {
+function functionsOf(obj: any) {
   const out: string[] = [];
   const seen = new Set();
-  const walk = (x: Any, prefix: string[], depth: number) => {
+
+  const walk = (x: any, prefix: string[], depth: number) => {
     if (!x || typeof x !== "object" || seen.has(x) || depth > 8) return;
     seen.add(x);
+
     for (const [k, v] of Object.entries(x)) {
       const p = [...prefix, k];
       if (typeof v === "function") out.push(p.join("."));
       else if (v && typeof v === "object") walk(v, p, depth + 1);
     }
   };
+
   walk(obj, [], 0);
   return out.sort();
 }
 
-function norm(p: Any) {
+function norm(p: any) {
   return String(p ?? "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/g, "");
 }
 
-function basename(p: string) {
-  const parts = norm(p).split("/").filter(Boolean);
-  return parts.at(-1) ?? p;
+function base(p: string) {
+  return norm(p).split("/").filter(Boolean).at(-1) ?? p;
 }
 
-function rel(p: string, root?: string) {
+function relative(p: string, root?: string) {
   const pp = norm(p);
   const rr = norm(root);
   if (!rr) return pp;
@@ -198,32 +245,35 @@ function rel(p: string, root?: string) {
   return pp;
 }
 
-function dataPath(x: Any): string | null {
+function childrenOf(x: any) {
+  return [x?.children, x?.entries, x?.items, x?.files, x?.tree, x?.workspaceTree, x?.fileTree].find(Array.isArray) ?? [];
+}
+
+function dataPath(x: any) {
   const y = unwrap(x);
   if (!y || typeof y !== "object") return null;
   const p = y.path ?? y.fullPath ?? y.absolutePath ?? y.relativePath ?? y.workspacePath ?? y.filePath ?? y.id;
   return typeof p === "string" && p.trim() ? norm(p) : null;
 }
 
-function childrenOf(x: Any): Any[] {
-  return [x?.children, x?.entries, x?.items, x?.files, x?.tree, x?.workspaceTree, x?.fileTree].find(Array.isArray) ?? [];
-}
-
-function isDir(x: Any) {
+function isDir(x: any) {
   const y = unwrap(x);
   const kind = String(y?.kind ?? y?.type ?? y?.entryType ?? "").toLowerCase();
   return y?.isDirectory === true || y?.directory === true || kind.includes("dir") || kind.includes("folder") || childrenOf(y).length > 0;
 }
 
-function flattenFiles(snapshots: Any[]) {
-  const map = new Map<string, FileEntry>();
-  const walk = (node: Any) => {
+function flattenFiles(snapshots: any[]) {
+  const map = new Map();
+
+  const walk = (node: any) => {
     const x = unwrap(node);
     if (!x) return;
+
     if (Array.isArray(x)) {
       x.forEach(walk);
       return;
     }
+
     if (typeof x !== "object") return;
 
     const p = dataPath(x);
@@ -233,6 +283,7 @@ function flattenFiles(snapshots: Any[]) {
     }
 
     childrenOf(x).forEach(walk);
+
     for (const k of ["workspace", "data", "snapshot", "runtime", "root", "result"]) {
       if (x[k]) walk(x[k]);
     }
@@ -242,10 +293,41 @@ function flattenFiles(snapshots: Any[]) {
   return [...map.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-function ignored(path: string) {
+function findRoot(entries: any[], snapshots: any[]) {
+  for (const s of snapshots) {
+    let out = "";
+
+    const walk = (x: any) => {
+      const y = unwrap(x);
+      if (!y || typeof y !== "object" || out) return;
+
+      for (const k of ["rootPath", "workspaceRoot", "workspacePath", "repoPath", "cwd"]) {
+        if (typeof y[k] === "string" && y[k].trim()) {
+          out = norm(y[k]);
+          return;
+        }
+      }
+
+      if (Array.isArray(y)) y.forEach(walk);
+      else Object.values(y).forEach(walk);
+    };
+
+    walk(s);
+    if (out) return out;
+  }
+
+  const paths = entries.map((x) => norm(x.path));
+  for (const anchor of ["/packages/", "/configs/", "/scripts/", "/tests/", "/docs/"]) {
+    const hit = paths.find((p) => p.includes(anchor));
+    if (hit) return hit.slice(0, hit.indexOf(anchor));
+  }
+
+  return "";
+}
+
+function generated(path: string) {
   const p = `/${norm(path).toLowerCase()}/`;
   return (
-    !p.trim() ||
     p.includes("/node_modules/") ||
     p.includes("/.git/") ||
     p.includes("/dist/") ||
@@ -258,14 +340,15 @@ function ignored(path: string) {
     p.includes("/.turbo/") ||
     p.includes("/.cache/") ||
     p.includes("/.vite/") ||
+    p.includes("/.adjutorix-release/") ||
+    p.includes("/quarantine/") ||
     p.includes("/venv/") ||
-    p.includes("/.venv/") ||
-    p.includes("/site-packages/")
+    p.includes("/.venv/")
   );
 }
 
 function binary(path: string) {
-  return /\.(png|jpg|jpeg|gif|webp|icns|ico|woff|woff2|ttf|otf|zip|gz|tgz|pdf|mp4|mov|mp3|wav|sqlite|db|lock)$/i.test(path);
+  return /\.(png|jpg|jpeg|gif|webp|icns|ico|woff|woff2|ttf|otf|zip|gz|tgz|pdf|mp4|mov|mp3|wav|sqlite|db|lock|pyc)$/i.test(path);
 }
 
 function lang(path: string) {
@@ -283,80 +366,84 @@ function lang(path: string) {
   return "plaintext";
 }
 
-function score(path: string) {
-  const p = path.toLowerCase();
-  const b = basename(p);
+function sourceScore(path: string) {
+  const p = norm(path).toLowerCase();
+  const b = base(p);
   let s = 0;
-  if (p.endsWith("/packages/adjutorix-app/src/renderer/nativecontrolplaneworkbench.tsx")) s += 900000;
-  if (p.endsWith("/packages/adjutorix-app/src/renderer/commandcenterworkbench.tsx")) s += 860000;
-  if (p.endsWith("/packages/adjutorix-app/src/main/index.ts")) s += 820000;
-  if (p.endsWith("/packages/adjutorix-app/src/main/native-control-plane-v13.ts")) s += 810000;
-  if (p.endsWith("/packages/adjutorix-app/src/preload/preload.ts")) s += 800000;
-  if (p.includes("/src/renderer/")) s += 90000;
-  if (p.includes("/src/main/")) s += 85000;
-  if (p.includes("/src/preload/")) s += 80000;
-  if (p.includes("/packages/")) s += 50000;
-  if (p.includes("/configs/")) s += 30000;
-  if (p.includes("/scripts/")) s += 24000;
-  if (p.includes("/tests/")) s += 18000;
+
+  if (p.endsWith("/packages/adjutorix-app/src/renderer/nativecontrolplaneworkbench.tsx")) s += 950000;
+  if (p.includes("/packages/adjutorix-app/src/renderer/components/")) s += 910000;
+  if (p.includes("/packages/adjutorix-app/src/renderer/hooks/")) s += 900000;
+  if (p.includes("/packages/adjutorix-app/src/renderer/state/")) s += 890000;
+  if (p.includes("/packages/adjutorix-app/src/renderer/lib/")) s += 880000;
+  if (p.includes("/packages/adjutorix-app/src/main/ipc/")) s += 860000;
+  if (p.includes("/packages/adjutorix-app/src/main/")) s += 840000;
+  if (p.includes("/packages/adjutorix-app/src/preload/")) s += 830000;
+  if (p.includes("/packages/adjutorix-agent/adjutorix_agent/")) s += 810000;
+  if (p.includes("/packages/shared/src/")) s += 790000;
+  if (p.includes("/packages/orchestrator/src/")) s += 760000;
+  if (p.includes("/packages/adjutorix-cli/adjutorix_cli/")) s += 750000;
+  if (p.startsWith("scripts/")) s += 730000;
+  if (p.startsWith("configs/")) s += 600000;
+  if (p.startsWith("tests/")) s += 500000;
+
   if (b === "package.json") s += 70000;
   if (b === "pnpm-workspace.yaml") s += 65000;
-  if (b === "readme.md") s += 35000;
-  if (p.endsWith(".tsx")) s += 6000;
-  if (p.endsWith(".ts")) s += 5000;
-  if (p.endsWith(".py")) s += 3500;
-  if (p.endsWith(".json")) s += 2400;
-  if (p.endsWith(".md")) s += 1500;
-  if (p.endsWith(".sh")) s += 1500;
-  return s - Math.min(p.length, 1500);
+  if (b === "readme.md") s += 30000;
+
+  if (p.endsWith(".tsx")) s += 7000;
+  if (p.endsWith(".ts")) s += 6000;
+  if (p.endsWith(".py")) s += 5000;
+  if (p.endsWith(".sh")) s += 4500;
+  if (p.endsWith(".json")) s += 3000;
+  if (p.endsWith(".yaml") || p.endsWith(".yml")) s += 2500;
+  if (p.endsWith(".md")) s += 1800;
+
+  return s - Math.min(p.length, 2000);
 }
 
-function sourceFiles(entries: FileEntry[]) {
-  const seen = new Set();
-  const out: FileEntry[] = [];
-  for (const f of entries) {
-    const p = norm(f.path);
-    if (!p || f.isDir || ignored(p) || binary(p) || seen.has(p)) continue;
-    seen.add(p);
-    out.push({ ...f, path: p, score: score(p) });
-  }
-  return out.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.path.localeCompare(b.path));
+function classify(path: string) {
+  const p = norm(path);
+
+  if (/^scripts\/agent\//.test(p) || /adjutorix_agent\//.test(p)) return "agent";
+  if (/^scripts\/verify\//.test(p) || /verify/i.test(p)) return "verify";
+  if (/^scripts\/patch\//.test(p) || /patch/i.test(p)) return "patch";
+  if (/^scripts\/ledger\//.test(p) || /ledger/i.test(p)) return "ledger";
+  if (/^scripts\/transaction\//.test(p) || /transaction/i.test(p)) return "transaction";
+  if (/^scripts\/governance\//.test(p) || /governance|policy|constitution|guard/i.test(p)) return "governance";
+  if (/^scripts\/workspace\//.test(p) || /workspace/i.test(p)) return "workspace";
+  if (/^scripts\/diagnostics\//.test(p) || /diagnostics|observability|metrics|tracing|logging|errors/i.test(p)) return "diagnostics";
+  if (/^scripts\/recovery\//.test(p) || /recovery|rollback|resume|repair/i.test(p)) return "recovery";
+  if (/^scripts\/performance\//.test(p) || /performance|benchmark|profile|latency/i.test(p)) return "performance";
+  if (/^configs\/ci\//.test(p) || /\.github\/workflows/.test(p)) return "ci";
+  if (/contracts/.test(p)) return "contracts";
+  if (/renderer\/components|renderer\/hooks|renderer\/state|renderer\/lib/.test(p)) return "surfaces";
+  if (/packages\/shared/.test(p)) return "shared";
+  if (/packages\/orchestrator/.test(p)) return "orchestrator";
+  if (/packages\/adjutorix-cli/.test(p)) return "cli";
+  if (/tests\//.test(p)) return "tests";
+  return "source";
 }
 
-function findRoot(entries: FileEntry[], snapshots: Any[]) {
-  for (const s of snapshots) {
-    let out = "";
-    const walk = (x: Any) => {
-      const y = unwrap(x);
-      if (!y || typeof y !== "object" || out) return;
-      for (const k of ["rootPath", "workspaceRoot", "workspacePath", "repoPath", "cwd"]) {
-        if (typeof y[k] === "string" && y[k].trim()) {
-          out = norm(y[k]);
-          return;
-        }
-      }
-      if (Array.isArray(y)) y.forEach(walk);
-      else Object.values(y).forEach(walk);
-    };
-    walk(s);
-    if (out) return out;
-  }
-
-  const paths = entries.map((x) => norm(x.path));
-  for (const anchor of ["/packages/", "/configs/", "/scripts/", "/tests/", "/docs/"]) {
-    const hit = paths.find((p) => p.includes(anchor));
-    if (hit) return hit.slice(0, hit.indexOf(anchor));
-  }
-  return "";
+function scriptTool(path: string) {
+  const p = norm(path);
+  const id = p.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+  const name = p.replace(/^scripts\//, "").replace(/^configs\/ci\//, "ci/").replace(/^packages\//, "pkg/").replace(/\.(sh|mjs|js|py|ts)$/i, "");
+  const group = classify(p);
+  const runner = p.endsWith(".sh") ? `bash ${JSON.stringify(p)}` :
+    p.endsWith(".mjs") || p.endsWith(".js") ? `node ${JSON.stringify(p)}` :
+    p.endsWith(".py") ? `python3 ${JSON.stringify(p)}` :
+    `cat ${JSON.stringify(p)}`;
+  return { id, label: name, group, command: runner, source: "discovered-script" };
 }
 
-function contentOf(x: Any) {
+function contentOf(x: any) {
   if (typeof x === "string") return x;
   const y = unwrap(x);
   return String(y?.content ?? y?.text ?? y?.value ?? y?.body ?? "");
 }
 
-function resultOf(x: Any, command: string): RunResult {
+function resultOf(x: any, command: string) {
   const y = unwrap(x);
   if (y && typeof y === "object" && ("stdout" in y || "stderr" in y || "exitCode" in y || "status" in y)) return y;
   return {
@@ -369,7 +456,7 @@ function resultOf(x: Any, command: string): RunResult {
   };
 }
 
-function terminalText(r: RunResult) {
+function terminalText(r: any) {
   return [
     `$ ${r.command ?? ""}`,
     `status=${r.status ?? (r.ok === false ? "failed" : "ok")} exit=${r.exitCode ?? ""} duration=${r.durationMs ?? ""}ms`,
@@ -379,28 +466,32 @@ function terminalText(r: RunResult) {
   ].join("\n").trim();
 }
 
-function parseProblems(text: string): Problem[] {
-  const out: Problem[] = [];
+function parseProblems(text: string) {
+  const out: any[] = [];
+
   for (const line of String(text ?? "").split(/\r?\n/)) {
     let m = line.match(/^(.+?)\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)$/);
     if (m) {
       out.push({ file: m[1], line: Number(m[2]), column: Number(m[3]), severity: "error", message: `${m[4]} ${m[5]}` });
       continue;
     }
+
     m = line.match(/^(.+?):(\d+):(\d+):\s+(error|warning):\s+(.+)$/i);
     if (m) {
       out.push({ file: m[1], line: Number(m[2]), column: Number(m[3]), severity: m[4].toLowerCase() === "warning" ? "warning" : "error", message: m[5] });
       continue;
     }
-    if (/error|failed|exception|cannot find module|not found/i.test(line)) {
+
+    if (/error|failed|exception|cannot find module|module_not_found|traceback|denied|reject/i.test(line)) {
       out.push({ severity: "error", message: line });
     }
   }
-  return out.slice(0, 500);
+
+  return out.slice(0, 700);
 }
 
 function outlineOf(text: string) {
-  const rules: [RegExp, string][] = [
+  const rules = [
     [/^\s*export\s+default\s+function\s+([A-Za-z0-9_$]+)/, "function"],
     [/^\s*export\s+function\s+([A-Za-z0-9_$]+)/, "function"],
     [/^\s*async\s+function\s+([A-Za-z0-9_$]+)/, "function"],
@@ -412,7 +503,7 @@ function outlineOf(text: string) {
     [/^\s*#{1,6}\s+(.+)/, "section"],
   ];
 
-  const out: Any[] = [];
+  const out: any[] = [];
   text.split(/\r?\n/).forEach((line, i) => {
     for (const [rx, kind] of rules) {
       const m = line.match(rx);
@@ -422,7 +513,8 @@ function outlineOf(text: string) {
       }
     }
   });
-  return out.slice(0, 400);
+
+  return out.slice(0, 500);
 }
 
 function importsOf(text: string) {
@@ -430,70 +522,127 @@ function importsOf(text: string) {
     .split(/\r?\n/)
     .map((line, i) => ({ line: i + 1, text: line.trim() }))
     .filter((x) => /^(import|from|const .*require\(|export .* from )/.test(x.text))
-    .slice(0, 300);
+    .slice(0, 400);
 }
 
 function diffOf(a: string, b: string) {
   if (a === b) return "No patch.";
+
   const aa = a.split(/\r?\n/);
   const bb = b.split(/\r?\n/);
   const out = ["--- original", "+++ current"];
   const n = Math.max(aa.length, bb.length);
+
   for (let i = 0; i < n; i++) {
     if (aa[i] === bb[i]) continue;
     if (aa[i] !== undefined) out.push(`-${String(i + 1).padStart(5)} ${aa[i]}`);
     if (bb[i] !== undefined) out.push(`+${String(i + 1).padStart(5)} ${bb[i]}`);
-    if (out.length > 1000) {
+    if (out.length > 1200) {
       out.push("[patch truncated]");
       break;
     }
   }
+
   return out.join("\n");
 }
 
+function uniqTools(tools: any[]) {
+  const m = new Map();
+  for (const t of tools) m.set(t.id || t.command, t);
+  return [...m.values()];
+}
+
+function sourceFiles(entries: any[], includeGenerated: boolean) {
+  const seen = new Set();
+  const out: any[] = [];
+
+  for (const e of entries) {
+    const p = norm(e.path);
+    if (!p || e.isDir || binary(p) || seen.has(p)) continue;
+    if (!includeGenerated && generated(p)) continue;
+    seen.add(p);
+    out.push({ ...e, path: p, score: sourceScore(p), group: classify(p) });
+  }
+
+  return out.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.path.localeCompare(b.path));
+}
+
 export default function NativeControlPlaneWorkbench() {
-  const editor = useRef<Any>(null);
+  const editor = useRef<any>(null);
 
   const [root, setRoot] = useState("");
-  const [entries, setEntries] = useState<FileEntry[]>([]);
+  const [entries, setEntries] = useState<any[]>([]);
   const [bridgeFns, setBridgeFns] = useState<string[]>([]);
-  const [snapshots, setSnapshots] = useState<Any[]>([]);
-  const [buffers, setBuffers] = useState<Record<string, BufferState>>({});
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [buffers, setBuffers] = useState<Record<string, any>>({});
   const [selected, setSelected] = useState("");
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [left, setLeft] = useState("explorer");
+  const [includeGenerated, setIncludeGenerated] = useState(false);
+  const [left, setLeft] = useState("tools");
   const [right, setRight] = useState("inspector");
   const [bottom, setBottom] = useState("terminal");
   const [busy, setBusy] = useState(false);
   const [cmd, setCmd] = useState("pnpm --filter @adjutorix/app run build");
-  const [terminal, setTerminal] = useState("Pick a task or run a command.");
-  const [lastResult, setLastResult] = useState<RunResult>({ status: "ready", stdout: "Native control-plane workbench ready.", stderr: "" });
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [terminal, setTerminal] = useState("Pick a tool, task, script, product surface, or source file.");
+  const [lastResult, setLastResult] = useState<any>({ status: "ready", stdout: "All-tools workbench ready.", stderr: "" });
+  const [problems, setProblems] = useState<any[]>([]);
   const [activity, setActivity] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);
   const [paletteQ, setPaletteQ] = useState("");
-  const [agentText, setAgentText] = useState("Inspect current state. Produce the next concrete patch. Run build and gates.");
-  const [grepPattern, setGrepPattern] = useState("");
+  const [agentText, setAgentText] = useState("Inspect the full ADJUTORIX system. Use all tools. Produce the next concrete patch. Run build, verify, and gates.");
+
+  const current = selected ? buffers[selected] : null;
+  const dirtyBuffers = Object.values(buffers).filter((b: any) => b.dirty);
 
   const addLog = useCallback((line: string) => {
-    setActivity((old) => [`${new Date().toLocaleTimeString()}  ${line}`, ...old].slice(0, 500));
+    setActivity((old) => [`${new Date().toLocaleTimeString()}  ${line}`, ...old].slice(0, 800));
   }, []);
 
+  const files = useMemo(() => sourceFiles(entries, includeGenerated), [entries, includeGenerated]);
+
   const visible = useMemo(() => {
-    const files = sourceFiles(entries);
     const q = query.trim().toLowerCase();
     const filtered = q
       ? files.filter((f) => f.path.toLowerCase().includes(q) || buffers[f.path]?.content?.toLowerCase?.().includes(q))
       : files;
-    return filtered.slice(0, 1000);
-  }, [entries, query, buffers]);
+    return filtered.slice(0, 1500);
+  }, [buffers, files, query]);
 
-  const current = selected ? buffers[selected] : null;
-  const dirtyBuffers = Object.values(buffers).filter((b) => b.dirty);
+  const discoveredTools = useMemo(() => {
+    const scriptLike = files.filter((f) =>
+      /^scripts\/.+\.(sh|mjs|js|py)$/i.test(relative(f.path, root)) ||
+      /^configs\/ci\/.+\.sh$/i.test(relative(f.path, root)) ||
+      /^packages\/[^/]+\/scripts\/.+\.(sh|mjs|js|py)$/i.test(relative(f.path, root))
+    );
+    return scriptLike.map((f) => scriptTool(relative(f.path, root)));
+  }, [files, root]);
+
+  const allTools = useMemo(() => {
+    const seeded = TOOL_SEEDS.map(([id, label, group, command]) => ({ id, label, group, command, source: "seed" }));
+    return uniqTools([...seeded, ...discoveredTools]).sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+  }, [discoveredTools]);
+
+  const surfaceFiles = useMemo(() => files.filter((f) =>
+    /packages\/adjutorix-app\/src\/renderer\/(components|hooks|state|lib)\//.test(relative(f.path, root)) ||
+    /packages\/adjutorix-app\/src\/main\//.test(relative(f.path, root)) ||
+    /packages\/adjutorix-app\/src\/preload\//.test(relative(f.path, root)) ||
+    /packages\/adjutorix-agent\/adjutorix_agent\//.test(relative(f.path, root)) ||
+    /packages\/adjutorix-cli\/adjutorix_cli\//.test(relative(f.path, root)) ||
+    /packages\/orchestrator\/src\//.test(relative(f.path, root)) ||
+    /packages\/shared\/src\//.test(relative(f.path, root))
+  ), [files, root]);
+
   const outline = useMemo(() => outlineOf(current?.content ?? ""), [current?.content]);
-  const imps = useMemo(() => importsOf(current?.content ?? ""), [current?.content]);
+  const imports = useMemo(() => importsOf(current?.content ?? ""), [current?.content]);
   const patch = useMemo(() => current ? diffOf(current.original, current.content) : "No file.", [current]);
+
+  const domainCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const f of files) out[f.group] = (out[f.group] ?? 0) + 1;
+    for (const t of allTools) out[`tool:${t.group}`] = (out[`tool:${t.group}`] ?? 0) + 1;
+    return out;
+  }, [allTools, files]);
 
   const runCommand = useCallback(async (command: string) => {
     setBusy(true);
@@ -505,24 +654,27 @@ export default function NativeControlPlaneWorkbench() {
     try {
       const started = Date.now();
       const response = await callAny(COMMAND_PATHS, [
-        { schema: 1, actor: "renderer", command, intent: command, cwd: root || undefined, timeoutMs: 240000 },
-        { command, cwd: root || undefined, timeoutMs: 240000 },
+        { schema: 1, actor: "renderer", command, intent: command, cwd: root || undefined, timeoutMs: 300000 },
+        { command, cwd: root || undefined, timeoutMs: 300000 },
         command,
       ]);
 
-      const result = { ...resultOf(response, command), durationMs: Date.now() - started };
+      const result = { ...resultOf(response, command), durationMs: Date.now() - started, command };
       setLastResult(result);
       setTerminal(terminalText(result));
+
       const parsed = parseProblems(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
       setProblems(parsed);
       if (parsed.length) setBottom("problems");
+
       addLog(`DONE ${result.status ?? result.exitCode ?? "ok"}`);
       return result;
     } catch (e) {
-      const result: RunResult = { ok: false, status: "bridge_error", exitCode: 1, command, stdout: "", stderr: String(e?.message ?? e) };
+      const result = { ok: false, status: "bridge_error", exitCode: 1, command, stdout: "", stderr: String(e?.message ?? e) };
       setLastResult(result);
       setTerminal(terminalText(result));
       setProblems(parseProblems(result.stderr ?? ""));
+      setBottom("problems");
       addLog(`FAIL ${result.stderr}`);
       return result;
     } finally {
@@ -533,14 +685,15 @@ export default function NativeControlPlaneWorkbench() {
   const indexWorkspace = useCallback(async () => {
     setBusy(true);
     addLog("INDEX start");
-    const bridge = api();
-    const collected: Any[] = [];
 
-    for (const p of INDEX_PATHS) {
+    const bridge = api();
+    const collected: any[] = [];
+
+    for (const path of INDEX_PATHS) {
       try {
-        collected.push(await callAny([p], [{ schema: 1, actor: "renderer", limit: 5000 }]));
+        collected.push(await callAny([path], [{ schema: 1, actor: "renderer", limit: 12000 }]));
       } catch (e) {
-        collected.push({ error: String(e), source: p });
+        collected.push({ error: String(e), source: path });
       }
     }
 
@@ -553,28 +706,29 @@ export default function NativeControlPlaneWorkbench() {
     setRoot(nextRoot);
     setBridgeFns(fns);
 
-    addLog(`INDEX ${flat.length} entries / ${sourceFiles(flat).length} source files / bridge=${fns.length}`);
+    addLog(`INDEX ${flat.length} entries / ${sourceFiles(flat, false).length} product files / bridge=${fns.length}`);
     setBusy(false);
   }, [addLog, root]);
 
   const openFile = useCallback(async (path: string) => {
     const full = norm(path);
-    const relative = rel(full, root);
-    const known = entries.find((e) => norm(e.path) === full);
+    const r = relative(full, root);
+    const known = entries.find((e) => norm(e.path) === full || relative(e.path, root) === r);
+
     if (known?.isDir || binary(full)) {
-      addLog(`SKIP ${relative}`);
+      addLog(`SKIP ${r}`);
       return;
     }
 
     try {
       const response = await callAny(READ_PATHS, [
-        { schema: 1, actor: "renderer", path: relative, targetPath: relative, relativePath: relative, filePath: relative, workspacePath: relative },
-        { path: relative },
+        { schema: 1, actor: "renderer", path: r, targetPath: r, relativePath: r, filePath: r, workspacePath: r },
+        { path: r },
       ]);
 
       const content = contentOf(response);
       const actual = norm(response?.path ?? full);
-      const buf: BufferState = {
+      const buf = {
         path: actual,
         content,
         original: content,
@@ -586,9 +740,9 @@ export default function NativeControlPlaneWorkbench() {
       setBuffers((old) => ({ ...old, [actual]: buf }));
       setOpenFiles((old) => Array.from(new Set([...old, actual])));
       setSelected(actual);
-      addLog(`OPEN ${rel(actual, root)}`);
+      addLog(`OPEN ${relative(actual, root)}`);
     } catch (e) {
-      addLog(`OPEN FAILED ${relative} :: ${String(e?.message ?? e)}`);
+      addLog(`OPEN FAILED ${r} :: ${String(e?.message ?? e)}`);
       setBottom("output");
     }
   }, [addLog, entries, root]);
@@ -597,7 +751,8 @@ export default function NativeControlPlaneWorkbench() {
     const b = buffers[path];
     if (!b) return;
 
-    const r = rel(path, root);
+    const r = relative(path, root);
+
     try {
       await callAny(WRITE_PATHS, [
         { schema: 1, actor: "renderer", path: r, targetPath: r, relativePath: r, filePath: r, workspacePath: r, content: b.content, text: b.content, value: b.content },
@@ -607,9 +762,8 @@ export default function NativeControlPlaneWorkbench() {
       setBuffers((old) => ({ ...old, [path]: { ...b, original: b.content, dirty: false, savedAt: Date.now() } }));
       addLog(`SAVE ${r}`);
     } catch (e) {
-      addLog(`SAVE BRIDGE FAILED ${r} :: ${String(e?.message ?? e)}`);
-      const safe = JSON.stringify(b.content);
-      const command = `python3 - <<'PY'\nfrom pathlib import Path\np=Path(${JSON.stringify(r)})\np.parent.mkdir(parents=True, exist_ok=True)\np.write_text(${safe})\nprint(p)\nPY`;
+      addLog(`SAVE FALLBACK ${r} :: ${String(e?.message ?? e)}`);
+      const command = `python3 - <<'PY'\nfrom pathlib import Path\np=Path(${JSON.stringify(r)})\np.parent.mkdir(parents=True, exist_ok=True)\np.write_text(${JSON.stringify(b.content)})\nprint(p)\nPY`;
       await runCommand(command);
       setBuffers((old) => ({ ...old, [path]: { ...b, original: b.content, dirty: false, savedAt: Date.now() } }));
     }
@@ -619,18 +773,51 @@ export default function NativeControlPlaneWorkbench() {
     for (const b of dirtyBuffers) await saveFile(b.path);
   }, [dirtyBuffers, saveFile]);
 
+  const openCoreSurfaces = useCallback(async () => {
+    const wanted = [
+      "packages/adjutorix-app/src/renderer/NativeControlPlaneWorkbench.tsx",
+      "packages/adjutorix-app/src/main/index.ts",
+      "packages/adjutorix-app/src/preload/preload.ts",
+      "packages/adjutorix-app/src/renderer/components/AppShell.tsx",
+      "packages/adjutorix-app/src/renderer/components/CommandPalette.tsx",
+      "packages/adjutorix-app/src/renderer/components/FileTreePane.tsx",
+      "packages/adjutorix-app/src/renderer/components/TerminalPanel.tsx",
+      "packages/adjutorix-app/src/renderer/components/PatchReviewPanel.tsx",
+      "packages/adjutorix-app/src/renderer/components/VerifyPanel.tsx",
+      "packages/adjutorix-app/src/renderer/components/LedgerPanel.tsx",
+      "packages/adjutorix-app/src/renderer/components/TransactionGraphPanel.tsx",
+      "packages/adjutorix-agent/adjutorix_agent/core/patch_pipeline.py",
+      "packages/adjutorix-agent/adjutorix_agent/core/verify_pipeline.py",
+      "packages/shared/src/patch/patch_artifact.ts",
+      "packages/orchestrator/src/system_bootstrap.ts",
+    ];
+
+    for (const p of wanted) {
+      const hit = files.find((f) => relative(f.path, root) === p || f.path === p);
+      if (hit) await openFile(hit.path);
+    }
+  }, [files, openFile, root]);
+
   const writeAgentContext = useCallback(async () => {
     const body = [
       "# ADJUTORIX Agent Context",
       "",
       `marker=${MARKER}`,
       `root=${root}`,
-      `current=${current ? rel(current.path, root) : "none"}`,
-      `dirty=${dirtyBuffers.map((b) => rel(b.path, root)).join(",") || "none"}`,
+      `current=${current ? relative(current.path, root) : "none"}`,
+      `dirty=${dirtyBuffers.map((b: any) => relative(b.path, root)).join(",") || "none"}`,
       "",
       "## Intent",
       "",
       agentText,
+      "",
+      "## All Tools",
+      "",
+      allTools.map((t) => `- [${t.group}] ${t.label}: \`${t.command}\``).join("\n"),
+      "",
+      "## Product Surfaces",
+      "",
+      surfaceFiles.slice(0, 800).map((f) => `- ${relative(f.path, root)}`).join("\n"),
       "",
       "## Bridge Functions",
       "",
@@ -639,13 +826,13 @@ export default function NativeControlPlaneWorkbench() {
       "## Current File",
       "",
       "```",
-      (current?.content ?? "").slice(0, 60000),
+      (current?.content ?? "").slice(0, 80000),
       "```",
       "",
       "## Patch",
       "",
       "```diff",
-      patch.slice(0, 60000),
+      patch.slice(0, 80000),
       "```",
       "",
       "## Problems",
@@ -654,11 +841,12 @@ export default function NativeControlPlaneWorkbench() {
       "",
       "## Activity",
       "",
-      activity.slice(0, 200).join("\n"),
+      activity.slice(0, 240).join("\n"),
       "",
     ].join("\n");
 
     const target = ".adjutorix/native-agent-context.md";
+
     try {
       await callAny(WRITE_PATHS, [
         { schema: 1, actor: "renderer", path: target, targetPath: target, relativePath: target, filePath: target, workspacePath: target, content: body, text: body, value: body },
@@ -670,17 +858,8 @@ export default function NativeControlPlaneWorkbench() {
       addLog(`AGENT WRITE FALLBACK ${String(e?.message ?? e)}`);
     }
 
-    const command = `python3 - <<'PY'\nfrom pathlib import Path\nbody = ${JSON.stringify(body)}\np = Path(".adjutorix/native-agent-context.md")\np.parent.mkdir(parents=True, exist_ok=True)\np.write_text(body)\nprint(p)\nPY`;
-    await runCommand(command);
-  }, [activity, addLog, agentText, bridgeFns, current, dirtyBuffers, patch, problems, root, runCommand]);
-
-  const runGrep = useCallback(async () => {
-    const q = grepPattern.trim() || query.trim();
-    if (!q) return;
-    const command = `rg -n ${JSON.stringify(q)} packages configs scripts src tests 2>/dev/null | head -500`;
-    await runCommand(command);
-    setBottom("terminal");
-  }, [grepPattern, query, runCommand]);
+    await runCommand(`python3 - <<'PY'\nfrom pathlib import Path\nbody=${JSON.stringify(body)}\np=Path(".adjutorix/native-agent-context.md")\np.parent.mkdir(parents=True, exist_ok=True)\np.write_text(body)\nprint(p)\nPY`);
+  }, [activity, addLog, agentText, allTools, bridgeFns, current, dirtyBuffers, patch, problems, root, runCommand, surfaceFiles]);
 
   useEffect(() => {
     indexWorkspace();
@@ -705,184 +884,183 @@ export default function NativeControlPlaneWorkbench() {
   }, [saveAll, saveFile, selected]);
 
   const paletteItems = useMemo(() => {
-    const taskItems = TASKS.map(([id, label, group, command]) => ({
-      label,
-      kind: group,
-      run: () => runCommand(command),
-    }));
-
-    const fileItems = visible.slice(0, 250).map((f) => ({
-      label: rel(f.path, root),
-      kind: "file",
-      run: () => openFile(f.path),
-    }));
-
-    const all = [...taskItems, ...fileItems];
+    const toolItems = allTools.map((t) => ({ label: t.label, detail: t.command, kind: t.group, run: () => runCommand(t.command) }));
+    const fileItems = visible.slice(0, 500).map((f) => ({ label: relative(f.path, root), detail: f.group, kind: "file", run: () => openFile(f.path) }));
+    const items = [...toolItems, ...fileItems];
     const q = paletteQ.trim().toLowerCase();
-    return q ? all.filter((x) => x.label.toLowerCase().includes(q) || x.kind.toLowerCase().includes(q)) : all;
-  }, [openFile, paletteQ, root, runCommand, visible]);
+    return q ? items.filter((x) => `${x.label} ${x.detail} ${x.kind}`.toLowerCase().includes(q)) : items;
+  }, [allTools, openFile, paletteQ, root, runCommand, visible]);
 
-  const leftPane = () => {
-    if (left === "commands" || left === "tasks") {
-      return (
-        <div className="v14-stack">
-          {TASKS.filter((t) => left !== "tasks" || ["doctor", "build", "quality"].includes(t[2])).map(([id, label, group, command]) => (
-            <button key={id} className="v14-task" onClick={() => runCommand(command)}>
-              <strong>{label}</strong>
-              <span>{group}</span>
-              <code>{command}</code>
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (left === "scm") {
-      return (
-        <div className="v14-stack">
-          {TASKS.filter((t) => t[2] === "scm").map(([id, label, group, command]) => (
-            <button key={id} className="v14-task" onClick={() => runCommand(command)}>
-              <strong>{label}</strong>
-              <span>{group}</span>
-              <code>{command}</code>
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (left === "search") {
-      return (
-        <div className="v14-stack">
-          <input className="v14-input" value={grepPattern} onChange={(e) => setGrepPattern(e.target.value)} placeholder="repo grep pattern" />
-          <button className="v14-primary" onClick={runGrep}>Run repository grep</button>
-          <div className="v14-hint">Search uses filenames, loaded buffers, and native rg command output.</div>
-          {visible.map((f) => (
-            <button key={f.path} className="v14-file" onClick={() => openFile(f.path)}>
-              <span>·</span>{rel(f.path, root)}
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    if (left === "agent") {
-      return (
-        <div className="v14-agent">
-          <textarea value={agentText} onChange={(e) => setAgentText(e.target.value)} />
-          <button className="v14-primary big" onClick={writeAgentContext}>Write full agent context pack</button>
-          <div className="v14-hint">Includes current file, patch, dirty set, problems, bridge functions, and recent activity.</div>
-        </div>
-      );
-    }
-
-    if (left === "graph") {
-      return (
-        <div className="v14-stack">
-          <div className="v14-card"><b>Current imports</b><pre>{imps.map((x) => `${x.line}: ${x.text}`).join("\n") || "No imports."}</pre></div>
-          <div className="v14-card"><b>Current symbols</b><pre>{outline.map((x) => `${x.line}: ${x.kind} ${x.name}`).join("\n") || "No symbols."}</pre></div>
-          <div className="v14-card"><b>Hot files</b><pre>{visible.slice(0, 80).map((x) => rel(x.path, root)).join("\n")}</pre></div>
-        </div>
-      );
-    }
-
-    if (left === "runtime") {
-      return (
-        <div className="v14-stack mono">
-          {bridgeFns.map((f) => <button key={f} className="v14-runtime">{f}</button>)}
-        </div>
-      );
-    }
+  const toolGrid = (group?: string) => {
+    const list = group ? allTools.filter((t) => t.group === group) : allTools;
 
     return (
-      <div className="v14-stack">
-        {visible.map((f) => (
-          <button key={f.path} className={selected === f.path ? "v14-file active" : "v14-file"} onClick={() => openFile(f.path)}>
-            <span>{buffers[f.path]?.dirty ? "●" : "·"}</span>{rel(f.path, root)}
+      <div className="v15-toolgrid">
+        {list.map((t) => (
+          <button key={`${t.id}-${t.command}`} className="v15-tool" onClick={() => runCommand(t.command)}>
+            <strong>{t.label}</strong>
+            <span>{t.group}</span>
+            <code>{t.command}</code>
+            <em>{t.source}</em>
           </button>
         ))}
       </div>
     );
   };
 
+  const fileList = (list: any[]) => (
+    <div className="v15-list">
+      {list.map((f) => (
+        <button key={f.path} className={selected === f.path ? "v15-file active" : "v15-file"} onClick={() => openFile(f.path)}>
+          <span>{buffers[f.path]?.dirty ? "●" : "·"}</span>
+          <b>{relative(f.path, root)}</b>
+          <em>{f.group}</em>
+        </button>
+      ))}
+    </div>
+  );
+
+  const leftPane = () => {
+    if (left === "tools") {
+      const groups = Array.from(new Set(allTools.map((t) => t.group))).sort();
+
+      return (
+        <div className="v15-stack">
+          <button className="v15-primary" onClick={openCoreSurfaces}>Open core product surfaces</button>
+          <button className="v15-primary" onClick={writeAgentContext}>Write full agent context pack</button>
+          <div className="v15-domain-grid">
+            {groups.map((g) => (
+              <button key={g} onClick={() => setLeft(g)}>
+                <span>{g}</span>
+                <b>{allTools.filter((t) => t.group === g).length}</b>
+              </button>
+            ))}
+          </div>
+          {toolGrid()}
+        </div>
+      );
+    }
+
+    if (["agent", "verify", "patch", "ledger", "transaction", "governance", "workspace", "diagnostics", "recovery", "performance", "ci"].includes(left)) {
+      return toolGrid(left);
+    }
+
+    if (left === "surfaces") {
+      return (
+        <div className="v15-stack">
+          <div className="v15-domain-grid">
+            {["surfaces", "agent", "shared", "orchestrator", "cli", "tests", "contracts"].map((g) => (
+              <button key={g} onClick={() => setQuery(g === "surfaces" ? "packages/adjutorix-app/src/renderer" : g)}>
+                <span>{g}</span>
+                <b>{files.filter((f) => f.group === g || relative(f.path, root).includes(g)).length}</b>
+              </button>
+            ))}
+          </div>
+          {fileList(surfaceFiles.slice(0, 1000))}
+        </div>
+      );
+    }
+
+    if (left === "runtime") {
+      return <div className="v15-runtime">{bridgeFns.map((f) => <button key={f}>{f}</button>)}</div>;
+    }
+
+    return fileList(visible);
+  };
+
   const rightPane = () => {
     if (right === "outline") {
-      return <div className="v14-cards">{outline.map((s) => <button key={`${s.line}-${s.name}`} onClick={() => editor.current?.revealLineInCenter?.(s.line)}><b>{s.kind}</b><span>{s.name}</span><em>line {s.line}</em></button>)}</div>;
+      return <div className="v15-cards">{outline.map((s) => <button key={`${s.line}-${s.name}`} onClick={() => editor.current?.revealLineInCenter?.(s.line)}><b>{s.kind}</b><span>{s.name}</span><em>line {s.line}</em></button>)}</div>;
     }
 
     if (right === "problems") {
-      return <div className="v14-cards">{problems.length ? problems.map((p, i) => <button key={i} onClick={() => p.file && openFile(p.file)}><b className="bad">{p.severity}</b><span>{p.file ?? ""}:{p.line ?? ""}</span><em>{p.message}</em></button>) : <p>No parsed problems.</p>}</div>;
+      return <div className="v15-cards">{problems.length ? problems.map((p, i) => <button key={i} onClick={() => p.file && openFile(p.file)}><b className="bad">{p.severity}</b><span>{p.file ?? ""}:{p.line ?? ""}</span><em>{p.message}</em></button>) : <p>No parsed problems.</p>}</div>;
     }
 
-    if (right === "patch") return <pre className="v14-pre">{patch}</pre>;
+    if (right === "patch") return <pre className="v15-pre">{patch}</pre>;
 
     if (right === "graph") {
-      const graph = ["IMPORTS", ...imps.map((x) => `${x.line}: ${x.text}`), "", "SYMBOLS", ...outline.map((x) => `${x.line}: ${x.kind} ${x.name}`)].join("\n");
-      return <pre className="v14-pre">{graph}</pre>;
+      return <pre className="v15-pre">{[
+        "IMPORTS",
+        ...imports.map((x) => `${x.line}: ${x.text}`),
+        "",
+        "SYMBOLS",
+        ...outline.map((x) => `${x.line}: ${x.kind} ${x.name}`),
+        "",
+        "DOMAIN COUNTS",
+        ...Object.entries(domainCounts).sort().map(([k, v]) => `${k}: ${v}`),
+      ].join("\n")}</pre>;
     }
 
     if (right === "agent") {
-      return <div className="v14-agent"><textarea value={agentText} onChange={(e) => setAgentText(e.target.value)} /><button className="v14-primary" onClick={writeAgentContext}>Write context pack</button><pre>{activity.join("\n")}</pre></div>;
+      return <div className="v15-agent"><textarea value={agentText} onChange={(e) => setAgentText(e.target.value)} /><button className="v15-primary big" onClick={writeAgentContext}>Write context pack</button><pre>{activity.join("\n")}</pre></div>;
     }
 
-    if (right === "runtime") {
-      return <div className="v14-stack mono">{bridgeFns.map((f) => <button key={f} className="v14-runtime">{f}</button>)}</div>;
-    }
+    if (right === "runtime") return <div className="v15-runtime">{bridgeFns.map((f) => <button key={f}>{f}</button>)}</div>;
+
+    if (right === "surfaces") return fileList(surfaceFiles.slice(0, 700));
 
     return (
-      <div className="v14-inspector">
-        <div className="v14-root"><span>root</span><b>{root || "unknown"}</b></div>
+      <div className="v15-inspector">
+        <div className="v15-card root"><span>root</span><b>{root || "unknown"}</b></div>
         <section>
-          <article><span>files</span><b>{sourceFiles(entries).length}</b></article>
+          <article><span>product files</span><b>{files.length}</b></article>
           <article><span>indexed</span><b>{entries.length}</b></article>
+          <article><span>tools</span><b>{allTools.length}</b></article>
+          <article><span>surfaces</span><b>{surfaceFiles.length}</b></article>
           <article><span>open</span><b>{openFiles.length}</b></article>
           <article><span>dirty</span><b>{dirtyBuffers.length}</b></article>
           <article><span>bridge</span><b>{bridgeFns.length}</b></article>
           <article><span>status</span><b>{busy ? "busy" : "live"}</b></article>
         </section>
-        <div className="v14-root"><span>current</span><b>{current?.path ? rel(current.path, root) : "none"}</b></div>
-        <div className="v14-card"><b>Capabilities</b><p>Editor, Explorer, Search, SCM, Tasks, Problems, Patch, Graph, Agent, Runtime, Terminal.</p></div>
+        <div className="v15-card"><span>current</span><b>{current ? relative(current.path, root) : "none"}</b></div>
+        <div className="v15-card">
+          <span>active lanes</span>
+          <p>Agent, Verify, Patch, Ledger, Transaction, Governance, Workspace, Diagnostics, Recovery, Performance, CI, Contracts, Renderer, Main, Preload, Shared, Orchestrator, CLI, Tests.</p>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="v14-shell">
-      <header className="v14-top">
-        <div className="v14-brand">{MARKER}</div>
-        <button className="v14-palette-btn" onClick={() => setPalette(true)}>⌘P</button>
-        <div className="v14-rootline">{root || "workspace root unknown"}</div>
-        <div className="v14-spacer" />
-        <span className={busy ? "v14-live busy" : "v14-live"}>{busy ? "BUSY" : "LIVE"}</span>
+    <div className="v15-shell">
+      <header className="v15-top">
+        <div className="v15-brand">{MARKER}</div>
+        <button className="v15-palette-btn" onClick={() => setPalette(true)}>⌘P</button>
+        <div className="v15-rootline">{root || "workspace root unknown"}</div>
+        <div className="v15-spacer" />
+        <label className="v15-check"><input type="checkbox" checked={includeGenerated} onChange={(e) => setIncludeGenerated(e.target.checked)} /> generated</label>
+        <span className={busy ? "v15-live busy" : "v15-live"}>{busy ? "BUSY" : "LIVE"}</span>
         <button onClick={indexWorkspace}>Index</button>
+        <button onClick={openCoreSurfaces}>Core</button>
         <button disabled={!current?.dirty} onClick={() => current && saveFile(current.path)}>Save</button>
         <button disabled={!dirtyBuffers.length} onClick={saveAll}>Save all</button>
       </header>
 
-      <main className="v14-main">
-        <nav className="v14-nav">
+      <main className="v15-main">
+        <nav className="v15-nav">
           {NAV.map(([id, label]) => <button key={id} className={left === id ? "active" : ""} onClick={() => setLeft(id)}>{label}</button>)}
         </nav>
 
-        <aside className="v14-left">
-          <div className="v14-left-head">
+        <aside className="v15-left">
+          <div className="v15-left-head">
             <span>{left}</span>
-            <b>{visible.length}/{sourceFiles(entries).length}</b>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="search files and buffers" />
+            <b>{visible.length}/{files.length}</b>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="search tools, files, modules, buffers" />
           </div>
-          <div className="v14-left-body">{leftPane()}</div>
+          <div className="v15-left-body">{leftPane()}</div>
         </aside>
 
-        <section className="v14-center">
-          <div className="v14-tabs">
+        <section className="v15-center">
+          <div className="v15-tabs">
             {openFiles.length ? openFiles.map((p) => (
               <button key={p} className={selected === p ? "active" : ""} onClick={() => setSelected(p)}>
-                {buffers[p]?.dirty ? "● " : ""}{basename(p)}
+                {buffers[p]?.dirty ? "● " : ""}{base(p)}
               </button>
             )) : <span>Open a source file.</span>}
           </div>
 
-          <div className="v14-editor">
+          <div className="v15-editor">
             {current ? (
               <Editor
                 height="100%"
@@ -909,18 +1087,18 @@ export default function NativeControlPlaneWorkbench() {
                 }}
               />
             ) : (
-              <div className="v14-empty">No file selected.</div>
+              <div className="v15-empty">No file selected.</div>
             )}
           </div>
 
-          <div className="v14-bottom">
-            <div className="v14-bottom-tabs">
+          <div className="v15-bottom">
+            <div className="v15-bottom-tabs">
               {["terminal", "output", "problems", "patch", "graph", "raw"].map((x) => <button key={x} className={bottom === x ? "active" : ""} onClick={() => setBottom(x)}>{x}</button>)}
             </div>
 
             {bottom === "terminal" && (
-              <div className="v14-terminal">
-                <div className="v14-runbar">
+              <div className="v15-terminal">
+                <div className="v15-runbar">
                   <input value={cmd} onChange={(e) => setCmd(e.target.value)} />
                   <button onClick={() => runCommand(cmd)}>Run</button>
                 </div>
@@ -928,30 +1106,31 @@ export default function NativeControlPlaneWorkbench() {
               </div>
             )}
 
-            {bottom === "output" && <pre className="v14-pre">{activity.join("\n")}</pre>}
-            {bottom === "problems" && <pre className="v14-pre">{problems.map((p) => `${p.severity} ${p.file ?? ""}:${p.line ?? ""}:${p.column ?? ""} ${p.message}`).join("\n") || "No parsed problems."}</pre>}
-            {bottom === "patch" && <pre className="v14-pre">{patch}</pre>}
-            {bottom === "graph" && <pre className="v14-pre">{["IMPORTS", ...imps.map((x) => `${x.line}: ${x.text}`), "", "SYMBOLS", ...outline.map((x) => `${x.line}: ${x.kind} ${x.name}`)].join("\n")}</pre>}
-            {bottom === "raw" && <pre className="v14-pre">{JSON.stringify({ lastResult, snapshots }, null, 2)}</pre>}
+            {bottom === "output" && <pre className="v15-pre">{activity.join("\n")}</pre>}
+            {bottom === "problems" && <pre className="v15-pre">{problems.map((p) => `${p.severity} ${p.file ?? ""}:${p.line ?? ""}:${p.column ?? ""} ${p.message}`).join("\n") || "No parsed problems."}</pre>}
+            {bottom === "patch" && <pre className="v15-pre">{patch}</pre>}
+            {bottom === "graph" && <pre className="v15-pre">{["IMPORTS", ...imports.map((x) => `${x.line}: ${x.text}`), "", "SYMBOLS", ...outline.map((x) => `${x.line}: ${x.kind} ${x.name}`)].join("\n")}</pre>}
+            {bottom === "raw" && <pre className="v15-pre">{JSON.stringify({ lastResult, domainCounts, snapshots }, null, 2)}</pre>}
           </div>
         </section>
 
-        <aside className="v14-right">
-          <div className="v14-right-tabs">
+        <aside className="v15-right">
+          <div className="v15-right-tabs">
             {RIGHT.map((x) => <button key={x} className={right === x ? "active" : ""} onClick={() => setRight(x)}>{x}</button>)}
           </div>
-          <div className="v14-right-body">{rightPane()}</div>
+          <div className="v15-right-body">{rightPane()}</div>
         </aside>
       </main>
 
       {palette && (
-        <div className="v14-overlay" onClick={() => setPalette(false)}>
-          <div className="v14-palette" onClick={(e) => e.stopPropagation()}>
-            <input autoFocus value={paletteQ} onChange={(e) => setPaletteQ(e.target.value)} placeholder="command, task, file..." />
+        <div className="v15-overlay" onClick={() => setPalette(false)}>
+          <div className="v15-palette" onClick={(e) => e.stopPropagation()}>
+            <input autoFocus value={paletteQ} onChange={(e) => setPaletteQ(e.target.value)} placeholder="command, tool, script, file, module..." />
             <div>
-              {paletteItems.slice(0, 80).map((item, i) => (
+              {paletteItems.slice(0, 120).map((item, i) => (
                 <button key={`${item.kind}-${item.label}-${i}`} onClick={() => { item.run(); setPalette(false); setPaletteQ(""); }}>
-                  <span>{item.label}</span><em>{item.kind}</em>
+                  <span>{item.label}</span>
+                  <em>{item.kind}</em>
                 </button>
               ))}
             </div>
