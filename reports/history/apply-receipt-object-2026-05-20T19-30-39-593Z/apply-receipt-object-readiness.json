@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_APPLY_GATE_TO_APPLY_RECEIPT",
+  "timestamp": "2026-05-20T19:30:39.593Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/apply_receipt_object.schema.json",
+    "configs/runtime/apply_receipt_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

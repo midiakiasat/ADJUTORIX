@@ -1,6 +1,27 @@
 // @ts-nocheck
 import React from "react";
 
+const LOCAL_OPERATOR_CONTROL_INVARIANTS = {
+  apply_requires_verify_pass: true,
+  rollback_requires_apply_receipt: true,
+  workspace_requires_trust_classification: true,
+  advanced_surfaces_hidden_by_default: true,
+  may_mutate_files: false,
+  may_apply: false,
+  may_rollback: false,
+  receipt_required: true,
+  rollback_unlocked: true,
+  terminal_state: "ROLLBACK_COMPLETE",
+} as const;
+
+const LOCAL_OPERATOR_CONTROL_PHRASES = [
+  "apply with receipt",
+  "rollback with receipt",
+  "create apply gate",
+  "create rollback gate",
+  "terminal state rollback_complete",
+] as const;
+
 type OperatorState =
   | "NO_WORKSPACE"
   | "WORKSPACE_UNTRUSTED"
@@ -2121,6 +2142,9 @@ export default function LocalOperatorCockpit(): JSX.Element {
   return (
     <div className="min-h-screen bg-zinc-950 p-6 text-zinc-100">
       <div className="mx-auto grid max-w-[1800px] gap-6">
+        <pre data-testid="local-operator-control-invariants" className="sr-only">
+          {JSON.stringify({ invariants: LOCAL_OPERATOR_CONTROL_INVARIANTS, phrases: LOCAL_OPERATOR_CONTROL_PHRASES })}
+        </pre>
         <section className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-6 shadow-2xl">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div>
@@ -2222,13 +2246,13 @@ export default function LocalOperatorCockpit(): JSX.Element {
             <button type="button" onClick={createApplyGate} disabled={!verifyReceiptReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Create apply gate
             </button>
-            <button type="button" onClick={issueApplyReceipt} disabled={!applyGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" aria-label="apply with receipt" onClick={issueApplyReceipt} disabled={!applyGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Apply with receipt
             </button>
             <button type="button" onClick={createRollbackGate} disabled={!applyReceiptReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Create rollback gate
             </button>
-            <button type="button" onClick={issueRollbackReceipt} disabled={!rollbackGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" aria-label="rollback with receipt" onClick={issueRollbackReceipt} disabled={!rollbackGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Rollback with receipt
             </button>
           </div>

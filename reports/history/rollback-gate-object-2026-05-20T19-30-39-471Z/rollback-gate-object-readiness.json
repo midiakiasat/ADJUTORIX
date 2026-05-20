@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_APPLY_RECEIPT_TO_ROLLBACK_GATE",
+  "timestamp": "2026-05-20T19:30:39.471Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/rollback_gate_object.schema.json",
+    "configs/runtime/rollback_gate_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "product": "ADJUTORIX_LOCAL_OPERATOR_COCKPIT",
+  "timestamp": "2026-05-20T19:30:39.963Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
+    "packages/adjutorix-app/src/renderer/main.tsx"
+  ],
+  "root_mount": "LocalOperatorCockpit",
+  "required_component_phrases": [
+    "Local governed coding control plane",
+    "ADJUTORIX Operator Cockpit",
+    "Repository custody",
+    "Trust classification",
+    "Intent capture",
+    "Plan object",
+    "Patch object",
+    "Verification object",
+    "Apply gate",
+    "Rollback receipt",
+    "Evidence timeline",
+    "Advanced surfaces"
+  ]
+}

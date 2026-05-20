@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_PATCH_CUSTODY_TO_VERIFICATION_GATE",
+  "timestamp": "2026-05-20T19:30:39.776Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/verification_gate_object.schema.json",
+    "configs/runtime/verification_gate_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

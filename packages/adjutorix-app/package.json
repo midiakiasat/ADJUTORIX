@@ -29,7 +29,9 @@
     "build:preload-entry": "node -e \"const fs=require('node:fs');fs.mkdirSync('dist/preload',{recursive:true});fs.copyFileSync('dist/preload/preload.js','dist/preload/preload.mjs')\"",
     "assert:electron": "node ./scripts/assert-electron-installed.cjs",
     "guard:release-surface": "bash ../../configs/ci/guard_renderer_release_surface.sh",
-    "guard:interaction-contract": "bash ../../configs/ci/guard_interaction_contract.sh"
+    "guard:interaction-contract": "bash ../../configs/ci/guard_interaction_contract.sh",
+    "test:renderer": "vitest run tests/renderer",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_VERIFY_RECEIPT_TO_APPLY_GATE",
+  "timestamp": "2026-05-20T19:30:39.654Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/apply_gate_object.schema.json",
+    "configs/runtime/apply_gate_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "product": "ADJUTORIX_OPERATOR_LOOP_SMOKE",
+  "timestamp": "2026-05-20T19:38:27.641Z",
+  "verdict": "PASS",
+  "failures": [],
+  "active_smoke_files": [
+    "local_operator_loop.smoke.test.tsx"
+  ],
+  "checked_files": [
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
+    "packages/adjutorix-app/tests/smoke/local_operator_loop.smoke.test.tsx",
+    "packages/adjutorix-app/vitest.smoke.config.ts",
+    "packages/adjutorix-app/package.json"
+  ]
+}

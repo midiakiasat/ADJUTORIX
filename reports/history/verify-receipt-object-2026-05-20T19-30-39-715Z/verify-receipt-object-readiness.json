@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_VERIFICATION_GATE_TO_VERIFY_RECEIPT",
+  "timestamp": "2026-05-20T19:30:39.715Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/verify_receipt_object.schema.json",
+    "configs/runtime/verify_receipt_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

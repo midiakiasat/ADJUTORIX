@@ -1,0 +1,349 @@
+ADJUTORIX_REAL_ROOT_SMOKE_FAILURE_CONTEXT
+timestamp=2026-05-20T19:28:35Z
+
+=== VERIFY PHASES ===
+phase	status	started	finished	duration_ms
+repo_layout	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:33Z	29
+toolchain	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:33Z	30
+git_state	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:33Z	27
+constitution	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:33Z	100
+contracts	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:33Z	52
+ipc_channel_registry	PASS	2026-05-20T19:23:33Z	2026-05-20T19:23:34Z	1297
+ipc_channel_registry_selftest	PASS	2026-05-20T19:23:34Z	2026-05-20T19:23:52Z	17474
+policy	PASS	2026-05-20T19:23:52Z	2026-05-20T19:23:52Z	41
+runtime_config	PASS	2026-05-20T19:23:52Z	2026-05-20T19:23:52Z	41
+observability	PASS	2026-05-20T19:23:52Z	2026-05-20T19:23:52Z	42
+root_lint	PASS	2026-05-20T19:23:52Z	2026-05-20T19:23:54Z	2194
+root_typecheck	PASS	2026-05-20T19:23:54Z	2026-05-20T19:23:57Z	2241
+root_tests	PASS	2026-05-20T19:23:57Z	2026-05-20T19:24:53Z	56107
+app_checks	PASS	2026-05-20T19:24:53Z	2026-05-20T19:26:06Z	73514
+agent_checks	PASS	2026-05-20T19:26:06Z	2026-05-20T19:26:07Z	281
+cli_checks	PASS	2026-05-20T19:26:07Z	2026-05-20T19:26:07Z	276
+invariants	PASS	2026-05-20T19:26:07Z	2026-05-20T19:26:07Z	268
+smoke	FAIL	2026-05-20T19:26:07Z	2026-05-20T19:26:08Z	1120
+
+=== VERIFY LOG TAIL ===
+[adjutorix-app] prepare-renderer-assets: verified fonts/Inter-Medium.woff2 (6102 bytes)
+[adjutorix-app] prepare-renderer-assets: verified fonts/Inter-Regular.woff2 (6056 bytes)
+[adjutorix-app] prepare-renderer-assets: verified fonts/Inter-SemiBold.woff2 (6086 bytes)
+[adjutorix-app] prepare-renderer-assets: verified icon.icns (9590 bytes)
+[adjutorix-app] prepare-renderer-assets: verified icon.png (5000 bytes)
+[adjutorix-app] prepare-renderer-assets: verified splash.png (8887 bytes)
+[adjutorix-app] prepare-renderer-assets: manifest written to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app/assets/asset-manifest.json
+
+> @adjutorix/app@0.1.0 typecheck /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app
+> tsc --noEmit
+
+
+> @adjutorix/app@0.1.0 lint /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app
+> eslint "src/**/*.{ts,tsx}" --max-warnings=0
+
+
+> @adjutorix/app@0.1.0 test /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app
+> vitest run tests/renderer
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app[39m
+
+ [32m✓[39m tests/renderer/monaco_models.test.ts [2m([22m[2m26 tests[22m[2m)[22m[90m 13[2mms[22m[39m
+ [32m✓[39m tests/renderer/diagnostics_panel.test.tsx [2m([22m[2m19 tests[22m[2m)[22m[90m 281[2mms[22m[39m
+ [32m✓[39m tests/renderer/file_tree_pane.test.tsx [2m([22m[2m24 tests[22m[2m)[22m[90m 259[2mms[22m[39m
+ [32m✓[39m tests/renderer/diagnostic_parser.test.ts [2m([22m[2m19 tests[22m[2m)[22m[90m 15[2mms[22m[39m
+ [32m✓[39m tests/renderer/use_ledger.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 820[2mms[22m[39m
+ [32m✓[39m tests/renderer/use_workspace.test.ts [2m([22m[2m21 tests[22m[2m)[22m[33m 870[2mms[22m[39m
+ [32m✓[39m tests/renderer/use_agent.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 875[2mms[22m[39m
+ [32m✓[39m tests/renderer/use_patch_review.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 983[2mms[22m[39m
+ [32m✓[39m tests/renderer/patch_review_panel.test.tsx [2m([22m[2m18 tests[22m[2m)[22m[33m 364[2mms[22m[39m
+ [32m✓[39m tests/renderer/large_file_guard.test.ts [2m([22m[2m22 tests[22m[2m)[22m[90m 10[2mms[22m[39m
+ [32m✓[39m tests/renderer/about_panel.test.tsx [2m([22m[2m14 tests[22m[2m)[22m[33m 599[2mms[22m[39m
+ [32m✓[39m tests/renderer/use_keyboard_shortcuts.test.ts [2m([22m[2m18 tests[22m[2m)[22m[90m 81[2mms[22m[39m
+ [32m✓[39m tests/renderer/outline_panel.test.tsx [2m([22m[2m18 tests[22m[2m)[22m[33m 583[2mms[22m[39m
+ [32m✓[39m tests/renderer/chat_panel.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 454[2mms[22m[39m
+ [32m✓[39m tests/renderer/monaco_editor_pane.test.tsx [2m([22m[2m16 tests[22m[2m)[22m[33m 428[2mms[22m[39m
+ [32m✓[39m tests/renderer/job_panel.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[33m 306[2mms[22m[39m
+ [32m✓[39m tests/renderer/verify_panel.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 713[2mms[22m[39m
+ [32m✓[39m tests/renderer/transaction_graph_panel.test.tsx [2m([22m[2m19 tests[22m[2m)[22m[33m 554[2mms[22m[39m
+   [33m[2m✓[22m[39m TransactionGraphPanel[2m > [22mwires open, reveal, and refresh actions explicitly [33m343[2mms[22m[39m
+ [32m✓[39m tests/renderer/welcome_screen.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 744[2mms[22m[39m
+   [33m[2m✓[22m[39m WelcomeScreen[2m > [22mrenders the canonical workspace admission shell with title, subtitle, and primary entry actions [33m318[2mms[22m[39m
+ [32m✓[39m tests/renderer/ledger_panel.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 600[2mms[22m[39m
+ [32m✓[39m tests/renderer/split_layout.test.tsx [2m([22m[2m20 tests[22m[2m)[22m[33m 564[2mms[22m[39m
+ [32m✓[39m tests/renderer/settings_panel.test.tsx [2m([22m[2m18 tests[22m[2m)[22m[33m 612[2mms[22m[39m
+ [32m✓[39m tests/renderer/search_panel.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 725[2mms[22m[39m
+   [33m[2m✓[22m[39m SearchPanel[2m > [22mwires query changes to the explicit callback instead of mutating local shadow state [33m364[2mms[22m[39m
+ [32m✓[39m tests/renderer/path_labels.test.ts [2m([22m[2m28 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32m✓[39m tests/renderer/diff_viewer_pane.test.tsx [2m([22m[2m17 tests[22m[2m)[22m[33m 409[2mms[22m[39m
+ [32m✓[39m tests/renderer/keyboard.test.ts [2m([22m[2m31 tests[22m[2m)[22m[90m 13[2mms[22m[39m
+ [32m✓[39m tests/renderer/terminal_panel.test.tsx [2m([22m[2m16 tests[22m[2m)[22m[33m 771[2mms[22m[39m
+   [33m[2m✓[22m[39m TerminalPanel[2m > [22mrenders the canonical terminal shell with title, subtitle, shell identity, cwd, and command input [33m342[2mms[22m[39m
+ [32m✓[39m tests/renderer/command_palette.test.tsx [2m([22m[2m19 tests[22m[2m)[22m[33m 1228[2mms[22m[39m
+   [33m[2m✓[22m[39m CommandPalette[2m > [22mrenders the canonical palette shell with title, subtitle, query, categories, and command list [33m406[2mms[22m[39m
+ [32m✓[39m tests/renderer/provider_status.test.tsx [2m([22m[2m13 tests[22m[2m)[22m[33m 348[2mms[22m[39m
+ [32m✓[39m tests/renderer/editor_tabs.test.tsx [2m([22m[2m19 tests[22m[2m)[22m[33m 552[2mms[22m[39m
+ [32m✓[39m tests/renderer/app_shell.composition_contract.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[90m 273[2mms[22m[39m
+ [32m✓[39m tests/renderer/active_buffer_diff_review.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 7[2mms[22m[39m
+ [32m✓[39m tests/renderer/editor_buffers.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 15[2mms[22m[39m
+ [32m✓[39m tests/renderer/app_shell_overlay_layers.regression.test.tsx [2m([22m[2m1 test[22m[2m)[22m[90m 24[2mms[22m[39m
+ [32m✓[39m tests/renderer/release_surface_guard.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 25[2mms[22m[39m
+ [32m✓[39m tests/renderer/interaction_contract.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[90m 3[2mms[22m[39m
+ [32m✓[39m tests/renderer/index_health_panel.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[33m 48332[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mrenders the canonical index-health shell with title, subtitle, workspace identity, and state [33m5409[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces health and trust posture explicitly instead of flattening them into index state [33m1635[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces coverage explicitly so indexed, eligible, ignored, and hidden file counts remain visible [33m3184[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces freshness and watcher lag explicitly instead of relying on coarse ready/stale labels [33m2506[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces issue summaries explicitly so warnings do not disappear behind green state [33m1955[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces notes explicitly so index interpretability is not reduced to numeric metrics [33m1467[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mkeeps operational metrics visible as facts about builds, rebuilds, duration, watcher events, and pending fs events [33m2847[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mwires refresh and rebuild actions explicitly [33m10320[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mdoes not advertise refresh or rebuild as enabled when capability gates are closed [33m4642[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces stale posture explicitly when freshness exceeds threshold [33m1556[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces building posture explicitly instead of reusing ready-shell assumptions [33m1555[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msurfaces failed index posture explicitly when coverage cannot be trusted [33m1989[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22msupports empty-workspace posture explicitly when no files are yet eligible for indexing [33m1564[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mrenders loading posture explicitly without dropping the index-health shell contract [33m1493[2mms[22m[39m
+   [33m[2m✓[22m[39m IndexHealthPanel[2m > [22mdoes not collapse the panel into only a status badge; coverage, freshness, issues, notes, metrics, and controls remain distinct [33m6208[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m37 passed[39m[22m[90m (37)[39m
+[2m      Tests [22m [1m[32m607 passed[39m[22m[90m (607)[39m
+[2m   Start at [22m 21:25:10
+[2m   Duration [22m 56.16s[2m (transform 1.72s, setup 0ms, collect 8.48s, tests 63.46s, environment 30.19s, prepare 2.74s)[22m
+
+[2026-05-20T19:26:06Z] [INFO] Phase passed: app_checks (73514 ms)
+[1m[36m==> [15] agent_checks[0m
+
+> @adjutorix/agent@0.1.0 test /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-agent
+> node ./scripts/verify-package-surface.mjs
+
+@adjutorix/agent-surface-ok
+[2026-05-20T19:26:07Z] [INFO] Phase passed: agent_checks (281 ms)
+[1m[36m==> [16] cli_checks[0m
+
+> @adjutorix/cli@0.1.0 test /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-cli
+> node ./scripts/verify-package-surface.mjs
+
+@adjutorix/cli-surface-ok
+[2026-05-20T19:26:07Z] [INFO] Phase passed: cli_checks (276 ms)
+[1m[36m==> [17] invariants[0m
+(node:73743) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./")); register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ governance invariant blocks apply without approval (0.655125ms)
+✔ governance invariant accepts approved apply on governed targets (0.062833ms)
+(node:73743) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/tests/invariants/apply_gate_enforcement.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73744) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./")); register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ mutation invariant accepts governed write paths only (0.730542ms)
+✔ mutation invariant passes when writes are governed and explicit (0.066292ms)
+(node:73744) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/tests/invariants/no_direct_write.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73745) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./")); register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ system invariants surface renderer isolation violations (1.217917ms)
+✔ system invariants expose aggregate status (0.118208ms)
+(node:73745) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/tests/invariants/renderer_isolation.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73746) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./")); register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ ordering invariant rejects out-of-order transitions (0.621584ms)
+✔ ordering invariant accepts monotonic scheduling (0.062667ms)
+(node:73746) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/tests/invariants/scheduler_enforcement.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:73747) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./")); register("./scripts/node-ts-extension-loader.mjs", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ verify invariant fails when required checks are missing (0.719625ms)
+✔ verify invariant accepts complete verification set (0.065417ms)
+(node:73747) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/tests/invariants/verify_gate_enforcement.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 187.183167
+[2026-05-20T19:26:07Z] [INFO] Phase passed: invariants (268 ms)
+[1m[36m==> [18] smoke[0m
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app[39m
+
+[90mstderr[2m | tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22m[2msmoke/local_operator_loop[2m > [22m[2mboots the local governed operator cockpit as the default product surface
+[22m[39mWarning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:30.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+[90mstderr[2m | tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22m[2msmoke/local_operator_loop[2m > [22m[2mexecutes the complete governed loop without terminal dependency
+[22m[39mWarning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:51.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+[90mstderr[2m | tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22m[2msmoke/local_operator_loop[2m > [22m[2mkeeps apply blocked before verify receipt and keeps rollback blocked before apply receipt
+[22m[39mWarning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:125.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+ [31m❯[39m tests/smoke/local_operator_loop.smoke.test.tsx [2m([22m[2m3 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[90m 10[2mms[22m[39m
+[31m   [31m×[31m smoke/local_operator_loop[2m > [22mboots the local governed operator cockpit as the default product surface[90m 9[2mms[22m[31m[39m
+[31m     → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.[39m
+[31m   [31m×[31m smoke/local_operator_loop[2m > [22mexecutes the complete governed loop without terminal dependency[90m 1[2mms[22m[31m[39m
+[31m     → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.[39m
+[31m   [31m×[31m smoke/local_operator_loop[2m > [22mkeeps apply blocked before verify receipt and keeps rollback blocked before apply receipt[90m 1[2mms[22m[31m[39m
+[31m     → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 3 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22msmoke/local_operator_loop[2m > [22mboots the local governed operator cockpit as the default product surface
+[31m[1m[7m FAIL [27m[22m[39m tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22msmoke/local_operator_loop[2m > [22mexecutes the complete governed loop without terminal dependency
+[31m[1m[7m FAIL [27m[22m[39m tests/smoke/local_operator_loop.smoke.test.tsx[2m > [22msmoke/local_operator_loop[2m > [22mkeeps apply blocked before verify receipt and keeps rollback blocked before apply receipt
+[31m[1mError[22m: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.[39m
+[90m [2m❯[22m createFiberFromTypeAndProps ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m28478:17[22m[39m
+[90m [2m❯[22m createFiberFromElement ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m28504:15[22m[39m
+[90m [2m❯[22m reconcileSingleElement ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m13986:23[22m[39m
+[90m [2m❯[22m reconcileChildFibers ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m14044:35[22m[39m
+[90m [2m❯[22m reconcileChildren ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m19193:28[22m[39m
+[90m [2m❯[22m updateHostRoot ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m19912:5[22m[39m
+[90m [2m❯[22m beginWork ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m21654:14[22m[39m
+[90m [2m❯[22m beginWork$1 ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m27465:14[22m[39m
+[90m [2m❯[22m performUnitOfWork ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m26599:12[22m[39m
+[90m [2m❯[22m workLoopSync ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:[2m26505:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[90m (3)[39m
+[2m   Start at [22m 21:26:08
+[2m   Duration [22m 664ms[2m (transform 56ms, setup 0ms, collect 109ms, tests 10ms, environment 281ms, prepare 49ms)[22m
+
+[2026-05-20T19:26:08Z] [ERROR] Phase failed: smoke (1120 ms)
+
+=== DIRECT SMOKE CONFIG OUTPUT ===
+
+ RUN  v2.1.9 /Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/packages/adjutorix-app
+
+stderr | tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > boots the local governed operator cockpit as the default product surface
+Warning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:30.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+stderr | tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > executes the complete governed loop without terminal dependency
+Warning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:51.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+ × tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > boots the local governed operator cockpit as the default product surface
+   → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+ × tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > executes the complete governed loop without terminal dependency
+   → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+ × tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > keeps apply blocked before verify receipt and keeps rollback blocked before apply receipt
+   → Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+stderr | tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > keeps apply blocked before verify receipt and keeps rollback blocked before apply receipt
+Warning: React.jsx: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+
+Check your code at local_operator_loop.smoke.test.tsx:125.
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+    at createFiberFromTypeAndProps (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17)
+    at createFiberFromElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15)
+    at reconcileSingleElement (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23)
+    at reconcileChildFibers (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35)
+    at reconcileChildren (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28)
+    at updateHostRoot (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5)
+    at beginWork (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14)
+    at HTMLUnknownElement.callCallback (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/generated/idl/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/midiakiasat/Downloads/Apps/midiakiasat/qzro/ADJUTORIX/node_modules/.pnpm/jsdom@29.0.2/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:360:16)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > boots the local governed operator cockpit as the default product surface
+ FAIL  tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > executes the complete governed loop without terminal dependency
+ FAIL  tests/smoke/local_operator_loop.smoke.test.tsx > smoke/local_operator_loop > keeps apply blocked before verify receipt and keeps rollback blocked before apply receipt
+Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined. You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.
+ ❯ createFiberFromTypeAndProps ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28478:17
+ ❯ createFiberFromElement ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:28504:15
+ ❯ reconcileSingleElement ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:13986:23
+ ❯ reconcileChildFibers ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:14044:35
+ ❯ reconcileChildren ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19193:28
+ ❯ updateHostRoot ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:19912:5
+ ❯ beginWork ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:21654:14
+ ❯ beginWork$1 ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync ../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/cjs/react-dom.development.js:26505:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  21:28:35
+   Duration  646ms (transform 54ms, setup 0ms, collect 112ms, tests 11ms, environment 271ms, prepare 38ms)
+

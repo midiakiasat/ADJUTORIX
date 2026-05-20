@@ -1,0 +1,19 @@
+{
+  "product": "ADJUTORIX_OPERATOR_LOOP_SMOKE",
+  "timestamp": "2026-05-20T19:30:40.088Z",
+  "verdict": "FAIL",
+  "failures": [
+    {
+      "code": "MISSING_OPERATOR_LOOP_SMOKE_PHRASE",
+      "phrase": "apply with receipt"
+    },
+    {
+      "code": "MISSING_OPERATOR_LOOP_SMOKE_PHRASE",
+      "phrase": "rollback with receipt"
+    }
+  ],
+  "checked_files": [
+    "packages/adjutorix-app/tests/smoke/local_operator_loop.smoke.test.tsx",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}
