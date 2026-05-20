@@ -1,8 +1,13 @@
 {
   "product": "ADJUTORIX_LOCAL_OPERATOR_COCKPIT",
-  "timestamp": "2026-05-20T18:39:02.582Z",
-  "verdict": "PASS",
-  "failures": [],
+  "timestamp": "2026-05-20T18:38:30.940Z",
+  "verdict": "FAIL",
+  "failures": [
+    {
+      "code": "MISSING_COCKPIT_PHRASE",
+      "phrase": "Patch object"
+    }
+  ],
   "checked_files": [
     "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
     "packages/adjutorix-app/src/renderer/main.tsx"

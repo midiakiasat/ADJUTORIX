@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "policy_type": "ADJUTORIX_PATCH_CUSTODY_POLICY",
+  "patch_custody_object_type": "ADJUTORIX_PATCH_CUSTODY_OBJECT",
+  "source": "LOCAL_OPERATOR_COCKPIT",
+  "requires_plan_object": true,
+  "requires_workspace_bound": true,
+  "patch_custody_may_not_mutate_files": true,
+  "diff_materialization_requires_patch_pipeline": true,
+  "operator_review_required": true,
+  "verification_required_before_apply": true,
+  "apply_requires_verify_pass": true,
+  "apply_requires_apply_receipt": true,
+  "rollback_required_after_apply": true,
+  "rollback_requires_rollback_receipt": true,
+  "forbidden_without_patch_custody": [
+    "verify",
+    "apply",
+    "rollback"
+  ],
+  "receipt_sequence": [
+    "intent_receipt",
+    "plan_receipt",
+    "patch_custody_receipt",
+    "patch_receipt",
+    "verify_receipt",
+    "apply_receipt",
+    "rollback_receipt"
+  ]
+}

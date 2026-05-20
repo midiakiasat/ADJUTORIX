@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.local/contracts/patch_custody_object.schema.json",
+  "title": "ADJUTORIX Patch Custody Object",
+  "type": "object",
+  "required": [
+    "object_type",
+    "schema_version",
+    "patch_custody_id",
+    "created_at",
+    "plan_id",
+    "workspace_root",
+    "operator_intent",
+    "custody",
+    "basis",
+    "target_scope",
+    "patch_state",
+    "review_gate",
+    "verification_gate",
+    "apply_gate",
+    "rollback_gate",
+    "evidence"
+  ],
+  "properties": {
+    "object_type": { "const": "ADJUTORIX_PATCH_CUSTODY_OBJECT" },
+    "schema_version": { "const": "1.0.0" },
+    "patch_custody_id": { "type": "string", "minLength": 12 },
+    "created_at": { "type": "string", "minLength": 20 },
+    "plan_id": { "type": "string", "minLength": 12 },
+    "workspace_root": { "type": "string", "minLength": 1 },
+    "selected_path": { "type": ["string", "null"] },
+    "operator_intent": { "type": "string", "minLength": 1 },
+    "custody": {
+      "type": "object",
+      "required": [
+        "source",
+        "workspace_bound",
+        "plan_bound",
+        "may_mutate_files"
+      ],
+      "properties": {
+        "source": { "const": "LOCAL_OPERATOR_COCKPIT" },
+        "workspace_bound": { "const": true },
+        "plan_bound": { "const": true },
+        "may_mutate_files": { "const": false }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "required": [
+        "basis_type",
+        "basis_id",
+        "basis_object_type"
+      ],
+      "properties": {
+        "basis_type": { "const": "INTENT_PLAN_OBJECT" },
+        "basis_id": { "type": "string", "minLength": 12 },
+        "basis_object_type": { "const": "ADJUTORIX_INTENT_PLAN_OBJECT" }
+      }
+    },
+    "target_scope": {
+      "type": "object",
+      "required": [
+        "classification",
+        "candidate_paths",
+        "requires_operator_review"
+      ],
+      "properties": {
+        "classification": {
+          "enum": [
+            "UNKNOWN_PENDING_DIFF",
+            "SINGLE_PATH_CANDIDATE",
+            "WORKSPACE_WIDE_CANDIDATE"
+          ]
+        },
+        "candidate_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requires_operator_review": { "const": true }
+      }
+    },
+    "patch_state": {
+      "type": "object",
+      "required": [
+        "state",
+        "diff_materialized",
+        "files_mutated"
+      ],
+      "properties": {
+        "state": { "const": "CUSTODY_CREATED_DIFF_NOT_MATERIALIZED" },
+        "diff_materialized": { "const": false },
+        "files_mutated": { "const": false }
+      }
+    },
+    "review_gate": {
+      "type": "object",
+      "required": [
+        "required",
+        "operator_must_review"
+      ],
+      "properties": {
+        "required": { "const": true },
+        "operator_must_review": { "const": true }
+      }
+    },
+    "verification_gate": {
+      "type": "object",
+      "required": [
+        "required",
+        "blocked_until_patch_review"
+      ],
+      "properties": {
+        "required": { "const": true },
+        "blocked_until_patch_review": { "const": true }
+      }
+    },
+    "apply_gate": {
+      "type": "object",
+      "required": [
+        "blocked",
+        "blocked_until_verify_pass",
+        "requires_apply_receipt"
+      ],
+      "properties": {
+        "blocked": { "const": true },
+        "blocked_until_verify_pass": { "const": true },
+        "requires_apply_receipt": { "const": true }
+      }
+    },
+    "rollback_gate": {
+      "type": "object",
+      "required": [
+        "required_after_apply",
+        "requires_rollback_receipt"
+      ],
+      "properties": {
+        "required_after_apply": { "const": true },
+        "requires_rollback_receipt": { "const": true }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "receipt_type",
+        "timeline_event"
+      ],
+      "properties": {
+        "receipt_type": { "const": "patch_custody_receipt" },
+        "timeline_event": { "const": "patch.custody.created" }
+      }
+    }
+  }
+}

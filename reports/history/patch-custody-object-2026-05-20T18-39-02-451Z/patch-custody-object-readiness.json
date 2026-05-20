@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_PLAN_TO_PATCH_CUSTODY",
+  "timestamp": "2026-05-20T18:39:02.451Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/patch_custody_object.schema.json",
+    "configs/runtime/patch_custody_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}
