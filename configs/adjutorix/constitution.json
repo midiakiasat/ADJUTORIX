@@ -252,7 +252,10 @@
         "packages/*/vite.config.*",
         "packages/*/vitest.config.*",
         "packages/*/postcss.config.*",
-        "packages/*/tailwind.config.*"
+        "packages/*/tailwind.config.*",
+        "product/**",
+        "reports/**",
+        "quarantine/**"
       ],
       "allowedReaders": [
         "operator",

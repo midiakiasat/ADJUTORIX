@@ -1,0 +1,39 @@
+{
+  "product": "ADJUTORIX_LOCAL_OPERATOR_LOOP_COMPLETE",
+  "timestamp": "2026-05-20T19:09:28.713Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/runtime/local_operator_loop_complete.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
+    "configs/contracts/intent_plan_object.schema.json",
+    "configs/contracts/patch_custody_object.schema.json",
+    "configs/contracts/verification_gate_object.schema.json",
+    "configs/contracts/verify_receipt_object.schema.json",
+    "configs/contracts/apply_gate_object.schema.json",
+    "configs/contracts/apply_receipt_object.schema.json",
+    "configs/contracts/rollback_gate_object.schema.json",
+    "configs/contracts/rollback_receipt_object.schema.json",
+    "scripts/product/assert-local-operator-cockpit.mjs",
+    "scripts/product/assert-intent-plan-object.mjs",
+    "scripts/product/assert-patch-custody-object.mjs",
+    "scripts/product/assert-verification-gate-object.mjs",
+    "scripts/product/assert-verify-receipt-object.mjs",
+    "scripts/product/assert-apply-gate-object.mjs",
+    "scripts/product/assert-apply-receipt-object.mjs",
+    "scripts/product/assert-rollback-gate-object.mjs",
+    "scripts/product/assert-rollback-receipt-object.mjs"
+  ],
+  "checked_reports": [
+    "reports/current/local-operator-cockpit-readiness.json",
+    "reports/current/intent-plan-object-readiness.json",
+    "reports/current/patch-custody-object-readiness.json",
+    "reports/current/verification-gate-object-readiness.json",
+    "reports/current/verify-receipt-object-readiness.json",
+    "reports/current/apply-gate-object-readiness.json",
+    "reports/current/apply-receipt-object-readiness.json",
+    "reports/current/rollback-gate-object-readiness.json",
+    "reports/current/rollback-receipt-object-readiness.json"
+  ],
+  "terminal_state": "ROLLBACK_COMPLETE"
+}

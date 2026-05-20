@@ -350,6 +350,133 @@ type ApplyReceiptObject = {
   };
 };
 
+
+type RollbackGateObject = {
+  object_type: "ADJUTORIX_ROLLBACK_GATE_OBJECT";
+  schema_version: "1.0.0";
+  rollback_gate_id: string;
+  created_at: string;
+  plan_id: string;
+  patch_custody_id: string;
+  verification_gate_id: string;
+  verify_receipt_id: string;
+  apply_gate_id: string;
+  apply_receipt_id: string;
+  workspace_root: string;
+  selected_path: string | null;
+  custody: {
+    source: "LOCAL_OPERATOR_COCKPIT";
+    workspace_bound: true;
+    plan_bound: true;
+    patch_custody_bound: true;
+    verification_gate_bound: true;
+    verify_receipt_bound: true;
+    apply_gate_bound: true;
+    apply_receipt_bound: true;
+    may_mutate_files: false;
+    may_rollback: false;
+  };
+  basis: {
+    plan_object_type: "ADJUTORIX_INTENT_PLAN_OBJECT";
+    patch_custody_object_type: "ADJUTORIX_PATCH_CUSTODY_OBJECT";
+    verification_gate_object_type: "ADJUTORIX_VERIFICATION_GATE_OBJECT";
+    verify_receipt_object_type: "ADJUTORIX_VERIFY_RECEIPT_OBJECT";
+    apply_gate_object_type: "ADJUTORIX_APPLY_GATE_OBJECT";
+    apply_receipt_object_type: "ADJUTORIX_APPLY_RECEIPT_OBJECT";
+    plan_id: string;
+    patch_custody_id: string;
+    verification_gate_id: string;
+    verify_receipt_id: string;
+    apply_gate_id: string;
+    apply_receipt_id: string;
+  };
+  inputs: {
+    apply_receipt_created: true;
+    rollback_available: true;
+    workspace_bound: true;
+  };
+  gate_state: {
+    state: "ROLLBACK_GATE_READY";
+    rollback_unlocked: true;
+    rollback_executed: false;
+  };
+  execution: {
+    mode: "OPERATOR_TRIGGERED";
+    executed: false;
+    receipt_required: true;
+  };
+  rollback_receipt: {
+    required: true;
+    object_type: "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT";
+  };
+  evidence: {
+    receipt_type: "rollback_gate_receipt";
+    timeline_event: "rollback.gate.created";
+  };
+};
+
+type RollbackReceiptObject = {
+  object_type: "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT";
+  schema_version: "1.0.0";
+  rollback_receipt_id: string;
+  created_at: string;
+  plan_id: string;
+  patch_custody_id: string;
+  verification_gate_id: string;
+  verify_receipt_id: string;
+  apply_gate_id: string;
+  apply_receipt_id: string;
+  rollback_gate_id: string;
+  workspace_root: string;
+  selected_path: string | null;
+  custody: {
+    source: "LOCAL_OPERATOR_COCKPIT";
+    workspace_bound: true;
+    plan_bound: true;
+    patch_custody_bound: true;
+    verification_gate_bound: true;
+    verify_receipt_bound: true;
+    apply_gate_bound: true;
+    apply_receipt_bound: true;
+    rollback_gate_bound: true;
+  };
+  basis: {
+    plan_object_type: "ADJUTORIX_INTENT_PLAN_OBJECT";
+    patch_custody_object_type: "ADJUTORIX_PATCH_CUSTODY_OBJECT";
+    verification_gate_object_type: "ADJUTORIX_VERIFICATION_GATE_OBJECT";
+    verify_receipt_object_type: "ADJUTORIX_VERIFY_RECEIPT_OBJECT";
+    apply_gate_object_type: "ADJUTORIX_APPLY_GATE_OBJECT";
+    apply_receipt_object_type: "ADJUTORIX_APPLY_RECEIPT_OBJECT";
+    rollback_gate_object_type: "ADJUTORIX_ROLLBACK_GATE_OBJECT";
+    plan_id: string;
+    patch_custody_id: string;
+    verification_gate_id: string;
+    verify_receipt_id: string;
+    apply_gate_id: string;
+    apply_receipt_id: string;
+    rollback_gate_id: string;
+  };
+  execution: {
+    mode: "OPERATOR_TRIGGERED";
+    executed: true;
+    operator_triggered: true;
+    rollback_complete: true;
+  };
+  result: {
+    status: "ROLLBACK_RECEIPT_CREATED";
+    rolled_back: true;
+    reason: string;
+  };
+  finality: {
+    operator_loop_complete: true;
+    terminal_state: "ROLLBACK_COMPLETE";
+  };
+  evidence: {
+    receipt_type: "rollback_receipt";
+    timeline_event: "rollback.receipt.created";
+  };
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
@@ -495,7 +622,10 @@ function createIntentPlanObject(input: {
         "node scripts/product/assert-verification-gate-object.mjs",
         "node scripts/product/assert-verify-receipt-object.mjs",
         "node scripts/product/assert-apply-gate-object.mjs",
-        "node scripts/product/assert-apply-receipt-object.mjs"
+        "node scripts/product/assert-apply-receipt-object.mjs",
+        "node scripts/product/assert-rollback-gate-object.mjs",
+        "node scripts/product/assert-rollback-receipt-object.mjs",
+        "node scripts/product/assert-local-operator-loop-complete.mjs"
       ],
       requires_runtime: true,
       requires_diagnostics: true,
@@ -606,6 +736,241 @@ function createPatchCustodyObject(plan: IntentPlanObject): PatchCustodyObject {
 
 
 
+
+
+function createRollbackGateObject(input: {
+  plan: IntentPlanObject;
+  patch: PatchCustodyObject;
+  verificationGate: VerificationGateObject;
+  verifyReceipt: VerifyReceiptObject;
+  applyGate: ApplyGateObject;
+  applyReceipt: ApplyReceiptObject;
+}): RollbackGateObject {
+  return {
+    object_type: "ADJUTORIX_ROLLBACK_GATE_OBJECT",
+    schema_version: "1.0.0",
+    rollback_gate_id: makeId("rollback-gate"),
+    created_at: new Date().toISOString(),
+    plan_id: input.plan.plan_id,
+    patch_custody_id: input.patch.patch_custody_id,
+    verification_gate_id: input.verificationGate.verification_gate_id,
+    verify_receipt_id: input.verifyReceipt.verify_receipt_id,
+    apply_gate_id: input.applyGate.apply_gate_id,
+    apply_receipt_id: input.applyReceipt.apply_receipt_id,
+    workspace_root: input.patch.workspace_root,
+    selected_path: input.patch.selected_path,
+    custody: {
+      source: "LOCAL_OPERATOR_COCKPIT",
+      workspace_bound: true,
+      plan_bound: true,
+      patch_custody_bound: true,
+      verification_gate_bound: true,
+      verify_receipt_bound: true,
+      apply_gate_bound: true,
+      apply_receipt_bound: true,
+      may_mutate_files: false,
+      may_rollback: false,
+    },
+    basis: {
+      plan_object_type: "ADJUTORIX_INTENT_PLAN_OBJECT",
+      patch_custody_object_type: "ADJUTORIX_PATCH_CUSTODY_OBJECT",
+      verification_gate_object_type: "ADJUTORIX_VERIFICATION_GATE_OBJECT",
+      verify_receipt_object_type: "ADJUTORIX_VERIFY_RECEIPT_OBJECT",
+      apply_gate_object_type: "ADJUTORIX_APPLY_GATE_OBJECT",
+      apply_receipt_object_type: "ADJUTORIX_APPLY_RECEIPT_OBJECT",
+      plan_id: input.plan.plan_id,
+      patch_custody_id: input.patch.patch_custody_id,
+      verification_gate_id: input.verificationGate.verification_gate_id,
+      verify_receipt_id: input.verifyReceipt.verify_receipt_id,
+      apply_gate_id: input.applyGate.apply_gate_id,
+      apply_receipt_id: input.applyReceipt.apply_receipt_id,
+    },
+    inputs: {
+      apply_receipt_created: true,
+      rollback_available: true,
+      workspace_bound: true,
+    },
+    gate_state: {
+      state: "ROLLBACK_GATE_READY",
+      rollback_unlocked: true,
+      rollback_executed: false,
+    },
+    execution: {
+      mode: "OPERATOR_TRIGGERED",
+      executed: false,
+      receipt_required: true,
+    },
+    rollback_receipt: {
+      required: true,
+      object_type: "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT",
+    },
+    evidence: {
+      receipt_type: "rollback_gate_receipt",
+      timeline_event: "rollback.gate.created",
+    },
+  };
+}
+
+function validateRollbackGateObject(
+  gate: RollbackGateObject,
+  plan: IntentPlanObject | null,
+  patch: PatchCustodyObject | null,
+  verificationGate: VerificationGateObject | null,
+  verifyReceipt: VerifyReceiptObject | null,
+  applyGate: ApplyGateObject | null,
+  applyReceipt: ApplyReceiptObject | null,
+): string[] {
+  const failures: string[] = [];
+
+  if (gate.object_type !== "ADJUTORIX_ROLLBACK_GATE_OBJECT") failures.push("object_type");
+  if (gate.schema_version !== "1.0.0") failures.push("schema_version");
+  if (!gate.rollback_gate_id || gate.rollback_gate_id.length < 12) failures.push("rollback_gate_id");
+  if (!gate.apply_receipt_id) failures.push("apply_receipt_id");
+  if (!gate.workspace_root) failures.push("workspace_root");
+  if (gate.custody.source !== "LOCAL_OPERATOR_COCKPIT") failures.push("custody.source");
+  if (gate.custody.workspace_bound !== true) failures.push("custody.workspace_bound");
+  if (gate.custody.apply_receipt_bound !== true) failures.push("custody.apply_receipt_bound");
+  if (gate.custody.may_mutate_files !== false) failures.push("custody.may_mutate_files");
+  if (gate.custody.may_rollback !== false) failures.push("custody.may_rollback");
+  if (gate.basis.plan_object_type !== "ADJUTORIX_INTENT_PLAN_OBJECT") failures.push("basis.plan_object_type");
+  if (gate.basis.patch_custody_object_type !== "ADJUTORIX_PATCH_CUSTODY_OBJECT") failures.push("basis.patch_custody_object_type");
+  if (gate.basis.verification_gate_object_type !== "ADJUTORIX_VERIFICATION_GATE_OBJECT") failures.push("basis.verification_gate_object_type");
+  if (gate.basis.verify_receipt_object_type !== "ADJUTORIX_VERIFY_RECEIPT_OBJECT") failures.push("basis.verify_receipt_object_type");
+  if (gate.basis.apply_gate_object_type !== "ADJUTORIX_APPLY_GATE_OBJECT") failures.push("basis.apply_gate_object_type");
+  if (gate.basis.apply_receipt_object_type !== "ADJUTORIX_APPLY_RECEIPT_OBJECT") failures.push("basis.apply_receipt_object_type");
+  if (plan && gate.basis.plan_id !== plan.plan_id) failures.push("basis.plan_id");
+  if (patch && gate.basis.patch_custody_id !== patch.patch_custody_id) failures.push("basis.patch_custody_id");
+  if (verificationGate && gate.basis.verification_gate_id !== verificationGate.verification_gate_id) failures.push("basis.verification_gate_id");
+  if (verifyReceipt && gate.basis.verify_receipt_id !== verifyReceipt.verify_receipt_id) failures.push("basis.verify_receipt_id");
+  if (applyGate && gate.basis.apply_gate_id !== applyGate.apply_gate_id) failures.push("basis.apply_gate_id");
+  if (applyReceipt && gate.basis.apply_receipt_id !== applyReceipt.apply_receipt_id) failures.push("basis.apply_receipt_id");
+  if (gate.inputs.apply_receipt_created !== true) failures.push("inputs.apply_receipt_created");
+  if (gate.inputs.rollback_available !== true) failures.push("inputs.rollback_available");
+  if (gate.gate_state.state !== "ROLLBACK_GATE_READY") failures.push("gate_state.state");
+  if (gate.gate_state.rollback_unlocked !== true) failures.push("gate_state.rollback_unlocked");
+  if (gate.gate_state.rollback_executed !== false) failures.push("gate_state.rollback_executed");
+  if (gate.execution.mode !== "OPERATOR_TRIGGERED") failures.push("execution.mode");
+  if (gate.execution.executed !== false) failures.push("execution.executed");
+  if (gate.rollback_receipt.required !== true) failures.push("rollback_receipt.required");
+  if (gate.rollback_receipt.object_type !== "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT") failures.push("rollback_receipt.object_type");
+  if (gate.evidence.receipt_type !== "rollback_gate_receipt") failures.push("evidence.receipt_type");
+
+  return failures;
+}
+
+function createRollbackReceiptObject(input: {
+  plan: IntentPlanObject;
+  patch: PatchCustodyObject;
+  verificationGate: VerificationGateObject;
+  verifyReceipt: VerifyReceiptObject;
+  applyGate: ApplyGateObject;
+  applyReceipt: ApplyReceiptObject;
+  rollbackGate: RollbackGateObject;
+}): RollbackReceiptObject {
+  return {
+    object_type: "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT",
+    schema_version: "1.0.0",
+    rollback_receipt_id: makeId("rollback-receipt"),
+    created_at: new Date().toISOString(),
+    plan_id: input.plan.plan_id,
+    patch_custody_id: input.patch.patch_custody_id,
+    verification_gate_id: input.verificationGate.verification_gate_id,
+    verify_receipt_id: input.verifyReceipt.verify_receipt_id,
+    apply_gate_id: input.applyGate.apply_gate_id,
+    apply_receipt_id: input.applyReceipt.apply_receipt_id,
+    rollback_gate_id: input.rollbackGate.rollback_gate_id,
+    workspace_root: input.patch.workspace_root,
+    selected_path: input.patch.selected_path,
+    custody: {
+      source: "LOCAL_OPERATOR_COCKPIT",
+      workspace_bound: true,
+      plan_bound: true,
+      patch_custody_bound: true,
+      verification_gate_bound: true,
+      verify_receipt_bound: true,
+      apply_gate_bound: true,
+      apply_receipt_bound: true,
+      rollback_gate_bound: true,
+    },
+    basis: {
+      plan_object_type: "ADJUTORIX_INTENT_PLAN_OBJECT",
+      patch_custody_object_type: "ADJUTORIX_PATCH_CUSTODY_OBJECT",
+      verification_gate_object_type: "ADJUTORIX_VERIFICATION_GATE_OBJECT",
+      verify_receipt_object_type: "ADJUTORIX_VERIFY_RECEIPT_OBJECT",
+      apply_gate_object_type: "ADJUTORIX_APPLY_GATE_OBJECT",
+      apply_receipt_object_type: "ADJUTORIX_APPLY_RECEIPT_OBJECT",
+      rollback_gate_object_type: "ADJUTORIX_ROLLBACK_GATE_OBJECT",
+      plan_id: input.plan.plan_id,
+      patch_custody_id: input.patch.patch_custody_id,
+      verification_gate_id: input.verificationGate.verification_gate_id,
+      verify_receipt_id: input.verifyReceipt.verify_receipt_id,
+      apply_gate_id: input.applyGate.apply_gate_id,
+      apply_receipt_id: input.applyReceipt.apply_receipt_id,
+      rollback_gate_id: input.rollbackGate.rollback_gate_id,
+    },
+    execution: {
+      mode: "OPERATOR_TRIGGERED",
+      executed: true,
+      operator_triggered: true,
+      rollback_complete: true,
+    },
+    result: {
+      status: "ROLLBACK_RECEIPT_CREATED",
+      rolled_back: true,
+      reason: "Rollback receipt created from Rollback Gate object; operator loop is complete.",
+    },
+    finality: {
+      operator_loop_complete: true,
+      terminal_state: "ROLLBACK_COMPLETE",
+    },
+    evidence: {
+      receipt_type: "rollback_receipt",
+      timeline_event: "rollback.receipt.created",
+    },
+  };
+}
+
+function validateRollbackReceiptObject(
+  receipt: RollbackReceiptObject,
+  plan: IntentPlanObject | null,
+  patch: PatchCustodyObject | null,
+  verificationGate: VerificationGateObject | null,
+  verifyReceipt: VerifyReceiptObject | null,
+  applyGate: ApplyGateObject | null,
+  applyReceipt: ApplyReceiptObject | null,
+  rollbackGate: RollbackGateObject | null,
+): string[] {
+  const failures: string[] = [];
+
+  if (receipt.object_type !== "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT") failures.push("object_type");
+  if (receipt.schema_version !== "1.0.0") failures.push("schema_version");
+  if (!receipt.rollback_receipt_id || receipt.rollback_receipt_id.length < 12) failures.push("rollback_receipt_id");
+  if (!receipt.rollback_gate_id) failures.push("rollback_gate_id");
+  if (!receipt.apply_receipt_id) failures.push("apply_receipt_id");
+  if (!receipt.workspace_root) failures.push("workspace_root");
+  if (receipt.custody.source !== "LOCAL_OPERATOR_COCKPIT") failures.push("custody.source");
+  if (receipt.custody.rollback_gate_bound !== true) failures.push("custody.rollback_gate_bound");
+  if (receipt.basis.rollback_gate_object_type !== "ADJUTORIX_ROLLBACK_GATE_OBJECT") failures.push("basis.rollback_gate_object_type");
+  if (receipt.basis.apply_receipt_object_type !== "ADJUTORIX_APPLY_RECEIPT_OBJECT") failures.push("basis.apply_receipt_object_type");
+  if (plan && receipt.basis.plan_id !== plan.plan_id) failures.push("basis.plan_id");
+  if (patch && receipt.basis.patch_custody_id !== patch.patch_custody_id) failures.push("basis.patch_custody_id");
+  if (verificationGate && receipt.basis.verification_gate_id !== verificationGate.verification_gate_id) failures.push("basis.verification_gate_id");
+  if (verifyReceipt && receipt.basis.verify_receipt_id !== verifyReceipt.verify_receipt_id) failures.push("basis.verify_receipt_id");
+  if (applyGate && receipt.basis.apply_gate_id !== applyGate.apply_gate_id) failures.push("basis.apply_gate_id");
+  if (applyReceipt && receipt.basis.apply_receipt_id !== applyReceipt.apply_receipt_id) failures.push("basis.apply_receipt_id");
+  if (rollbackGate && receipt.basis.rollback_gate_id !== rollbackGate.rollback_gate_id) failures.push("basis.rollback_gate_id");
+  if (receipt.execution.mode !== "OPERATOR_TRIGGERED") failures.push("execution.mode");
+  if (receipt.execution.executed !== true) failures.push("execution.executed");
+  if (receipt.execution.operator_triggered !== true) failures.push("execution.operator_triggered");
+  if (receipt.execution.rollback_complete !== true) failures.push("execution.rollback_complete");
+  if (receipt.result.status !== "ROLLBACK_RECEIPT_CREATED") failures.push("result.status");
+  if (receipt.result.rolled_back !== true) failures.push("result.rolled_back");
+  if (receipt.finality.operator_loop_complete !== true) failures.push("finality.operator_loop_complete");
+  if (receipt.finality.terminal_state !== "ROLLBACK_COMPLETE") failures.push("finality.terminal_state");
+  if (receipt.evidence.receipt_type !== "rollback_receipt") failures.push("evidence.receipt_type");
+
+  return failures;
+}
 
 function createApplyReceiptObject(input: {
   plan: IntentPlanObject;
@@ -1107,6 +1472,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
   const [applyGateFailures, setApplyGateFailures] = React.useState<string[]>([]);
   const [applyReceiptObject, setApplyReceiptObject] = React.useState<ApplyReceiptObject | null>(null);
   const [applyReceiptFailures, setApplyReceiptFailures] = React.useState<string[]>([]);
+  const [rollbackGateObject, setRollbackGateObject] = React.useState<RollbackGateObject | null>(null);
+  const [rollbackGateFailures, setRollbackGateFailures] = React.useState<string[]>([]);
+  const [rollbackReceiptObject, setRollbackReceiptObject] = React.useState<RollbackReceiptObject | null>(null);
+  const [rollbackReceiptFailures, setRollbackReceiptFailures] = React.useState<string[]>([]);
   const [lastReceipt, setLastReceipt] = React.useState<Record<string, unknown> | null>(null);
   const [lastError, setLastError] = React.useState<string | null>(null);
   const [eventLog, setEventLog] = React.useState<EventItem[]>([]);
@@ -1118,6 +1487,8 @@ export default function LocalOperatorCockpit(): JSX.Element {
   const verifyReceiptReady = Boolean(verifyReceiptObject && verifyReceiptFailures.length === 0 && verifyReceiptObject.verdict.passed === true);
   const applyGateObjectReady = Boolean(applyGateObject && applyGateFailures.length === 0 && applyGateObject.gate_state.apply_unlocked === true);
   const applyReceiptReady = Boolean(applyReceiptObject && applyReceiptFailures.length === 0 && applyReceiptObject.result.applied === true);
+  const rollbackGateReady = Boolean(rollbackGateObject && rollbackGateFailures.length === 0 && rollbackGateObject.gate_state.rollback_unlocked === true);
+  const rollbackReceiptReady = Boolean(rollbackReceiptObject && rollbackReceiptFailures.length === 0 && rollbackReceiptObject.finality.operator_loop_complete === true);
   const verificationReady = workspaceBound && planReady && patchCustodyReady && verificationGateReady && runtimeReady && diagnosticsReady;
   const applyGateReady = applyGateObjectReady && operatorState !== "VERIFY_FAILED";
 
@@ -1247,6 +1618,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
       setApplyGateFailures([]);
       setApplyReceiptObject(null);
       setApplyReceiptFailures([]);
+      setRollbackGateObject(null);
+      setRollbackGateFailures([]);
+      setRollbackReceiptObject(null);
+      setRollbackReceiptFailures([]);
 
       const api = bridge();
       const workspace = asRecord(api.workspace);
@@ -1319,6 +1694,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     setApplyGateFailures([]);
     setApplyReceiptObject(null);
     setApplyReceiptFailures([]);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const plan = createIntentPlanObject({
       workspaceRoot,
@@ -1371,6 +1750,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     setApplyGateFailures([]);
     setApplyReceiptObject(null);
     setApplyReceiptFailures([]);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const receipt = {
       receipt_type: "patch_custody_receipt",
@@ -1415,6 +1798,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     setApplyGateFailures([]);
     setApplyReceiptObject(null);
     setApplyReceiptFailures([]);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const receipt = {
       receipt_type: "verification_gate_receipt",
@@ -1458,6 +1845,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     setApplyGateFailures([]);
     setApplyReceiptObject(null);
     setApplyReceiptFailures([]);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const receipt = {
       receipt_type: "verify_receipt",
@@ -1499,6 +1890,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     setApplyGateFailures(failures);
     setApplyReceiptObject(null);
     setApplyReceiptFailures([]);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const receipt = {
       receipt_type: "apply_gate_receipt",
@@ -1553,6 +1948,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
 
     setApplyReceiptObject(receiptObject);
     setApplyReceiptFailures(failures);
+    setRollbackGateObject(null);
+    setRollbackGateFailures([]);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
 
     const receipt = {
       receipt_type: "apply_receipt",
@@ -1580,26 +1979,126 @@ export default function LocalOperatorCockpit(): JSX.Element {
     if (failures.length === 0) setTimeout(() => setOperatorState("ROLLBACK_AVAILABLE"), 0);
   };
 
+  const createRollbackGate = () => {
+    if (
+      !applyReceiptReady ||
+      !planObject ||
+      !patchCustodyObject ||
+      !verificationGateObject ||
+      !verifyReceiptObject ||
+      !applyGateObject ||
+      !applyReceiptObject
+    ) return;
+
+    const gate = createRollbackGateObject({
+      plan: planObject,
+      patch: patchCustodyObject,
+      verificationGate: verificationGateObject,
+      verifyReceipt: verifyReceiptObject,
+      applyGate: applyGateObject,
+      applyReceipt: applyReceiptObject,
+    });
+
+    const failures = validateRollbackGateObject(
+      gate,
+      planObject,
+      patchCustodyObject,
+      verificationGateObject,
+      verifyReceiptObject,
+      applyGateObject,
+      applyReceiptObject,
+    );
+
+    setRollbackGateObject(gate);
+    setRollbackGateFailures(failures);
+    setRollbackReceiptObject(null);
+    setRollbackReceiptFailures([]);
+
+    const receipt = {
+      receipt_type: "rollback_gate_receipt",
+      timestamp: new Date().toISOString(),
+      rollback_gate_id: gate.rollback_gate_id,
+      apply_receipt_id: applyReceiptObject.apply_receipt_id,
+      apply_gate_id: applyGateObject.apply_gate_id,
+      verify_receipt_id: verifyReceiptObject.verify_receipt_id,
+      verification_gate_id: verificationGateObject.verification_gate_id,
+      patch_custody_id: patchCustodyObject.patch_custody_id,
+      plan_id: planObject.plan_id,
+      workspace_root: workspaceRoot,
+      rollback_gate_valid: failures.length === 0,
+      rollback_gate_failures: failures,
+      rollback_unlocked: failures.length === 0,
+      next_state: failures.length === 0 ? "ROLLBACK_AVAILABLE" : "APPLIED_WITH_RECEIPT",
+    };
+
+    setLastReceipt(receipt);
+    record("rollback.gate.created", gate);
+    record("rollback.gate.receipt", receipt);
+
+    setOperatorState(failures.length === 0 ? "ROLLBACK_AVAILABLE" : "APPLIED_WITH_RECEIPT");
+  };
+
   const issueRollbackReceipt = () => {
-    if (!applyReceiptReady || (operatorState !== "ROLLBACK_AVAILABLE" && operatorState !== "APPLIED_WITH_RECEIPT")) return;
+    if (
+      !rollbackGateReady ||
+      !planObject ||
+      !patchCustodyObject ||
+      !verificationGateObject ||
+      !verifyReceiptObject ||
+      !applyGateObject ||
+      !applyReceiptObject ||
+      !rollbackGateObject
+    ) return;
+
+    const receiptObject = createRollbackReceiptObject({
+      plan: planObject,
+      patch: patchCustodyObject,
+      verificationGate: verificationGateObject,
+      verifyReceipt: verifyReceiptObject,
+      applyGate: applyGateObject,
+      applyReceipt: applyReceiptObject,
+      rollbackGate: rollbackGateObject,
+    });
+
+    const failures = validateRollbackReceiptObject(
+      receiptObject,
+      planObject,
+      patchCustodyObject,
+      verificationGateObject,
+      verifyReceiptObject,
+      applyGateObject,
+      applyReceiptObject,
+      rollbackGateObject,
+    );
+
+    setRollbackReceiptObject(receiptObject);
+    setRollbackReceiptFailures(failures);
 
     const receipt = {
       receipt_type: "rollback_receipt",
       timestamp: new Date().toISOString(),
-      plan_id: planObject?.plan_id ?? null,
-      patch_custody_id: patchCustodyObject?.patch_custody_id ?? null,
-      verification_gate_id: verificationGateObject?.verification_gate_id ?? null,
-      verify_receipt_id: verifyReceiptObject?.verify_receipt_id ?? null,
-      apply_gate_id: applyGateObject?.apply_gate_id ?? null,
-      apply_receipt_id: applyReceiptObject?.apply_receipt_id ?? null,
+      rollback_receipt_id: receiptObject.rollback_receipt_id,
+      rollback_gate_id: rollbackGateObject.rollback_gate_id,
+      apply_receipt_id: applyReceiptObject.apply_receipt_id,
+      apply_gate_id: applyGateObject.apply_gate_id,
+      verify_receipt_id: verifyReceiptObject.verify_receipt_id,
+      verification_gate_id: verificationGateObject.verification_gate_id,
+      patch_custody_id: patchCustodyObject.patch_custody_id,
+      plan_id: planObject.plan_id,
       workspace_root: workspaceRoot,
       selected_path: selectedPath,
-      rollback_complete: true,
+      rollback_receipt_valid: failures.length === 0,
+      rollback_receipt_failures: failures,
+      rollback_complete: failures.length === 0,
+      operator_loop_complete: failures.length === 0,
+      terminal_state: failures.length === 0 ? "ROLLBACK_COMPLETE" : "ROLLBACK_AVAILABLE",
     };
 
     setLastReceipt(receipt);
+    record("rollback.receipt.created", receiptObject);
     record("rollback.receipt", receipt);
-    setOperatorState("ROLLBACK_COMPLETE");
+
+    setOperatorState(failures.length === 0 ? "ROLLBACK_COMPLETE" : "ROLLBACK_AVAILABLE");
   };
 
   const steps = [
@@ -1613,8 +2112,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
     ["Verify receipt", verifyReceiptReady ? "complete" : verificationGateReady ? "ready" : "blocked", verifyReceiptReady ? `Verify receipt ${verifyReceiptObject?.verify_receipt_id} passed.` : "Create verify receipt from the verification gate."],
     ["Apply Gate object", applyGateObjectReady ? "complete" : verifyReceiptReady ? "ready" : "blocked", applyGateObjectReady ? `Apply Gate object ${applyGateObject?.apply_gate_id} unlocked.` : "Create apply gate from the passed verify receipt."],
     ["Apply Receipt object", applyReceiptReady ? "complete" : applyGateReady ? "ready" : "blocked", applyReceiptReady ? `Apply Receipt object ${applyReceiptObject?.apply_receipt_id} created.` : "Create apply receipt from the Apply Gate object."],
+    ["Rollback Gate object", rollbackGateReady ? "complete" : applyReceiptReady ? "ready" : "blocked", rollbackGateReady ? `Rollback Gate object ${rollbackGateObject?.rollback_gate_id} unlocked.` : "Create rollback gate from the Apply Receipt object."],
+    ["Rollback Receipt object", rollbackReceiptReady ? "complete" : rollbackGateReady ? "ready" : "blocked", rollbackReceiptReady ? `Rollback Receipt object ${rollbackReceiptObject?.rollback_receipt_id} completed.` : "Create rollback receipt from the Rollback Gate object."],
     ["Apply gate", applyGateReady ? "ready" : "blocked", applyGateReady ? "Apply receipt can be issued." : "Apply blocked until Apply Gate object exists."],
-    ["Rollback receipt", applyReceiptReady && (operatorState === "ROLLBACK_AVAILABLE" || operatorState === "ROLLBACK_COMPLETE") ? "ready" : "blocked", "Rollback is first-class evidence and requires apply receipt."],
+    ["Rollback receipt", rollbackReceiptReady ? "complete" : rollbackGateReady ? "ready" : "blocked", "Rollback is first-class evidence and requires rollback receipt."],
   ] as const;
 
   return (
@@ -1682,6 +2183,18 @@ export default function LocalOperatorCockpit(): JSX.Element {
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
+                <span className="text-zinc-500">rollback gate</span>
+                <span className={rollbackGateReady ? "text-emerald-300" : "text-amber-300"}>
+                  {rollbackGateReady ? "READY" : "MISSING"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-zinc-500">rollback receipt</span>
+                <span className={rollbackReceiptReady ? "text-emerald-300" : "text-amber-300"}>
+                  {rollbackReceiptReady ? "COMPLETE" : "MISSING"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
                 <span className="text-zinc-500">apply gate</span>
                 <span className={applyGateReady ? "text-emerald-300" : "text-amber-300"}>
                   {applyGateReady ? "READY" : "BLOCKED"}
@@ -1712,7 +2225,10 @@ export default function LocalOperatorCockpit(): JSX.Element {
             <button type="button" onClick={issueApplyReceipt} disabled={!applyGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Apply with receipt
             </button>
-            <button type="button" onClick={issueRollbackReceipt} disabled={operatorState !== "ROLLBACK_AVAILABLE" && operatorState !== "APPLIED_WITH_RECEIPT"} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" onClick={createRollbackGate} disabled={!applyReceiptReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
+              Create rollback gate
+            </button>
+            <button type="button" onClick={issueRollbackReceipt} disabled={!rollbackGateReady} className="rounded-2xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40">
               Rollback with receipt
             </button>
           </div>
@@ -1767,6 +2283,20 @@ export default function LocalOperatorCockpit(): JSX.Element {
           </section>
         ) : null}
 
+        {rollbackGateFailures.length > 0 ? (
+          <section className="rounded-3xl border border-red-500/40 bg-red-950/30 p-5 text-red-100">
+            <div className="text-xs uppercase tracking-[0.24em] text-red-300">Rollback Gate object invalid</div>
+            <pre className="mt-3 whitespace-pre-wrap text-sm">{JSON.stringify(rollbackGateFailures, null, 2)}</pre>
+          </section>
+        ) : null}
+
+        {rollbackReceiptFailures.length > 0 ? (
+          <section className="rounded-3xl border border-red-500/40 bg-red-950/30 p-5 text-red-100">
+            <div className="text-xs uppercase tracking-[0.24em] text-red-300">Rollback Receipt object invalid</div>
+            <pre className="mt-3 whitespace-pre-wrap text-sm">{JSON.stringify(rollbackReceiptFailures, null, 2)}</pre>
+          </section>
+        ) : null}
+
         <section className="grid gap-4 xl:grid-cols-4">
           {steps.map(([label, state, description], index) => (
             <article key={label} className={cx("rounded-2xl border p-4", surfaceClass(state as any))}>
@@ -1787,7 +2317,7 @@ export default function LocalOperatorCockpit(): JSX.Element {
             <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Intent capture</div>
             <h2 className="mt-2 text-xl font-semibold text-zinc-50">Bounded change request</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-400">
-              This creates an ADJUTORIX_INTENT_PLAN_OBJECT, then a non-mutating ADJUTORIX_PATCH_CUSTODY_OBJECT, then an ADJUTORIX_VERIFICATION_GATE_OBJECT, then an ADJUTORIX_VERIFY_RECEIPT_OBJECT, then an ADJUTORIX_APPLY_GATE_OBJECT, then an ADJUTORIX_APPLY_RECEIPT_OBJECT. Rollback remains blocked until apply receipt exists.
+              This creates an ADJUTORIX_INTENT_PLAN_OBJECT, then a non-mutating ADJUTORIX_PATCH_CUSTODY_OBJECT, then an ADJUTORIX_VERIFICATION_GATE_OBJECT, then an ADJUTORIX_VERIFY_RECEIPT_OBJECT, then an ADJUTORIX_APPLY_GATE_OBJECT, then an ADJUTORIX_APPLY_RECEIPT_OBJECT, then an ADJUTORIX_ROLLBACK_GATE_OBJECT, then an ADJUTORIX_ROLLBACK_RECEIPT_OBJECT. The terminal state is ROLLBACK_COMPLETE.
             </p>
             <textarea
               value={intentDraft}
@@ -1864,7 +2394,7 @@ export default function LocalOperatorCockpit(): JSX.Element {
           </article>
         </section>
 
-        <section className="grid gap-6 2xl:grid-cols-8">
+        <section className="grid gap-6 2xl:grid-cols-10">
           <article className="rounded-3xl border border-zinc-800 bg-zinc-950/60 p-5">
             <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Latest receipt</div>
             <pre className="mt-4 max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
@@ -1911,6 +2441,20 @@ export default function LocalOperatorCockpit(): JSX.Element {
             <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Apply Receipt object</div>
             <pre className="mt-4 max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
               {JSON.stringify(applyReceiptObject ?? { apply_receipt_object: "none" }, null, 2)}
+            </pre>
+          </article>
+
+          <article className="rounded-3xl border border-zinc-800 bg-zinc-950/60 p-5">
+            <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Rollback Gate object</div>
+            <pre className="mt-4 max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
+              {JSON.stringify(rollbackGateObject ?? { rollback_gate_object: "none" }, null, 2)}
+            </pre>
+          </article>
+
+          <article className="rounded-3xl border border-zinc-800 bg-zinc-950/60 p-5">
+            <div className="text-xs uppercase tracking-[0.24em] text-zinc-500">Rollback Receipt object</div>
+            <pre className="mt-4 max-h-[24rem] overflow-auto rounded-2xl border border-zinc-800 bg-black/40 p-4 text-xs leading-6 text-zinc-300">
+              {JSON.stringify(rollbackReceiptObject ?? { rollback_receipt_object: "none" }, null, 2)}
             </pre>
           </article>
 

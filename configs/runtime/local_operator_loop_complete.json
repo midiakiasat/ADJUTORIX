@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "product": "ADJUTORIX_LOCAL_OPERATOR_LOOP_COMPLETE",
+  "default_surface": "LocalOperatorCockpit",
+  "required_objects": [
+    "ADJUTORIX_INTENT_PLAN_OBJECT",
+    "ADJUTORIX_PATCH_CUSTODY_OBJECT",
+    "ADJUTORIX_VERIFICATION_GATE_OBJECT",
+    "ADJUTORIX_VERIFY_RECEIPT_OBJECT",
+    "ADJUTORIX_APPLY_GATE_OBJECT",
+    "ADJUTORIX_APPLY_RECEIPT_OBJECT",
+    "ADJUTORIX_ROLLBACK_GATE_OBJECT",
+    "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT"
+  ],
+  "required_sequence": [
+    "repo_intake",
+    "trust_classification",
+    "intent_plan_object",
+    "patch_custody_object",
+    "verification_gate_object",
+    "verify_receipt_object",
+    "apply_gate_object",
+    "apply_receipt_object",
+    "rollback_gate_object",
+    "rollback_receipt_object"
+  ],
+  "terminal_state": "ROLLBACK_COMPLETE",
+  "terminal_verdict": "COMPLETE"
+}

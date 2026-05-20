@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "policy_type": "ADJUTORIX_ROLLBACK_RECEIPT_POLICY",
+  "rollback_receipt_object_type": "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT",
+  "source": "LOCAL_OPERATOR_COCKPIT",
+  "requires_plan_object": true,
+  "requires_patch_custody_object": true,
+  "requires_verification_gate_object": true,
+  "requires_verify_receipt_object": true,
+  "requires_apply_gate_object": true,
+  "requires_apply_receipt_object": true,
+  "requires_rollback_gate_object": true,
+  "rollback_receipt_records_execution": true,
+  "rollback_receipt_terminal_state": true,
+  "operator_loop_complete_on_rollback_receipt": true,
+  "receipt_sequence": [
+    "intent_receipt",
+    "plan_receipt",
+    "patch_custody_receipt",
+    "verification_gate_receipt",
+    "verify_receipt",
+    "apply_gate_receipt",
+    "apply_receipt",
+    "rollback_gate_receipt",
+    "rollback_receipt"
+  ]
+}

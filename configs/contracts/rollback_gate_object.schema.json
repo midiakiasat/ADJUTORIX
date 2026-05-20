@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.local/contracts/rollback_gate_object.schema.json",
+  "title": "ADJUTORIX Rollback Gate Object",
+  "type": "object",
+  "required": [
+    "object_type",
+    "schema_version",
+    "rollback_gate_id",
+    "created_at",
+    "plan_id",
+    "patch_custody_id",
+    "verification_gate_id",
+    "verify_receipt_id",
+    "apply_gate_id",
+    "apply_receipt_id",
+    "workspace_root",
+    "custody",
+    "basis",
+    "inputs",
+    "gate_state",
+    "execution",
+    "rollback_receipt",
+    "evidence"
+  ],
+  "properties": {
+    "object_type": { "const": "ADJUTORIX_ROLLBACK_GATE_OBJECT" },
+    "schema_version": { "const": "1.0.0" },
+    "rollback_gate_id": { "type": "string", "minLength": 12 },
+    "created_at": { "type": "string", "minLength": 20 },
+    "plan_id": { "type": "string", "minLength": 12 },
+    "patch_custody_id": { "type": "string", "minLength": 12 },
+    "verification_gate_id": { "type": "string", "minLength": 12 },
+    "verify_receipt_id": { "type": "string", "minLength": 12 },
+    "apply_gate_id": { "type": "string", "minLength": 12 },
+    "apply_receipt_id": { "type": "string", "minLength": 12 },
+    "workspace_root": { "type": "string", "minLength": 1 },
+    "selected_path": { "type": ["string", "null"] },
+    "custody": {
+      "type": "object",
+      "required": [
+        "source",
+        "workspace_bound",
+        "plan_bound",
+        "patch_custody_bound",
+        "verification_gate_bound",
+        "verify_receipt_bound",
+        "apply_gate_bound",
+        "apply_receipt_bound",
+        "may_mutate_files",
+        "may_rollback"
+      ],
+      "properties": {
+        "source": { "const": "LOCAL_OPERATOR_COCKPIT" },
+        "workspace_bound": { "const": true },
+        "plan_bound": { "const": true },
+        "patch_custody_bound": { "const": true },
+        "verification_gate_bound": { "const": true },
+        "verify_receipt_bound": { "const": true },
+        "apply_gate_bound": { "const": true },
+        "apply_receipt_bound": { "const": true },
+        "may_mutate_files": { "const": false },
+        "may_rollback": { "const": false }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "required": [
+        "plan_object_type",
+        "patch_custody_object_type",
+        "verification_gate_object_type",
+        "verify_receipt_object_type",
+        "apply_gate_object_type",
+        "apply_receipt_object_type",
+        "plan_id",
+        "patch_custody_id",
+        "verification_gate_id",
+        "verify_receipt_id",
+        "apply_gate_id",
+        "apply_receipt_id"
+      ],
+      "properties": {
+        "plan_object_type": { "const": "ADJUTORIX_INTENT_PLAN_OBJECT" },
+        "patch_custody_object_type": { "const": "ADJUTORIX_PATCH_CUSTODY_OBJECT" },
+        "verification_gate_object_type": { "const": "ADJUTORIX_VERIFICATION_GATE_OBJECT" },
+        "verify_receipt_object_type": { "const": "ADJUTORIX_VERIFY_RECEIPT_OBJECT" },
+        "apply_gate_object_type": { "const": "ADJUTORIX_APPLY_GATE_OBJECT" },
+        "apply_receipt_object_type": { "const": "ADJUTORIX_APPLY_RECEIPT_OBJECT" },
+        "plan_id": { "type": "string", "minLength": 12 },
+        "patch_custody_id": { "type": "string", "minLength": 12 },
+        "verification_gate_id": { "type": "string", "minLength": 12 },
+        "verify_receipt_id": { "type": "string", "minLength": 12 },
+        "apply_gate_id": { "type": "string", "minLength": 12 },
+        "apply_receipt_id": { "type": "string", "minLength": 12 }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "apply_receipt_created",
+        "rollback_available",
+        "workspace_bound"
+      ],
+      "properties": {
+        "apply_receipt_created": { "const": true },
+        "rollback_available": { "const": true },
+        "workspace_bound": { "const": true }
+      }
+    },
+    "gate_state": {
+      "type": "object",
+      "required": [
+        "state",
+        "rollback_unlocked",
+        "rollback_executed"
+      ],
+      "properties": {
+        "state": { "const": "ROLLBACK_GATE_READY" },
+        "rollback_unlocked": { "const": true },
+        "rollback_executed": { "const": false }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "mode",
+        "executed",
+        "receipt_required"
+      ],
+      "properties": {
+        "mode": { "const": "OPERATOR_TRIGGERED" },
+        "executed": { "const": false },
+        "receipt_required": { "const": true }
+      }
+    },
+    "rollback_receipt": {
+      "type": "object",
+      "required": [
+        "required",
+        "object_type"
+      ],
+      "properties": {
+        "required": { "const": true },
+        "object_type": { "const": "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "receipt_type",
+        "timeline_event"
+      ],
+      "properties": {
+        "receipt_type": { "const": "rollback_gate_receipt" },
+        "timeline_event": { "const": "rollback.gate.created" }
+      }
+    }
+  }
+}
