@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.local/contracts/intent_plan_object.schema.json",
+  "title": "ADJUTORIX Intent Plan Object",
+  "type": "object",
+  "required": [
+    "object_type",
+    "schema_version",
+    "plan_id",
+    "created_at",
+    "workspace_root",
+    "operator_intent",
+    "custody",
+    "trust_snapshot",
+    "mutation_scope",
+    "verification_plan",
+    "apply_gate",
+    "rollback_plan",
+    "evidence"
+  ],
+  "properties": {
+    "object_type": { "const": "ADJUTORIX_INTENT_PLAN_OBJECT" },
+    "schema_version": { "const": "1.0.0" },
+    "plan_id": { "type": "string", "minLength": 12 },
+    "created_at": { "type": "string", "minLength": 20 },
+    "workspace_root": { "type": "string", "minLength": 1 },
+    "selected_path": { "type": ["string", "null"] },
+    "operator_intent": { "type": "string", "minLength": 1 },
+    "custody": {
+      "type": "object",
+      "required": ["workspace_bound", "source"],
+      "properties": {
+        "workspace_bound": { "const": true },
+        "source": { "const": "LOCAL_OPERATOR_COCKPIT" }
+      }
+    },
+    "trust_snapshot": {
+      "type": "object",
+      "required": ["trust_level", "writable", "issue_count"],
+      "properties": {
+        "trust_level": { "type": "string" },
+        "writable": { "type": "string" },
+        "issue_count": { "type": "number" }
+      }
+    },
+    "mutation_scope": {
+      "type": "object",
+      "required": ["classification", "candidate_paths", "requires_patch_review"],
+      "properties": {
+        "classification": {
+          "enum": [
+            "UNKNOWN_PENDING_PATCH_OBJECT",
+            "SINGLE_PATH_CANDIDATE",
+            "WORKSPACE_WIDE_CANDIDATE"
+          ]
+        },
+        "candidate_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requires_patch_review": { "const": true }
+      }
+    },
+    "verification_plan": {
+      "type": "object",
+      "required": ["required", "commands", "requires_runtime", "requires_diagnostics"],
+      "properties": {
+        "required": { "const": true },
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requires_runtime": { "const": true },
+        "requires_diagnostics": { "const": true }
+      }
+    },
+    "apply_gate": {
+      "type": "object",
+      "required": ["blocked_until_verify_pass", "requires_apply_receipt"],
+      "properties": {
+        "blocked_until_verify_pass": { "const": true },
+        "requires_apply_receipt": { "const": true }
+      }
+    },
+    "rollback_plan": {
+      "type": "object",
+      "required": ["required", "requires_apply_receipt", "requires_rollback_receipt"],
+      "properties": {
+        "required": { "const": true },
+        "requires_apply_receipt": { "const": true },
+        "requires_rollback_receipt": { "const": true }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["receipt_type", "timeline_event"],
+      "properties": {
+        "receipt_type": { "const": "plan_receipt" },
+        "timeline_event": { "const": "plan.object.created" }
+      }
+    }
+  }
+}

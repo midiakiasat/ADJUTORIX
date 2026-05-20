@@ -1,0 +1,11 @@
+{
+  "product": "ADJUTORIX_INTENT_TO_PLAN_OBJECT",
+  "timestamp": "2026-05-20T18:35:40.751Z",
+  "verdict": "PASS",
+  "failures": [],
+  "checked_files": [
+    "configs/contracts/intent_plan_object.schema.json",
+    "configs/runtime/intent_plan_policy.json",
+    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  ]
+}

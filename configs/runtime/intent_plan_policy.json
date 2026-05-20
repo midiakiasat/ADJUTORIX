@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "policy_type": "ADJUTORIX_INTENT_PLAN_POLICY",
+  "plan_object_type": "ADJUTORIX_INTENT_PLAN_OBJECT",
+  "plan_source": "LOCAL_OPERATOR_COCKPIT",
+  "intent_may_not_mutate_files": true,
+  "plan_may_not_apply_patch": true,
+  "plan_requires_workspace_bound": true,
+  "plan_requires_patch_review": true,
+  "plan_requires_verification": true,
+  "apply_requires_verify_pass": true,
+  "rollback_requires_apply_receipt": true,
+  "required_verification_commands": [
+    "pnpm verify",
+    "node scripts/product/assert-local-operator-cockpit.mjs"
+  ],
+  "receipt_sequence": [
+    "intent_receipt",
+    "plan_receipt",
+    "patch_receipt",
+    "verify_receipt",
+    "apply_receipt",
+    "rollback_receipt"
+  ]
+}
