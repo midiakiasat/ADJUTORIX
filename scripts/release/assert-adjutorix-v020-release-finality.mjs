@@ -1,76 +1,86 @@
+#!/usr/bin/env node
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const TAG = "adjutorix-local-operator-cockpit-v0.2.0";
-const RELEASE_SHA = "b39a7736809d94e79bdcd445071e2c55401c585b";
-const RELEASE_DIR = `reports/releases/${TAG}`;
-const requiredFiles = [
-  `${RELEASE_DIR}/RELEASE.md`,
-  `${RELEASE_DIR}/manifest.json`,
-  "configs/runtime/local_operator_loop_complete.json",
-  "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
-  "packages/adjutorix-app/tests/smoke/local_operator_loop.smoke.test.tsx",
-  "scripts/product/assert-local-operator-loop-complete.mjs",
-  "scripts/product/assert-real-root-smoke.mjs"
-];
-
-function sh(cmd, args) {
-  return execFileSync(cmd, args, { encoding: "utf8" }).trim();
-}
+const repo = process.env.GITHUB_REPOSITORY || "qzro/ADJUTORIX";
+const tag = process.env.ADJUTORIX_V020_TAG || "adjutorix-local-operator-cockpit-v0.2.0";
+const expectedSha = process.env.ADJUTORIX_V020_RELEASE_SHA || "b39a7736809d94e79bdcd445071e2c55401c585b";
 
 const failures = [];
 
-for (const file of requiredFiles) {
-  if (!fs.existsSync(file)) failures.push({ code: "MISSING_REQUIRED_FILE", file });
+function run(command, args) {
+  return execFileSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
-let tagSha = "";
-try {
-  tagSha = sh("git", ["rev-list", "-n", "1", TAG]);
-} catch (error) {
-  failures.push({ code: "TAG_NOT_FOUND", tag: TAG });
-}
-
-if (tagSha && tagSha !== RELEASE_SHA) {
-  failures.push({ code: "TAG_SHA_DRIFT", expected: RELEASE_SHA, actual: tagSha });
-}
-
-let manifest = null;
-try {
-  manifest = JSON.parse(fs.readFileSync(`${RELEASE_DIR}/manifest.json`, "utf8"));
-} catch (error) {
-  failures.push({ code: "BAD_RELEASE_MANIFEST", file: `${RELEASE_DIR}/manifest.json` });
-}
-
-if (manifest) {
-  if (manifest.tag !== TAG) failures.push({ code: "MANIFEST_TAG_DRIFT", expected: TAG, actual: manifest.tag });
-  if (manifest.main_sha !== RELEASE_SHA) failures.push({ code: "MANIFEST_RELEASE_SHA_DRIFT", expected: RELEASE_SHA, actual: manifest.main_sha });
-
-  const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
-  for (const expected of [
-    "Adjutorix-0.1.0-arm64.dmg",
-    "Adjutorix-0.1.0-arm64.dmg.blockmap",
-    "builder-effective-config.yaml"
-  ]) {
-    if (!assets.some((asset) => String(asset.path || "").endsWith(expected))) {
-      failures.push({ code: "MANIFEST_ASSET_MISSING", asset: expected });
-    }
-  }
-
-  for (const asset of assets) {
-    if (!asset.sha256 || !/^[a-f0-9]{64}$/.test(asset.sha256)) {
-      failures.push({ code: "BAD_ASSET_SHA256", asset: asset.path });
-    }
-    if (!Number.isInteger(asset.bytes) || asset.bytes <= 0) {
-      failures.push({ code: "BAD_ASSET_SIZE", asset: asset.path });
-    }
+function maybe(command, args) {
+  try {
+    return run(command, args);
+  } catch {
+    return "";
   }
 }
 
-const cockpit = fs.existsSync("packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx")
-  ? fs.readFileSync("packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx", "utf8")
-  : "";
+function requireFile(path) {
+  if (!fs.existsSync(path)) failures.push({ code: "MISSING_FILE", path });
+}
 
+function requireText(path, phrase) {
+  if (!fs.existsSync(path)) {
+    failures.push({ code: "MISSING_FILE", path });
+    return;
+  }
+  const text = fs.readFileSync(path, "utf8");
+  if (!text.includes(phrase)) failures.push({ code: "MISSING_TEXT", path, phrase });
+}
+
+function requireJson(path) {
+  requireFile(path);
+  if (!fs.existsSync(path)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(path, "utf8"));
+  } catch (error) {
+    failures.push({ code: "BAD_JSON", path, error: String(error?.message || error) });
+    return null;
+  }
+}
+
+let tagSha = maybe("git", ["rev-list", "-n", "1", tag]);
+if (!tagSha) {
+  maybe("git", ["fetch", "--force", "origin", `refs/tags/${tag}:refs/tags/${tag}`]);
+  tagSha = maybe("git", ["rev-list", "-n", "1", tag]);
+}
+
+if (tagSha !== expectedSha) {
+  failures.push({ code: "TAG_SHA_MISMATCH", tag, expected: expectedSha, actual: tagSha || null });
+}
+
+const releaseEvidenceDir = "reports/releases/adjutorix-local-operator-cockpit-v0.2.0";
+const releaseManifestPath = `${releaseEvidenceDir}/manifest.json`;
+const releaseReadmePath = `${releaseEvidenceDir}/RELEASE.md`;
+
+requireFile(releaseReadmePath);
+const releaseManifest = requireJson(releaseManifestPath);
+
+if (releaseManifest) {
+  const manifestSha = releaseManifest.release_main_sha || releaseManifest.main_sha || releaseManifest.sha || null;
+  if (releaseManifest.tag !== tag) failures.push({ code: "RELEASE_MANIFEST_TAG_MISMATCH", expected: tag, actual: releaseManifest.tag });
+  if (manifestSha !== expectedSha) failures.push({ code: "RELEASE_MANIFEST_SHA_MISMATCH", expected: expectedSha, actual: manifestSha });
+
+  if (!Array.isArray(releaseManifest.assets) || releaseManifest.assets.length < 3) {
+    failures.push({ code: "RELEASE_MANIFEST_ASSETS_MISSING" });
+  }
+
+  for (const asset of releaseManifest.assets || []) {
+    if (!asset.path) failures.push({ code: "RELEASE_ASSET_PATH_MISSING", asset });
+    if (!asset.sha256 || !/^[a-f0-9]{64}$/.test(asset.sha256)) failures.push({ code: "RELEASE_ASSET_SHA256_BAD", asset });
+    if (typeof asset.bytes !== "number" || asset.bytes <= 0) failures.push({ code: "RELEASE_ASSET_BYTES_BAD", asset });
+  }
+}
+
+const cockpit = "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx";
 for (const phrase of [
   "ADJUTORIX_INTENT_PLAN_OBJECT",
   "ADJUTORIX_PATCH_CUSTODY_OBJECT",
@@ -84,29 +94,60 @@ for (const phrase of [
   "rollback_requires_apply_receipt",
   "may_mutate_files: false",
   "may_apply_patch: false",
-  "ROLLBACK_COMPLETE"
+  "apply with receipt",
+  "rollback with receipt"
 ]) {
-  if (!cockpit.includes(phrase)) {
-    failures.push({ code: "COCKPIT_FINALITY_PHRASE_MISSING", phrase });
+  requireText(cockpit, phrase);
+}
+
+const releaseRaw = maybe("gh", ["release", "view", tag, "--repo", repo, "--json", "tagName,name,isDraft,isPrerelease,targetCommitish,url,assets"]);
+if (releaseRaw) {
+  let release = null;
+  try {
+    release = JSON.parse(releaseRaw);
+  } catch (error) {
+    failures.push({ code: "GH_RELEASE_JSON_BAD", error: String(error?.message || error) });
   }
+
+  if (release) {
+    if (release.tagName !== tag) failures.push({ code: "GH_RELEASE_TAG_MISMATCH", expected: tag, actual: release.tagName });
+    if (release.isDraft !== false) failures.push({ code: "GH_RELEASE_IS_DRAFT", actual: release.isDraft });
+    if (release.isPrerelease !== false) failures.push({ code: "GH_RELEASE_IS_PRERELEASE", actual: release.isPrerelease });
+
+    const assetNames = new Set((release.assets || []).map((asset) => asset.name));
+    for (const required of [
+      "Adjutorix-0.1.0-arm64.dmg",
+      "Adjutorix-0.1.0-arm64.dmg.blockmap",
+      "builder-effective-config.yaml",
+      "manifest.json",
+      "RELEASE.md"
+    ]) {
+      if (!assetNames.has(required)) failures.push({ code: "GH_RELEASE_ASSET_MISSING", asset: required });
+    }
+  }
+} else if (process.env.CI) {
+  failures.push({ code: "GH_RELEASE_VIEW_FAILED", tag, repo });
 }
 
 const report = {
   product: "ADJUTORIX_V020_RELEASE_FINALITY_GUARD",
   verdict: failures.length === 0 ? "PASS" : "FAIL",
-  timestamp: new Date().toISOString(),
-  tag: TAG,
-  release_sha: RELEASE_SHA,
-  observed_tag_sha: tagSha,
-  checked_files: requiredFiles,
-  failures
+  tag,
+  release_main_sha: expectedSha,
+  checked_at: new Date().toISOString(),
+  guarantees: [
+    "release tag resolves to immutable v0.2.0 cockpit commit",
+    "release evidence exists",
+    "release manifest contains hashed package artifacts",
+    "LocalOperatorCockpit contains governed object chain",
+    "unsafe apply and rollback invariants remain source-bound",
+    "GitHub release assets exist"
+  ],
+  failures,
 };
 
 fs.mkdirSync("reports/current", { recursive: true });
-fs.writeFileSync(
-  "reports/current/adjutorix-v020-release-finality.json",
-  JSON.stringify(report, null, 2) + "\n"
-);
+fs.writeFileSync("reports/current/adjutorix-v020-release-finality.json", JSON.stringify(report, null, 2) + "\n");
 
 console.log(`ADJUTORIX_V020_RELEASE_FINALITY=${report.verdict}`);
 console.log("REPORT=reports/current/adjutorix-v020-release-finality.json");

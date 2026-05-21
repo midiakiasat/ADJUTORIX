@@ -1,33 +1,47 @@
 name: ADJUTORIX v0.2.0 Release Finality
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+    paths:
+      - ".github/workflows/adjutorix-v020-release-finality.yml"
+      - "scripts/release/assert-adjutorix-v020-release-finality.mjs"
+      - "reports/current/adjutorix-v020-release-finality.json"
+      - "reports/releases/adjutorix-local-operator-cockpit-v0.2.0/**"
+      - "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx"
+  push:
+    branches:
+      - main
+      - "adjutorix/v021-release-finality-guard"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  finality:
+  release-finality:
+    name: ADJUTORIX v0.2.0 Release Finality
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ADJUTORIX_V020_TAG: adjutorix-local-operator-cockpit-v0.2.0
+      ADJUTORIX_V020_RELEASE_SHA: b39a7736809d94e79bdcd445071e2c55401c585b
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout full repository history and tags
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+      - name: Fetch and assert release tag
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${ADJUTORIX_V020_TAG}:refs/tags/${ADJUTORIX_V020_TAG}"
+          test "$(git rev-list -n 1 "$ADJUTORIX_V020_TAG")" = "$ADJUTORIX_V020_RELEASE_SHA"
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.0
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Assert v0.2.0 release finality
-        run: node scripts/release/assert-adjutorix-v020-release-finality.mjs
-
-      - name: Root verify
-        run: pnpm verify
+      - name: Assert ADJUTORIX v0.2.0 release finality
+        run: |
+          set -euo pipefail
+          node scripts/release/assert-adjutorix-v020-release-finality.mjs

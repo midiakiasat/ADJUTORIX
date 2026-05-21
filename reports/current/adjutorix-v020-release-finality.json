@@ -1,18 +1,16 @@
 {
   "product": "ADJUTORIX_V020_RELEASE_FINALITY_GUARD",
   "verdict": "PASS",
-  "timestamp": "2026-05-21T17:26:57.017Z",
   "tag": "adjutorix-local-operator-cockpit-v0.2.0",
-  "release_sha": "b39a7736809d94e79bdcd445071e2c55401c585b",
-  "observed_tag_sha": "b39a7736809d94e79bdcd445071e2c55401c585b",
-  "checked_files": [
-    "reports/releases/adjutorix-local-operator-cockpit-v0.2.0/RELEASE.md",
-    "reports/releases/adjutorix-local-operator-cockpit-v0.2.0/manifest.json",
-    "configs/runtime/local_operator_loop_complete.json",
-    "packages/adjutorix-app/src/renderer/components/LocalOperatorCockpit.tsx",
-    "packages/adjutorix-app/tests/smoke/local_operator_loop.smoke.test.tsx",
-    "scripts/product/assert-local-operator-loop-complete.mjs",
-    "scripts/product/assert-real-root-smoke.mjs"
+  "release_main_sha": "b39a7736809d94e79bdcd445071e2c55401c585b",
+  "checked_at": "2026-05-21T17:42:34.842Z",
+  "guarantees": [
+    "release tag resolves to immutable v0.2.0 cockpit commit",
+    "release evidence exists",
+    "release manifest contains hashed package artifacts",
+    "LocalOperatorCockpit contains governed object chain",
+    "unsafe apply and rollback invariants remain source-bound",
+    "GitHub release assets exist"
   ],
   "failures": []
 }
