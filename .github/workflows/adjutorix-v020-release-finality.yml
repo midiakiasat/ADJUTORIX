@@ -1,0 +1,33 @@
+name: ADJUTORIX v0.2.0 Release Finality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  finality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert v0.2.0 release finality
+        run: node scripts/release/assert-adjutorix-v020-release-finality.mjs
+
+      - name: Root verify
+        run: pnpm verify
