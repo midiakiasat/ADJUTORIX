@@ -1,0 +1,24 @@
+{
+  "product": "ADJUTORIX_REAL_OPERATOR_KERNEL_POLICY",
+  "schema_version": "1.0.0",
+  "version": "0.3.0",
+  "default_mode": "DRY_RUN",
+  "hard_boundaries": {
+    "renderer_may_mutate": false,
+    "kernel_may_mutate_without_verify": false,
+    "apply_requires_verify_pass": true,
+    "rollback_requires_apply_receipt": true,
+    "evidence_log_is_append_only": true
+  },
+  "required_receipts": [
+    "ADJUTORIX_INTENT_PLAN_OBJECT",
+    "ADJUTORIX_PATCH_CUSTODY_OBJECT",
+    "ADJUTORIX_VERIFICATION_GATE_OBJECT",
+    "ADJUTORIX_VERIFY_RECEIPT_OBJECT",
+    "ADJUTORIX_APPLY_GATE_OBJECT",
+    "ADJUTORIX_APPLY_RECEIPT_OBJECT",
+    "ADJUTORIX_ROLLBACK_GATE_OBJECT",
+    "ADJUTORIX_ROLLBACK_RECEIPT_OBJECT",
+    "ADJUTORIX_OPERATOR_KERNEL_RECEIPT"
+  ]
+}

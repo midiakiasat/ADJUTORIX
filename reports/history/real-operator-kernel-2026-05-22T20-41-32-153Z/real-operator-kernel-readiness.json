@@ -1,0 +1,20 @@
+{
+  "product": "ADJUTORIX_REAL_OPERATOR_KERNEL",
+  "verdict": "PASS",
+  "checked_at": "2026-05-22T20:41:32.154Z",
+  "checked_files": [
+    "packages/adjutorix-app/src/main/operator/real_operator_kernel.ts",
+    "configs/contracts/operator_kernel_receipt.schema.json",
+    "configs/runtime/operator_kernel_policy.json"
+  ],
+  "source_sha256": "eb78853bb1f79d77afa49eee6d12b80ca51b7bcad797c25645bc1ece33b834f2",
+  "guarantees": [
+    "operator kernel exists outside renderer surface",
+    "receipts are canonical-hash bound",
+    "evidence append API exists",
+    "renderer mutation remains impossible",
+    "apply without verify is blocked",
+    "rollback without apply receipt is blocked"
+  ],
+  "failures": []
+}

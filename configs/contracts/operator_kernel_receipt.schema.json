@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adjutorix.local/contracts/operator_kernel_receipt.schema.json",
+  "title": "ADJUTORIX Operator Kernel Receipt",
+  "type": "object",
+  "required": [
+    "object_type",
+    "schema_version",
+    "receipt_id",
+    "created_at",
+    "kernel",
+    "workspace",
+    "intent",
+    "operation",
+    "mutation_boundary",
+    "verification",
+    "evidence",
+    "hash"
+  ],
+  "properties": {
+    "object_type": { "const": "ADJUTORIX_OPERATOR_KERNEL_RECEIPT" },
+    "schema_version": { "const": "1.0.0" },
+    "receipt_id": { "type": "string", "minLength": 16 },
+    "created_at": { "type": "string", "minLength": 20 },
+    "kernel": {
+      "type": "object",
+      "required": ["name", "mode", "version"],
+      "properties": {
+        "name": { "const": "ADJUTORIX_REAL_OPERATOR_KERNEL" },
+        "mode": { "enum": ["DRY_RUN", "APPLY_REQUEST_BLOCKED", "ROLLBACK_REQUEST_BLOCKED"] },
+        "version": { "const": "0.3.0" }
+      },
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "required": ["root", "trusted", "writable"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "trusted": { "type": "boolean" },
+        "writable": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "intent": {
+      "type": "object",
+      "required": ["text", "bounded"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "bounded": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "operation": {
+      "type": "object",
+      "required": ["kind", "paths", "diff_sha256"],
+      "properties": {
+        "kind": { "enum": ["PLAN", "PATCH_PREVIEW", "VERIFY", "APPLY", "ROLLBACK"] },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "diff_sha256": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "mutation_boundary": {
+      "type": "object",
+      "required": [
+        "renderer_may_mutate",
+        "kernel_may_mutate_without_verify",
+        "apply_requires_verify_pass",
+        "rollback_requires_apply_receipt",
+        "append_only_evidence"
+      ],
+      "properties": {
+        "renderer_may_mutate": { "const": false },
+        "kernel_may_mutate_without_verify": { "const": false },
+        "apply_requires_verify_pass": { "const": true },
+        "rollback_requires_apply_receipt": { "const": true },
+        "append_only_evidence": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "required": ["required", "passed", "commands"],
+      "properties": {
+        "required": { "const": true },
+        "passed": { "type": "boolean" },
+        "commands": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["previous_hash", "canonical_payload_sha256"],
+      "properties": {
+        "previous_hash": { "type": ["string", "null"] },
+        "canonical_payload_sha256": { "type": "string", "minLength": 64, "maxLength": 64 }
+      },
+      "additionalProperties": false
+    },
+    "hash": { "type": "string", "minLength": 64, "maxLength": 64 }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,6 @@
+{
+  "product": "ADJUTORIX_REAL_OPERATOR_KERNEL",
+  "verdict": "PASS",
+  "report": "real-operator-kernel-readiness.json",
+  "source_sha256": "2d28ab16f04863ade9ff7cf752f9a2863137295065fa28a43ddd2d62520c2fec"
+}
