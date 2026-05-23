@@ -3,6 +3,8 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 
+const repoRoot = process.cwd();
+
 const root = process.cwd();
 const reportPath = path.join(root, "reports/current/real-operator-kernel-readiness.json");
 const historyDir = path.join(root, `reports/history/real-operator-kernel-${new Date().toISOString().replace(/[:.]/g, "-")}`);
@@ -11,6 +13,7 @@ const schemaPath = path.join(root, "configs/contracts/operator_kernel_receipt.sc
 const policyPath = path.join(root, "configs/runtime/operator_kernel_policy.json");
 
 const failures = [];
+
 
 function requireFile(p) {
   if (!fs.existsSync(p)) failures.push({ code: "MISSING_FILE", file: path.relative(root, p) });
@@ -93,3 +96,32 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(JSON.stringify(failure));
   process.exit(1);
 }
+
+
+const ipcPath = path.join(repoRoot, "packages/adjutorix-app/src/main/ipc/operator_kernel_ipc.ts");
+const preloadPath = path.join(repoRoot, "packages/adjutorix-app/src/preload/preload.ts");
+const mainPath = path.join(repoRoot, "packages/adjutorix-app/src/main/index.ts");
+
+for (const file of [ipcPath, preloadPath, mainPath]) {
+  if (!fs.existsSync(file)) fail("MISSING_OPERATOR_KERNEL_WIRING_FILE", { file });
+}
+
+const ipcSource = fs.readFileSync(ipcPath, "utf8");
+const preloadSource = fs.readFileSync(preloadPath, "utf8");
+const mainSource = fs.readFileSync(mainPath, "utf8");
+
+for (const phrase of [
+  "createOperatorKernelReceipt",
+  "readLastOperatorKernelHash",
+  "adjutorix:operatorKernel:createReceipt",
+  "adjutorix:operatorKernel:lastHash"
+]) {
+  if (!ipcSource.includes(phrase) && !preloadSource.includes(phrase)) {
+    fail("MISSING_OPERATOR_KERNEL_IPC_PHRASE", { phrase });
+  }
+}
+
+if (!mainSource.includes("registerOperatorKernelIpc")) {
+  fail("OPERATOR_KERNEL_IPC_NOT_REGISTERED", {});
+}
+

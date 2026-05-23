@@ -9,6 +9,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn, ChildProcess } from "node:child_process";
+import { registerOperatorKernelIpc } from "./ipc/operator_kernel_ipc";
 
 /**
  * ADJUTORIX APP — MAIN / index.ts
@@ -1365,7 +1366,9 @@ async function main(): Promise<void> {
   registerGlobalHandlers();
   enforceSingleInstance();
 
-  await app.whenReady();
+  await registerOperatorKernelIpc();
+
+app.whenReady();
   recordEvent("app.whenReady");
   await bootstrap();
 }

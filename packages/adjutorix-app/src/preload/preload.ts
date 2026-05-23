@@ -849,3 +849,14 @@ try {
     run: (payload?: unknown) => __portfolioInvokeV18("adjutorix:v18:run", payload),
   });
 } catch {}
+
+
+const operatorKernelApi = {
+  createReceipt: (input: unknown) =>
+    ipcRenderer.invoke("adjutorix:operatorKernel:createReceipt", input),
+  lastHash: (input: unknown) =>
+    ipcRenderer.invoke("adjutorix:operatorKernel:lastHash", input),
+};
+
+
+contextBridge.exposeInMainWorld("adjutorixOperatorKernel", operatorKernelApi);

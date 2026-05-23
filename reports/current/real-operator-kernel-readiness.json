@@ -1,7 +1,7 @@
 {
   "product": "ADJUTORIX_REAL_OPERATOR_KERNEL",
   "verdict": "PASS",
-  "checked_at": "2026-05-22T20:42:25.956Z",
+  "checked_at": "2026-05-23T10:11:12.733Z",
   "checked_files": [
     "packages/adjutorix-app/src/main/operator/real_operator_kernel.ts",
     "configs/contracts/operator_kernel_receipt.schema.json",
