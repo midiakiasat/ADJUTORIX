@@ -1,0 +1,18 @@
+{
+  "product": "ADJUTORIX_V040_LIVE_OPERATOR_KERNEL_SURFACE_FINALITY_GUARD",
+  "verdict": "PASS",
+  "tag": "adjutorix-live-operator-kernel-surface-v0.4.0",
+  "expected_sha": "653589386430c105c9057b0aa38d93ed3e2e0037",
+  "tag_sha": "653589386430c105c9057b0aa38d93ed3e2e0037",
+  "checked_at": "2026-05-24T11:00:58.024Z",
+  "guarantees": [
+    "v0.4.0 live operator kernel surface tag resolves to immutable merge commit",
+    "GitHub release exists and is not draft or prerelease",
+    "release assets include DMG, blockmap, and builder effective config",
+    "renderer contains user-visible operator kernel cockpit evidence",
+    "preload preserves operator kernel evidence through patch.apply normalization",
+    "live surface contract test remains in implemented Vitest suite",
+    "live surface readiness report remains PASS"
+  ],
+  "failures": []
+}
