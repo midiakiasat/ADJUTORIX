@@ -33,6 +33,7 @@ export default defineConfig({
       "tests/renderer/provider_status.test.tsx",
       "tests/renderer/operator_kernel_ipc_contract.test.ts",
       "tests/renderer/operator_kernel_mandatory_gate_contract.test.ts",
+      "tests/renderer/operator_kernel_enforcement_contract.test.ts",
       "tests/renderer/release_surface_guard.test.ts",
       "tests/renderer/search_panel.test.tsx",
       "tests/renderer/settings_panel.test.tsx",

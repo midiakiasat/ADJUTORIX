@@ -1,0 +1,12 @@
+{
+  "product": "ADJUTORIX_OPERATOR_KERNEL_ENFORCEMENT",
+  "verdict": "PASS",
+  "checked_at": "2026-05-24T06:55:48.675Z",
+  "guarantees": [
+    "patch apply authority is source-bound to mandatory operator kernel gate",
+    "operator kernel receipt id, kernel hash, or kernel object is required before apply",
+    "enforcement has a renderer contract test",
+    "enforcement contract is in the explicit Vitest include list"
+  ],
+  "failures": []
+}

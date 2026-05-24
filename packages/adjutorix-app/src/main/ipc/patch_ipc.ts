@@ -1,6 +1,7 @@
 // @ts-nocheck
 import crypto from "node:crypto";
 import { ipcMain } from "electron";
+import { assertMandatoryOperatorKernelGate } from "../operator/operator_kernel_enforcement";
 
 /**
  * ADJUTORIX APP — MAIN / IPC / patch_ipc.ts
@@ -465,7 +466,14 @@ export function createPatchIpc(options: PatchIpcOptions): PatchHandlerBundle {
     if (registered) return;
 
     ipcMain.handle(channels.preview, async (_event, payload: PatchPreviewPayload) => previewPatch(payload));
-    ipcMain.handle(channels.apply, async (_event, payload: PatchApplyPayload) => applyPatch(payload));
+    ipcMain.handle(channels.apply, async (_event, payload: PatchApplyPayload & {
+      operatorKernelReceiptId?: unknown;
+      operatorKernelHash?: unknown;
+      operatorKernel?: unknown;
+    }) => {
+      assertMandatoryOperatorKernelGate(payload);
+      return applyPatch(payload);
+    });
     ipcMain.handle(channels.bindVerify, async (_event, payload: PatchVerifyBindingPayload) => {
       bindVerifyResult(payload);
       return { ok: true };
