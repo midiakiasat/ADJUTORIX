@@ -1,0 +1,20 @@
+name: ADJUTORIX v0.4.2 Mission Control Finality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  finality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assert v0.4.2 mission control finality
+        run: node scripts/release/assert-adjutorix-v042-mission-control-finality.mjs

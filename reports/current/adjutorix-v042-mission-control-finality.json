@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "guard": "adjutorix-v042-mission-control-finality",
+  "expectedTag": "adjutorix-operator-mission-control-surface-v0.4.2",
+  "expectedSha": "e20129f54fa28418f194505edd6034aed3778852",
+  "tagSha": "e20129f54fa28418f194505edd6034aed3778852",
+  "lockedSurface": "operator-mission-control",
+  "requiredFiles": [
+    "configs/runtime/operator_mission_control_surface_policy.json",
+    "packages/adjutorix-app/src/renderer/components/OperatorMissionControlPanel.tsx",
+    "packages/adjutorix-app/src/renderer/App.tsx",
+    "packages/adjutorix-app/tests/renderer/operator_mission_control_surface_contract.test.ts",
+    "packages/adjutorix-app/vitest.config.mjs",
+    "reports/current/operator-mission-control-surface-readiness.json",
+    "scripts/product/assert-operator-mission-control-surface.mjs"
+  ],
+  "checkedAt": "2026-05-24T11:25:51.188Z"
+}
