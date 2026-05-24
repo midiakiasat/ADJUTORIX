@@ -1,0 +1,23 @@
+name: ADJUTORIX v0.5.0 Execution Runway Finality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  finality:
+    name: finality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assert ADJUTORIX v0.5.0 execution runway finality
+        run: node scripts/release/assert-adjutorix-v050-execution-runway-finality.mjs

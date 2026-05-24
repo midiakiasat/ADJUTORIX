@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "schema": "adjutorix-v050-execution-runway-finality-v1",
+  "checkedAt": "2026-05-24T18:20:18.675Z",
+  "head": "10339e3947cc9bf19389a7bdbaada700b67fb90b",
+  "lockedTag": "adjutorix-operator-execution-runway-surface-v0.5.0",
+  "lockedSha": "10339e3947cc9bf19389a7bdbaada700b67fb90b",
+  "tagSha": "10339e3947cc9bf19389a7bdbaada700b67fb90b",
+  "releaseName": "ADJUTORIX v0.5.0 — Operator Execution Runway Surface",
+  "finality": "PASS",
+  "invariant": "v0.5.0 operator execution runway surface remains locked, user-visible, policy-backed, test-backed, assertion-backed, and release-backed",
+  "requiredFiles": [
+    "configs/runtime/operator_execution_runway_surface_policy.json",
+    "packages/adjutorix-app/src/renderer/App.tsx",
+    "packages/adjutorix-app/src/renderer/components/OperatorExecutionRunwayPanel.tsx",
+    "packages/adjutorix-app/tests/renderer/operator_execution_runway_surface_contract.test.ts",
+    "packages/adjutorix-app/vitest.config.mjs",
+    "reports/current/operator-execution-runway-surface-readiness.json",
+    "scripts/product/assert-operator-execution-runway-surface.mjs"
+  ],
+  "requiredPolicyConcepts": [
+    "operator",
+    "execution",
+    "runway"
+  ],
+  "fileHashes": {
+    "configs/runtime/operator_execution_runway_surface_policy.json": "f0c9eec965e4c40f0f5e330be1af96a93c2e57b5f7982f4dc6ab62018877f413",
+    "packages/adjutorix-app/src/renderer/App.tsx": "11f2fb127092758ffe21df3d17c42103cf63008058c5481bbeeca2d7b6c49a5c",
+    "packages/adjutorix-app/src/renderer/components/OperatorExecutionRunwayPanel.tsx": "9d2e84033d1ea170ce513b86c04b729ca9b512671e69b9952ec185408ad280c4",
+    "packages/adjutorix-app/tests/renderer/operator_execution_runway_surface_contract.test.ts": "070164d2c564e1cfb65036ef1f3b8d1233a11f94d845dae24856a9e5c473578a",
+    "packages/adjutorix-app/vitest.config.mjs": "453689506283d6795f69421829510a3a615c3dab90b09a562d196b5049944053",
+    "reports/current/operator-execution-runway-surface-readiness.json": "1152a74ef63d67aeeacd3dce9ad5283572bdc5db174d91059b00c9e331142712",
+    "scripts/product/assert-operator-execution-runway-surface.mjs": "ff1a524b45db2a65e4d43f34e7def9ffdca3b961c8b1f71c17d1142807a54762"
+  }
+}
