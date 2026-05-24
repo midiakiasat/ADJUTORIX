@@ -1,0 +1,19 @@
+{
+  "product": "ADJUTORIX_V033_OPERATOR_KERNEL_ENFORCEMENT_FINALITY",
+  "verdict": "PASS",
+  "tag": "adjutorix-enforced-operator-kernel-gate-v0.3.3",
+  "expected_sha": "1f8e1dc3a9f26b9092711f4b5fc68f41787cd74c",
+  "release_url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-enforced-operator-kernel-gate-v0.3.3",
+  "guarantees": [
+    "v0.3.3 tag resolves to locked enforcement commit",
+    "GitHub release exists and is not draft/prerelease",
+    "release target is SHA-pinned",
+    "release assets exist",
+    "patch apply IPC boundary is operator-kernel gated",
+    "legacy main apply boundary is operator-kernel gated",
+    "runtime bootstrap apply boundary is operator-kernel gated",
+    "enforcement contract test remains in implemented Vitest suite",
+    "enforcement readiness report remains PASS"
+  ],
+  "failures": []
+}
