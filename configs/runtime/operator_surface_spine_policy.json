@@ -1,0 +1,24 @@
+{
+  "schema": "adjutorix.operator_surface_spine_policy.v1",
+  "surface": "ADJUTORIX_OPERATOR_SURFACE_SPINE",
+  "required": true,
+  "purpose": "Collapse user-usable operator surfaces into one governed path.",
+  "requiredSurfaces": [
+    "mission-control",
+    "live-kernel",
+    "execution-runway",
+    "evidence-finality"
+  ],
+  "forbiddenPostures": [
+    "orphan operator panel",
+    "hidden patch apply path",
+    "release posture outside the operator spine",
+    "surface added without reachability contract"
+  ],
+  "releaseBoundary": {
+    "requiresContract": true,
+    "requiresProductAssertion": true,
+    "requiresRootVerify": true,
+    "requiresPackage": true
+  }
+}

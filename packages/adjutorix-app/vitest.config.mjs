@@ -37,6 +37,7 @@ export default defineConfig({
       "tests/renderer/operator_kernel_live_surface_contract.test.ts",
       "tests/renderer/operator_mission_control_surface_contract.test.ts",
       "tests/renderer/operator_execution_runway_surface_contract.test.ts",
+      "tests/renderer/operator_surface_spine_contract.test.ts",
       "tests/renderer/release_surface_guard.test.ts",
       "tests/renderer/search_panel.test.tsx",
       "tests/renderer/settings_panel.test.tsx",

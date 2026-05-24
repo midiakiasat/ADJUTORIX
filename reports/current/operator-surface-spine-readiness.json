@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "surface": "ADJUTORIX_OPERATOR_SURFACE_SPINE",
+  "version": "v0.6.0",
+  "branch": "adjutorix/v060-operator-surface-spine",
+  "requiredSurfaces": [
+    "mission-control",
+    "live-kernel",
+    "execution-runway",
+    "evidence-finality"
+  ],
+  "checkedAt": "2026-05-24T18:36:47.259Z"
+}

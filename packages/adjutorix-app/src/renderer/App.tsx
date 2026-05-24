@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { OperatorMissionControlPanel } from "./components/OperatorMissionControlPanel";
 import { OperatorExecutionRunwayPanel } from "./components/OperatorExecutionRunwayPanel";
+import { OperatorSurfaceSpinePanel } from "./components/OperatorSurfaceSpinePanel";
 
 type AnyRecord = Record<string, any>;
 
@@ -699,92 +700,95 @@ export default function App(): React.JSX.Element {
             )}
           </div>
 
+          <OperatorSurfaceSpinePanel
+            missionControl={<OperatorMissionControlPanel />}
+            liveKernelCockpit={
+              <div
+                          data-testid="operator-kernel-live-surface"
+                          className="border-b border-emerald-900/60 bg-emerald-950/10 px-3 py-2"
+                        >
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                                Operator Kernel Live Cockpit
+                              </div>
+                              <div className="mt-1 text-xs text-zinc-500">
+                                User-visible receipt creation and kernel-gated apply evidence. No invisible mutation.
+                              </div>
+                            </div>
+                            <div className={`rounded-md px-2 py-1 text-xs ${operatorKernelReady ? "bg-emerald-950 text-emerald-300" : "bg-red-950 text-red-300"}`}>
+                              {operatorKernelReady ? "kernel bridge ready" : "kernel bridge missing"}
+                            </div>
+                          </div>
 
-                <OperatorMissionControlPanel />
-      <OperatorExecutionRunwayPanel />
-<div
-            data-testid="operator-kernel-live-surface"
-            className="border-b border-emerald-900/60 bg-emerald-950/10 px-3 py-2"
-          >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
-                  Operator Kernel Live Cockpit
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">
-                  User-visible receipt creation and kernel-gated apply evidence. No invisible mutation.
-                </div>
-              </div>
-              <div className={`rounded-md px-2 py-1 text-xs ${operatorKernelReady ? "bg-emerald-950 text-emerald-300" : "bg-red-950 text-red-300"}`}>
-                {operatorKernelReady ? "kernel bridge ready" : "kernel bridge missing"}
-              </div>
-            </div>
+                          <div className="grid gap-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                            <div className="grid gap-2">
+                              <input
+                                value={operatorIntent}
+                                onChange={(event) => setOperatorIntent(event.target.value)}
+                                placeholder="Operator intent required before governed apply"
+                                className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
+                              />
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <input
+                                  value={operatorKernelPatchId}
+                                  onChange={(event) => setOperatorKernelPatchId(event.target.value)}
+                                  placeholder="patchId"
+                                  className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
+                                />
+                                <input
+                                  value={operatorKernelPreviewHash}
+                                  onChange={(event) => setOperatorKernelPreviewHash(event.target.value)}
+                                  placeholder="previewHash"
+                                  className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
+                                />
+                                <input
+                                  value={operatorKernelRequestHash}
+                                  onChange={(event) => setOperatorKernelRequestHash(event.target.value)}
+                                  placeholder="requestHash"
+                                  className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
+                                />
+                              </div>
+                            </div>
 
-            <div className="grid gap-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-              <div className="grid gap-2">
-                <input
-                  value={operatorIntent}
-                  onChange={(event) => setOperatorIntent(event.target.value)}
-                  placeholder="Operator intent required before governed apply"
-                  className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
-                />
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <input
-                    value={operatorKernelPatchId}
-                    onChange={(event) => setOperatorKernelPatchId(event.target.value)}
-                    placeholder="patchId"
-                    className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
-                  />
-                  <input
-                    value={operatorKernelPreviewHash}
-                    onChange={(event) => setOperatorKernelPreviewHash(event.target.value)}
-                    placeholder="previewHash"
-                    className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
-                  />
-                  <input
-                    value={operatorKernelRequestHash}
-                    onChange={(event) => setOperatorKernelRequestHash(event.target.value)}
-                    placeholder="requestHash"
-                    className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs outline-none focus:border-emerald-700"
-                  />
-                </div>
-              </div>
+                            <div className="grid gap-2">
+                              <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
+                                <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
+                                  root: {rootPath ?? "none"}
+                                </div>
+                                <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
+                                  selected: {selectedPath ? rel(selectedPath, rootPath) : "none"}
+                                </div>
+                                <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
+                                  previousKernelHash: {operatorKernelPreviousHash ?? "none"}
+                                </div>
+                                <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
+                                  receiptHash: {operatorKernelReceiptHash || "none"}
+                                </div>
+                              </div>
 
-              <div className="grid gap-2">
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
-                  <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
-                    root: {rootPath ?? "none"}
-                  </div>
-                  <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
-                    selected: {selectedPath ? rel(selectedPath, rootPath) : "none"}
-                  </div>
-                  <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
-                    previousKernelHash: {operatorKernelPreviousHash ?? "none"}
-                  </div>
-                  <div className="truncate rounded-md border border-zinc-800 bg-black px-2 py-1">
-                    receiptHash: {operatorKernelReceiptHash || "none"}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => void createOperatorKernelReceipt()}
-                    disabled={!operatorKernelReady || operatorKernelBusy}
-                    className="rounded-lg bg-emerald-900 px-3 py-2 text-xs font-semibold text-emerald-100 enabled:hover:bg-emerald-800 disabled:opacity-40"
-                  >
-                    Create kernel receipt
-                  </button>
-                  <button
-                    onClick={() => void applyKernelGatedPatch()}
-                    disabled={!operatorKernelApplyReady || operatorKernelBusy}
-                    className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-black enabled:hover:bg-white disabled:opacity-30"
-                  >
-                    Kernel-gated apply
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => void createOperatorKernelReceipt()}
+                                  disabled={!operatorKernelReady || operatorKernelBusy}
+                                  className="rounded-lg bg-emerald-900 px-3 py-2 text-xs font-semibold text-emerald-100 enabled:hover:bg-emerald-800 disabled:opacity-40"
+                                >
+                                  Create kernel receipt
+                                </button>
+                                <button
+                                  onClick={() => void applyKernelGatedPatch()}
+                                  disabled={!operatorKernelApplyReady || operatorKernelBusy}
+                                  className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-semibold text-black enabled:hover:bg-white disabled:opacity-30"
+                                >
+                                  Kernel-gated apply
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+            }
+            executionRunway={<OperatorExecutionRunwayPanel />}
+          />
 
           <div className="min-h-0">
             {selectedPath ? (
