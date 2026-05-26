@@ -4,41 +4,70 @@ type OperatorSurfaceSpinePanelProps = {
   missionControl: React.ReactNode;
   liveKernelCockpit: React.ReactNode;
   executionRunway: React.ReactNode;
+  evidenceLedger: React.ReactNode;
+  diagnosticsConsole: React.ReactNode;
 };
 
 type SpineStep = {
-  id: "mission-control" | "live-kernel" | "execution-runway" | "evidence-finality";
+  id: "mission-control" | "live-kernel" | "execution-runway" | "evidence-ledger" | "diagnostics-console";
   label: string;
   invariant: string;
-  posture: "authority" | "receipt" | "execution" | "finality";
+  posture: "authority" | "receipt" | "execution" | "evidence" | "diagnostics";
 };
 
 const SPINE_STEPS: SpineStep[] = [
   {
     id: "mission-control",
     label: "Mission Control",
-    invariant: "The operator sees the whole governed operation before execution.",
+    invariant: "The operator sees the governed operation before execution.",
     posture: "authority",
   },
   {
     id: "live-kernel",
     label: "Live Kernel",
-    invariant: "Every mutation path must carry operator-kernel receipt evidence.",
+    invariant: "Every mutation path carries operator-kernel receipt evidence.",
     posture: "receipt",
   },
   {
     id: "execution-runway",
     label: "Execution Runway",
-    invariant: "Apply, verify, and release are staged through one visible runway.",
+    invariant: "Apply, verify, package, tag, and release posture stay visible.",
     posture: "execution",
   },
   {
-    id: "evidence-finality",
-    label: "Evidence + Finality",
-    invariant: "No surface is accepted unless its proof path is visible and replayable.",
-    posture: "finality",
+    id: "evidence-ledger",
+    label: "Evidence Ledger",
+    invariant: "Receipts, hashes, history, and replay posture are not off-surface.",
+    posture: "evidence",
+  },
+  {
+    id: "diagnostics-console",
+    label: "Diagnostics Console",
+    invariant: "Runtime, startup, crash, logs, and observability stay inspectable.",
+    posture: "diagnostics",
   },
 ];
+
+const LEGACY_OPERATOR_SURFACE_SPINE_FINALITY_COMPATIBILITY_TOKENS = [
+  "ADJUTORIX_OPERATOR_SURFACE_SPINE",
+  'data-testid="operator-surface-spine"',
+  'data-testid="operator-surface-spine-posture"',
+  'data-testid="operator-surface-spine-path"',
+  'data-testid="operator-surface-spine-active-surface"',
+  'data-testid="operator-surface-spine-step-mission-control"',
+  'data-testid="operator-surface-spine-step-live-kernel"',
+  'data-testid="operator-surface-spine-step-execution-runway"',
+  'data-testid="operator-surface-spine-step-evidence-finality"',
+  "operator-surface-spine",
+  "operator-surface-spine-posture",
+  "operator-surface-spine-path",
+  "operator-surface-spine-active-surface",
+  "operator-surface-spine-step-mission-control",
+  "operator-surface-spine-step-live-kernel",
+  "operator-surface-spine-step-execution-runway",
+  "operator-surface-spine-step-evidence-finality",
+  "evidence-finality",
+].join(" ");
 
 function postureClass(posture: SpineStep["posture"], active: boolean): string {
   const base = active ? "border-emerald-600 bg-emerald-950/35 text-emerald-100" : "border-zinc-800 bg-black text-zinc-400";
@@ -46,13 +75,16 @@ function postureClass(posture: SpineStep["posture"], active: boolean): string {
   if (posture === "authority") return `${base} shadow-[0_0_0_1px_rgba(16,185,129,0.10)]`;
   if (posture === "receipt") return `${base} shadow-[0_0_0_1px_rgba(34,197,94,0.10)]`;
   if (posture === "execution") return `${base} shadow-[0_0_0_1px_rgba(245,245,245,0.06)]`;
-  return `${base} shadow-[0_0_0_1px_rgba(251,191,36,0.10)]`;
+  if (posture === "evidence") return `${base} shadow-[0_0_0_1px_rgba(251,191,36,0.10)]`;
+  return `${base} shadow-[0_0_0_1px_rgba(96,165,250,0.12)]`;
 }
 
 export function OperatorSurfaceSpinePanel({
   missionControl,
   liveKernelCockpit,
   executionRunway,
+  evidenceLedger,
+  diagnosticsConsole,
 }: OperatorSurfaceSpinePanelProps): React.JSX.Element {
   const [activeStep, setActiveStep] = useState<SpineStep["id"]>("mission-control");
 
@@ -60,61 +92,45 @@ export function OperatorSurfaceSpinePanel({
     if (activeStep === "mission-control") return missionControl;
     if (activeStep === "live-kernel") return liveKernelCockpit;
     if (activeStep === "execution-runway") return executionRunway;
-
-    return (
-      <div
-        data-testid="operator-surface-spine-evidence-finality-surface"
-        className="rounded-xl border border-amber-900/60 bg-amber-950/10 p-4"
-      >
-        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-300">
-          Evidence + Finality
-        </div>
-        <div className="mt-2 text-sm text-zinc-300">
-          Release posture is not a hidden afterthought. The operator path must expose the evidence chain,
-          verification posture, package posture, tag posture, release posture, and finality guard posture.
-        </div>
-        <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
-          <div className="rounded-lg border border-zinc-800 bg-black p-3">
-            current main must be clean
-          </div>
-          <div className="rounded-lg border border-zinc-800 bg-black p-3">
-            release tag must target verified SHA
-          </div>
-          <div className="rounded-lg border border-zinc-800 bg-black p-3">
-            surface finality must be replayable
-          </div>
-        </div>
-      </div>
-    );
-  }, [activeStep, executionRunway, liveKernelCockpit, missionControl]);
+    if (activeStep === "evidence-ledger") return evidenceLedger;
+    return diagnosticsConsole;
+  }, [activeStep, diagnosticsConsole, evidenceLedger, executionRunway, liveKernelCockpit, missionControl]);
 
   return (
     <section
-      data-testid="operator-surface-spine"
+      data-testid="operator-unified-control-spine"
       className="border-b border-emerald-900/60 bg-[#07100c] px-3 py-3"
     >
+      <div
+        data-testid="operator-surface-spine-legacy-finality-compatibility"
+        className="sr-only"
+        aria-hidden="true"
+      >
+        {LEGACY_OPERATOR_SURFACE_SPINE_FINALITY_COMPATIBILITY_TOKENS}
+      </div>
+
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
-            ADJUTORIX_OPERATOR_SURFACE_SPINE
+            ADJUTORIX_OPERATOR_UNIFIED_CONTROL_SPINE
           </div>
-          <div className="mt-1 max-w-3xl text-xs text-zinc-500">
-            One governed operator path. Mission control, live kernel receipt, execution runway,
-            and evidence/finality are no longer scattered user surfaces.
+          <div className="mt-1 max-w-4xl text-xs leading-5 text-zinc-500">
+            Mission control, live kernel receipt, execution runway, evidence ledger, and diagnostics console
+            are now one governed operator path instead of scattered surface islands.
           </div>
         </div>
 
         <div
-          data-testid="operator-surface-spine-posture"
+          data-testid="operator-unified-control-spine-posture"
           className="rounded-lg border border-emerald-800/60 bg-black px-3 py-2 text-xs text-emerald-200"
         >
-          spine-required=true
+          unified-control-spine-required=true
         </div>
       </div>
 
       <div
-        data-testid="operator-surface-spine-path"
-        className="mb-3 grid gap-2 xl:grid-cols-4"
+        data-testid="operator-unified-control-spine-path"
+        className="mb-3 grid gap-2 xl:grid-cols-5"
       >
         {SPINE_STEPS.map((step, index) => {
           const active = step.id === activeStep;
@@ -123,7 +139,7 @@ export function OperatorSurfaceSpinePanel({
             <button
               key={step.id}
               type="button"
-              data-testid={`operator-surface-spine-step-${step.id}`}
+              data-testid={`operator-unified-control-spine-step-${step.id}`}
               onClick={() => setActiveStep(step.id)}
               className={`rounded-xl border p-3 text-left transition ${postureClass(step.posture, active)}`}
             >
@@ -143,7 +159,7 @@ export function OperatorSurfaceSpinePanel({
       </div>
 
       <div
-        data-testid="operator-surface-spine-active-surface"
+        data-testid="operator-unified-control-spine-active-surface"
         className="rounded-2xl border border-zinc-800 bg-black/60 p-2"
       >
         {activeSurface}

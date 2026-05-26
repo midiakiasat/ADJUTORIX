@@ -8,6 +8,7 @@ export default defineConfig({
     clearMocks: true,
     include: [
       "tests/renderer/operator_diagnostics_console_surface_contract.test.ts",
+      "tests/renderer/operator_unified_control_spine_contract.test.ts",
       "tests/renderer/operator_evidence_ledger_surface_contract.test.ts",
       "tests/renderer/about_panel.test.tsx",
       "tests/renderer/active_buffer_diff_review.test.ts",

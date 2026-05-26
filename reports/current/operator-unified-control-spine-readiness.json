@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "schema": "adjutorix.operator_unified_control_spine_readiness_report.v1",
+  "surface": "ADJUTORIX_OPERATOR_UNIFIED_CONTROL_SPINE",
+  "version": "0.9.0",
+  "governedPath": [
+    "mission-control",
+    "live-kernel",
+    "execution-runway",
+    "evidence-ledger",
+    "diagnostics-console"
+  ],
+  "baseTag": "adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+  "assertedAt": "2026-05-26T19:59:08.578Z"
+}

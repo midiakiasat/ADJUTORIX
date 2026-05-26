@@ -790,6 +790,8 @@ export default function App(): React.JSX.Element {
                         </div>
             }
             executionRunway={<OperatorExecutionRunwayPanel />}
+            evidenceLedger={<OperatorEvidenceLedgerPanel />}
+            diagnosticsConsole={<OperatorDiagnosticsConsolePanel />}
           />
 
           <div className="min-h-0">
@@ -885,8 +887,6 @@ export default function App(): React.JSX.Element {
             </div>
           )}
         </section>
-            <OperatorEvidenceLedgerPanel />
-      <OperatorDiagnosticsConsolePanel />
     </main>
     </div>
   );

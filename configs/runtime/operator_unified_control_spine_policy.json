@@ -1,0 +1,17 @@
+{
+  "schema": "adjutorix.operator_unified_control_spine_policy.v1",
+  "required": true,
+  "surface": "ADJUTORIX_OPERATOR_UNIFIED_CONTROL_SPINE",
+  "version": "0.9.0",
+  "baseTag": "adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+  "governedPath": [
+    "mission-control",
+    "live-kernel",
+    "execution-runway",
+    "evidence-ledger",
+    "diagnostics-console"
+  ],
+  "requiredInvariant": "Mission control, live kernel receipt, execution runway, evidence ledger, and diagnostics console must be reachable through one governed operator spine.",
+  "disallowedFailure": "Evidence ledger and diagnostics console must not remain scattered outside the governed surface spine.",
+  "releasePosture": "surface-ready"
+}
