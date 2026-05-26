@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "schema": "adjutorix-v070-evidence-ledger-finality-v1",
+  "finality": "ADJUTORIX_V070_OPERATOR_EVIDENCE_LEDGER_SURFACE_FINALITY",
+  "tag": "adjutorix-operator-evidence-ledger-surface-v0.7.0",
+  "lockedSha": "4d5952e53e84c31a564b2b99771cf00c3cf0ccea",
+  "actualTagSha": "4d5952e53e84c31a564b2b99771cf00c3cf0ccea",
+  "checkedFiles": [
+    "configs/runtime/operator_evidence_ledger_surface_policy.json",
+    "packages/adjutorix-app/src/renderer/App.tsx",
+    "packages/adjutorix-app/src/renderer/components/OperatorEvidenceLedgerPanel.tsx",
+    "packages/adjutorix-app/tests/renderer/operator_evidence_ledger_surface_contract.test.ts",
+    "packages/adjutorix-app/vitest.config.mjs",
+    "reports/current/operator-evidence-ledger-surface-readiness.json",
+    "scripts/product/assert-operator-evidence-ledger-surface.mjs"
+  ],
+  "checkedAt": "2026-05-26T16:52:39.824Z"
+}

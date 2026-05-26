@@ -1,0 +1,22 @@
+name: ADJUTORIX v0.7.0 Evidence Ledger Finality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  finality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Assert v0.7.0 evidence ledger finality
+        run: node scripts/release/assert-adjutorix-v070-evidence-ledger-finality.mjs
