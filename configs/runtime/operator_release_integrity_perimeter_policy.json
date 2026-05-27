@@ -1,0 +1,28 @@
+{
+  "schema": "adjutorix.operator_release_integrity_perimeter.v1",
+  "surface": "ADJUTORIX_OPERATOR_RELEASE_INTEGRITY_PERIMETER",
+  "version": "1.0.0",
+  "required": true,
+  "purpose": "Lock the operator release chain so tags, releases, packaged artifacts, and finality guards cannot silently drift after publication.",
+  "invariants": [
+    "every protected release tag resolves to its recorded commit",
+    "every protected release has a non-draft, non-prerelease GitHub release",
+    "packaged operator-surface releases expose release assets",
+    "finality guard releases remain release-visible",
+    "main descends from every protected release tag",
+    "release integrity assertion is runnable locally and in GitHub Actions",
+    "v0.9.1 remains the base for v1.0.0 perimeter admission"
+  ],
+  "protected_release_chain": [
+    "adjutorix-operator-execution-runway-surface-v0.5.0",
+    "adjutorix-v050-execution-runway-finality-guard-v0.5.1",
+    "adjutorix-operator-surface-spine-v0.6.0",
+    "adjutorix-v060-operator-surface-spine-finality-guard-v0.6.1",
+    "adjutorix-operator-evidence-ledger-surface-v0.7.0",
+    "adjutorix-v070-evidence-ledger-finality-guard-v0.7.1",
+    "adjutorix-operator-diagnostics-console-surface-v0.8.0",
+    "adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+    "adjutorix-operator-unified-control-spine-v0.9.0",
+    "adjutorix-v090-operator-unified-control-spine-finality-guard-v0.9.1"
+  ]
+}

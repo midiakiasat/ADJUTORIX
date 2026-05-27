@@ -1,0 +1,188 @@
+{
+  "ok": true,
+  "surface": "ADJUTORIX_OPERATOR_RELEASE_INTEGRITY_PERIMETER",
+  "readiness": "PASS",
+  "version": "1.0.0",
+  "mainSha": "bab19b639bf5222d46b5038a02cc48db82499fb0",
+  "protectedTagCount": 10,
+  "packagedReleaseCount": 5,
+  "tagResults": [
+    {
+      "tag": "adjutorix-operator-execution-runway-surface-v0.5.0",
+      "expectedPrefix": "10339e3",
+      "actualSha": "10339e3947cc9bf19389a7bdbaada700b67fb90b",
+      "class": "surface",
+      "minimumAssets": 0
+    },
+    {
+      "tag": "adjutorix-v050-execution-runway-finality-guard-v0.5.1",
+      "expectedPrefix": "64e1209",
+      "actualSha": "64e120936b3c54085be8394cd358901a6303b728",
+      "class": "finality",
+      "minimumAssets": 0
+    },
+    {
+      "tag": "adjutorix-operator-surface-spine-v0.6.0",
+      "expectedPrefix": "c775ce9",
+      "actualSha": "c775ce9f7b193f08bc05e928fe6aea23d4bc59b0",
+      "class": "packaged-surface",
+      "minimumAssets": 3
+    },
+    {
+      "tag": "adjutorix-v060-operator-surface-spine-finality-guard-v0.6.1",
+      "expectedPrefix": "a7b0da2",
+      "actualSha": "a7b0da214811191bb7dc781e5f7fc71f6783f09a",
+      "class": "finality",
+      "minimumAssets": 0
+    },
+    {
+      "tag": "adjutorix-operator-evidence-ledger-surface-v0.7.0",
+      "expectedPrefix": "4d5952e",
+      "actualSha": "4d5952e53e84c31a564b2b99771cf00c3cf0ccea",
+      "class": "packaged-surface",
+      "minimumAssets": 3
+    },
+    {
+      "tag": "adjutorix-v070-evidence-ledger-finality-guard-v0.7.1",
+      "expectedPrefix": "30a89a8",
+      "actualSha": "30a89a8696e0b398465c9f2b29eaa019a5b5d0bc",
+      "class": "finality",
+      "minimumAssets": 0
+    },
+    {
+      "tag": "adjutorix-operator-diagnostics-console-surface-v0.8.0",
+      "expectedPrefix": "99b1014",
+      "actualSha": "99b10149d061c744bdcc23f7aab341c5bf1e5f11",
+      "class": "packaged-surface",
+      "minimumAssets": 3
+    },
+    {
+      "tag": "adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+      "expectedPrefix": "e8b21ae",
+      "actualSha": "e8b21aeb7af66b5bc3f81326fc03f6aa42ba9fa0",
+      "class": "finality",
+      "minimumAssets": 0
+    },
+    {
+      "tag": "adjutorix-operator-unified-control-spine-v0.9.0",
+      "expectedPrefix": "045d2d8",
+      "actualSha": "045d2d81c6564cb3fb837a2a944f7015f26daeca",
+      "class": "packaged-surface",
+      "minimumAssets": 3
+    },
+    {
+      "tag": "adjutorix-v090-operator-unified-control-spine-finality-guard-v0.9.1",
+      "expectedPrefix": "bab19b6",
+      "actualSha": "bab19b639bf5222d46b5038a02cc48db82499fb0",
+      "class": "finality",
+      "minimumAssets": 0
+    }
+  ],
+  "releaseResults": [
+    {
+      "tag": "adjutorix-operator-execution-runway-surface-v0.5.0",
+      "name": "ADJUTORIX v0.5.0 — Operator Execution Runway Surface",
+      "targetCommitish": "10339e3947cc9bf19389a7bdbaada700b67fb90b",
+      "assetCount": 3,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-operator-execution-runway-surface-v0.5.0",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-v050-execution-runway-finality-guard-v0.5.1",
+      "name": "ADJUTORIX v0.5.1 — v0.5.0 Execution Runway Finality Guard",
+      "targetCommitish": "64e120936b3c54085be8394cd358901a6303b728",
+      "assetCount": 0,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-v050-execution-runway-finality-guard-v0.5.1",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-operator-surface-spine-v0.6.0",
+      "name": "ADJUTORIX v0.6.0 — Operator Surface Spine",
+      "targetCommitish": "main",
+      "assetCount": 3,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-operator-surface-spine-v0.6.0",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-v060-operator-surface-spine-finality-guard-v0.6.1",
+      "name": "ADJUTORIX v0.6.1 — v0.6.0 Operator Surface Spine Finality Guard",
+      "targetCommitish": "main",
+      "assetCount": 0,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-v060-operator-surface-spine-finality-guard-v0.6.1",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-operator-evidence-ledger-surface-v0.7.0",
+      "name": "ADJUTORIX v0.7.0 — Operator Evidence Ledger Surface",
+      "targetCommitish": "main",
+      "assetCount": 3,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-operator-evidence-ledger-surface-v0.7.0",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-v070-evidence-ledger-finality-guard-v0.7.1",
+      "name": "ADJUTORIX v0.7.1 — v0.7.0 Evidence Ledger Finality Guard",
+      "targetCommitish": "main",
+      "assetCount": 0,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-v070-evidence-ledger-finality-guard-v0.7.1",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-operator-diagnostics-console-surface-v0.8.0",
+      "name": "ADJUTORIX v0.8.0 — Operator Diagnostics Console Surface",
+      "targetCommitish": "main",
+      "assetCount": 3,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-operator-diagnostics-console-surface-v0.8.0",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+      "name": "ADJUTORIX v0.8.1 — v0.8.0 Diagnostics Console Finality Guard",
+      "targetCommitish": "main",
+      "assetCount": 0,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-v080-diagnostics-console-finality-guard-v0.8.1",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-operator-unified-control-spine-v0.9.0",
+      "name": "ADJUTORIX v0.9.0 — Operator Unified Control Spine",
+      "targetCommitish": "main",
+      "assetCount": 3,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-operator-unified-control-spine-v0.9.0",
+      "draft": false,
+      "prerelease": false
+    },
+    {
+      "tag": "adjutorix-v090-operator-unified-control-spine-finality-guard-v0.9.1",
+      "name": "ADJUTORIX v0.9.1 — v0.9.0 Operator Unified Control Spine Finality Guard",
+      "targetCommitish": "main",
+      "assetCount": 0,
+      "url": "https://github.com/qzro/ADJUTORIX/releases/tag/adjutorix-v090-operator-unified-control-spine-finality-guard-v0.9.1",
+      "draft": false,
+      "prerelease": false
+    }
+  ],
+  "requiredFinalityWorkflows": [
+    ".github/workflows/adjutorix-v050-execution-runway-finality.yml",
+    ".github/workflows/adjutorix-v060-operator-surface-spine-finality.yml",
+    ".github/workflows/adjutorix-v070-evidence-ledger-finality.yml",
+    ".github/workflows/adjutorix-v080-diagnostics-console-finality.yml",
+    ".github/workflows/adjutorix-v090-operator-unified-control-spine-finality.yml"
+  ],
+  "invariants": [
+    "protected tags resolve to recorded commits",
+    "main descends from all protected tags",
+    "protected releases are non-draft and non-prerelease",
+    "packaged releases expose release assets",
+    "v0.9.1 finality is preserved before v1.0.0 admission",
+    "release integrity perimeter is executable in CI"
+  ]
+}

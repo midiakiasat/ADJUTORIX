@@ -1,0 +1,20 @@
+name: ADJUTORIX v1.0.0 Operator Release Integrity Perimeter
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-integrity:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assert ADJUTORIX operator release integrity perimeter
+        run: node scripts/product/assert-operator-release-integrity-perimeter.mjs
